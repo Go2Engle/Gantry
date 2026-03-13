@@ -157,7 +157,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 }
 
 // createDirectories creates the data and config directories with proper ownership.
-func createDirectories(dataDir, configDir, userName, groupName string) error {
+func createDirectories(dataDir, configDir, userName, _ string) error {
 	// Look up UID/GID.
 	u, err := user.Lookup(userName)
 	if err != nil {
