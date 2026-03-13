@@ -174,6 +174,32 @@ function widthOf(w: DashboardWidgetConfig): 'full' | 'half' {
   return w.width === 'half' ? 'half' : 'full';
 }
 
+function StatusMonitorWidgetSkeleton() {
+  return (
+    <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+      <div className="flex items-center justify-between border-b border-[var(--gantry-border)] px-6 py-4">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
+          <h2 className="text-base font-semibold text-[var(--gantry-text-primary)]">Service Status</h2>
+        </div>
+        <span className="text-sm text-[var(--gantry-text-secondary)]">Loading...</span>
+      </div>
+      <div className="space-y-3 px-6 py-4 animate-pulse">
+        <div className="h-4 w-44 rounded bg-[var(--gantry-bg-secondary)]" />
+        <div className="space-y-2">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="flex items-center gap-3">
+              <div className="h-2.5 w-2.5 rounded-full bg-[var(--gantry-bg-tertiary)]" />
+              <div className="h-3.5 flex-1 rounded bg-[var(--gantry-bg-secondary)]" />
+              <div className="h-5 w-24 rounded bg-[var(--gantry-bg-secondary)]" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // EntityPicker: searchable dropdown for pinned entity selection
 // ---------------------------------------------------------------------------
@@ -286,6 +312,7 @@ export default function Dashboard() {
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [statusMonitor, setStatusMonitor] = useState<StatusMonitorResult[]>([]);
+  const [statusMonitorLoading, setStatusMonitorLoading] = useState(true);
   const [gitopsStatus, setGitopsStatus] = useState<GitOpsStatus | null>(null);
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -312,21 +339,47 @@ export default function Dashboard() {
       api.listAllActionRuns(5).catch(() => [] as ActionRun[]),
       api.getDashboardConfig().catch(() => null),
       api.getHistory(5).catch(() => [] as HistoryEntry[]),
-      api.getStatusMonitorStatuses().catch(() => [] as StatusMonitorResult[]),
       api.getGitOpsStatus().catch(() => null as GitOpsStatus | null),
     ])
-      .then(([ents, audit, runs, cfg, hist, sm, gops]) => {
+      .then(([ents, audit, runs, cfg, hist, gops]) => {
         setEntities(ents || []);
         setActivity(audit || []);
         setActionRuns(runs || []);
         setHistory(hist || []);
-        setStatusMonitor(sm || []);
         setGitopsStatus(gops || null);
         setConfig(cfg || { announcements: [], quickLinks: [], pinnedEntities: [], widgets: DEFAULT_WIDGETS });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    let cancelled = false;
+    setStatusMonitorLoading(true);
+
+    api.getStatusMonitorStatuses()
+      .then((statuses) => {
+        if (!cancelled) {
+          setStatusMonitor(statuses || []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStatusMonitor([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setStatusMonitorLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading]);
 
   const kindCounts: KindCount[] = ENTITY_KINDS.map((k) => ({
     ...k,
@@ -820,6 +873,10 @@ export default function Dashboard() {
         );
 
       case 'status_monitor': {
+        if (statusMonitorLoading) {
+          return <StatusMonitorWidgetSkeleton />;
+        }
+
         // Only render if we have status data (plugin enabled and responding).
         if (statusMonitor.length === 0) return null;
         const smIssues = statusMonitor.filter((s) => s.status !== 'operational' && s.status !== 'unknown');
