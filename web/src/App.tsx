@@ -1,4 +1,6 @@
+import { useCallback, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import Sidebar from './components/Sidebar';
 import CommandPalette from './components/CommandPalette';
@@ -17,11 +19,23 @@ import GitOps from './pages/GitOps';
 import RBAC from './pages/RBAC';
 
 function AuthenticatedLayout() {
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const closeMobileSidebar = useCallback(() => setMobileSidebarOpen(false), []);
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-[var(--gantry-bg-secondary)]">
-        <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="flex h-screen overflow-hidden bg-[var(--gantry-bg-secondary)]">
+      <Sidebar mobileOpen={mobileSidebarOpen} onCloseMobile={closeMobileSidebar} />
+      <main className="relative flex-1 overflow-y-auto bg-[var(--gantry-bg-secondary)]">
+        <div className="sticky top-0 z-20 border-b border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]/95 px-4 py-3 backdrop-blur lg:hidden">
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="rounded-lg p-2 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Dashboard />} />
