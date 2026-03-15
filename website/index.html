@@ -313,12 +313,27 @@
           <path d="M5 12h14"></path>
           <path d="m13 5 7 7-7 7"></path>
         </symbol>
+        <symbol id="icon-menu" viewBox="0 0 24 24">
+          <path d="M4 7h16"></path>
+          <path d="M4 12h16"></path>
+          <path d="M4 17h16"></path>
+        </symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24">
+          <path d="m6 6 12 12"></path>
+          <path d="m18 6-12 12"></path>
+        </symbol>
       </svg>
-      <div class="product-shell">
+      <div class="product-shell" data-demo-shell>
+        <button type="button" class="product-mobile-scrim" aria-label="Close navigation menu"></button>
         <aside class="product-sidebar" aria-label="Mock Gantry navigation">
           <div class="product-brand">
-            <div class="product-brand-mark">G</div>
-            <span class="product-brand-text">Gantry</span>
+            <div class="product-brand-lockup">
+              <div class="product-brand-mark">G</div>
+              <span class="product-brand-text">Gantry</span>
+            </div>
+            <button type="button" class="product-mobile-close" aria-label="Close navigation menu">
+              <svg class="product-bottom-icon" viewBox="0 0 24 24"><use href="#icon-x"></use></svg>
+            </button>
           </div>
 
           <nav class="product-nav">
@@ -385,6 +400,11 @@
         </aside>
 
         <div class="product-main">
+          <div class="product-mobile-topbar">
+            <button type="button" class="product-mobile-menu-toggle" aria-label="Open navigation menu" aria-expanded="false">
+              <svg class="product-bottom-icon" viewBox="0 0 24 24"><use href="#icon-menu"></use></svg>
+            </button>
+          </div>
           <section class="product-view is-active" data-demo-view="dashboard" aria-label="Dashboard view">
             <div class="product-canvas">
               <div class="product-page-head">

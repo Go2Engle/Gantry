@@ -139,9 +139,22 @@ document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
 
 /* — Product demo view switcher — */
 (function () {
+  const shell = document.querySelector('[data-demo-shell]');
   const views = Array.from(document.querySelectorAll('[data-demo-view]'));
   const controls = Array.from(document.querySelectorAll('[data-demo-target]'));
-  if (!views.length || !controls.length) return;
+  if (!shell || !views.length || !controls.length) return;
+
+  const mobileBreakpoint = window.matchMedia('(max-width: 768px)');
+  const mobileMenuButton = shell.querySelector('.product-mobile-menu-toggle');
+  const mobileCloseButton = shell.querySelector('.product-mobile-close');
+  const mobileScrim = shell.querySelector('.product-mobile-scrim');
+
+  function setMobileMenu(open) {
+    shell.classList.toggle('is-mobile-nav-open', open);
+    if (mobileMenuButton) {
+      mobileMenuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+  }
 
   function setView(nextView) {
     views.forEach((view) => {
@@ -157,11 +170,45 @@ document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
         control.setAttribute('aria-selected', active ? 'true' : 'false');
       }
     });
+
+    if (mobileBreakpoint.matches) {
+      setMobileMenu(false);
+    }
   }
 
   controls.forEach((control) => {
     control.addEventListener('click', () => setView(control.dataset.demoTarget));
   });
+
+  if (mobileMenuButton) {
+    mobileMenuButton.addEventListener('click', () => setMobileMenu(true));
+  }
+
+  if (mobileCloseButton) {
+    mobileCloseButton.addEventListener('click', () => setMobileMenu(false));
+  }
+
+  if (mobileScrim) {
+    mobileScrim.addEventListener('click', () => setMobileMenu(false));
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setMobileMenu(false);
+    }
+  });
+
+  const handleBreakpointChange = (event) => {
+    if (!event.matches) {
+      setMobileMenu(false);
+    }
+  };
+
+  if (typeof mobileBreakpoint.addEventListener === 'function') {
+    mobileBreakpoint.addEventListener('change', handleBreakpointChange);
+  } else if (typeof mobileBreakpoint.addListener === 'function') {
+    mobileBreakpoint.addListener(handleBreakpointChange);
+  }
 })();
 
 /* — Terminal typewriter — */

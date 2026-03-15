@@ -549,11 +549,18 @@ a { text-decoration: none; color: inherit; }
   display: grid;
   grid-template-columns: 256px minmax(0, 1fr);
   min-height: 760px;
+  position: relative;
   border-radius: 22px;
   overflow: hidden;
   background: var(--mock-gantry-bg-secondary);
   border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 24px 80px rgba(0,0,0,0.28);
+}
+
+.product-mobile-scrim,
+.product-mobile-topbar,
+.product-mobile-close {
+  display: none;
 }
 
 .product-sidebar {
@@ -562,15 +569,25 @@ a { text-decoration: none; color: inherit; }
   border-right: 1px solid var(--mock-gantry-border);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  transition: transform 0.2s ease;
 }
 
 .product-brand {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   height: 64px;
   padding: 0 16px;
   border-bottom: 1px solid var(--mock-gantry-border);
+}
+
+.product-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .product-brand-mark {
@@ -778,6 +795,11 @@ a { text-decoration: none; color: inherit; }
 .product-main {
   min-width: 0;
   background: var(--mock-gantry-bg-secondary);
+  display: flex;
+  flex-direction: column;
+  border-top-right-radius: inherit;
+  border-bottom-right-radius: inherit;
+  overflow: hidden;
 }
 
 .product-view {
@@ -2261,18 +2283,94 @@ a { text-decoration: none; color: inherit; }
   .features-grid { grid-template-columns: 1fr; }
   .product-demo-switcher {
     width: 100%;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 10px;
+    border-radius: 28px;
+    justify-content: stretch;
   }
   .product-shell {
     grid-template-columns: 1fr;
     min-height: auto;
   }
+  .product-main {
+    border-radius: inherit;
+  }
+  .product-mobile-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border: none;
+    background: rgba(0,0,0,0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .product-shell.is-mobile-nav-open .product-mobile-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
   .product-sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--mock-gantry-border);
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 3;
+    width: min(288px, calc(100% - 24px));
+    border-right: 1px solid var(--mock-gantry-border);
+    border-bottom: none;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.18);
+    transform: translateX(-100%);
+  }
+  .product-shell.is-mobile-nav-open .product-sidebar {
+    transform: translateX(0);
   }
   .product-nav {
-    overflow: visible;
+    overflow-y: auto;
+  }
+  .product-mobile-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--mock-gantry-border);
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(12px);
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+  }
+  .demo-switch {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .product-mobile-menu-toggle,
+  .product-mobile-close {
+    appearance: none;
+    border: none;
+    background: transparent;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mock-gantry-text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .product-mobile-menu-toggle:hover,
+  .product-mobile-close:hover {
+    background: var(--mock-gantry-bg-tertiary);
+    color: var(--mock-gantry-text-primary);
   }
   .product-canvas {
     padding: 24px 18px;
@@ -2319,10 +2417,6 @@ a { text-decoration: none; color: inherit; }
 
 @media (max-width: 480px) {
   .plugins-grid { grid-template-columns: 1fr; }
-  .demo-switch {
-    width: calc(50% - 4px);
-    text-align: center;
-  }
   .product-canvas {
     padding: 20px 14px;
   }
