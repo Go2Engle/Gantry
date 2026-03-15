@@ -2231,6 +2231,18 @@ a { text-decoration: none; color: inherit; }
 /* ============================================================
    RESPONSIVE
    ============================================================ */
+@media (max-width: 1280px) {
+  .product-demo-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .product-demo-switcher {
+    width: fit-content;
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 1024px) {
   .features-grid { grid-template-columns: repeat(2, 1fr); }
   .plugins-grid  { grid-template-columns: repeat(2, 1fr); }
