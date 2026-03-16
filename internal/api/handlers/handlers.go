@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/go2engle/gantry/internal/auth"
 	"github.com/go2engle/gantry/internal/db"
@@ -27,6 +28,8 @@ type Handlers struct {
 	Dispatcher *dispatcher.Manager
 	GitOps     *gitops.Service
 	DataDir    string // root data directory, used for GitOps repo storage
+
+	teamsNotifierOnce sync.Once
 }
 
 // writeJSON serializes v as JSON and writes it to the response with the given

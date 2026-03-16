@@ -12,7 +12,7 @@ const SYNCABLE_PLUGINS = new Set(['kubernetes', 'github', 'argocd']);
 
 // Plugins with full backend + frontend implementations.
 // Anything not in this set is shown as "Coming Soon" and cannot be enabled.
-const IMPLEMENTED_PLUGINS = new Set(['github', 'kubernetes', 'argocd', 'status-monitor', 'gitops']);
+const IMPLEMENTED_PLUGINS = new Set(['github', 'kubernetes', 'argocd', 'status-monitor', 'gitops', 'teams']);
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },
@@ -120,6 +120,26 @@ const PLUGIN_SECTIONS: Record<string, Array<{
           </div>
         );
       },
+    },
+  ],
+  teams: [
+    {
+      title: 'Delivery',
+      description: 'Configure the Teams channel webhook Gantry should post action lifecycle updates to.',
+      fields: ['incomingWebhookSecret', 'gantryBaseUrl', 'titlePrefix'],
+      renderBanner: () => (
+        <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-tertiary)] px-4 py-3">
+          <p className="text-sm font-medium text-[var(--gantry-text-primary)]">Microsoft Teams incoming webhook</p>
+          <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+            Create an incoming webhook in the target Teams channel, then paste the webhook URL here. Gantry uses it to send action start, success, and failure notifications.
+          </p>
+        </div>
+      ),
+    },
+    {
+      title: 'Events',
+      description: 'Choose which Gantry action lifecycle events should be delivered to Teams.',
+      fields: ['notifyOnStart', 'notifyOnSuccess', 'notifyOnFailure'],
     },
   ],
 };

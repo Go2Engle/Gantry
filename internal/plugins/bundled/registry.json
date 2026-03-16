@@ -250,6 +250,65 @@
     }
   },
   {
+    "name": "teams",
+    "title": "Microsoft Teams Notifications",
+    "description": "Send Gantry action notifications to Microsoft Teams using an incoming webhook.",
+    "longDescription": "The Microsoft Teams Notifications plugin posts Gantry action lifecycle updates into a Teams channel through an incoming webhook. When an Action starts, succeeds, or fails, Gantry can send a structured notification with the action name, run ID, trigger user, and optional deep-link back to Gantry.\n\nUse it to keep deployment, operations, or platform channels informed without requiring engineers to constantly watch the Gantry UI.",
+    "features": [
+      "Action start notifications",
+      "Action success notifications",
+      "Action failure notifications with error details",
+      "Optional deep-link back to Gantry",
+      "Configurable notification title prefix"
+    ],
+    "version": "1.0.0",
+    "author": "Gantry",
+    "category": "integration",
+    "homepage": "https://github.com/go2engle/gantry",
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "incomingWebhookSecret": {
+          "type": "string",
+          "title": "Incoming Webhook URL",
+          "description": "Microsoft Teams incoming webhook URL for the destination channel."
+        },
+        "gantryBaseUrl": {
+          "type": "string",
+          "title": "Gantry Base URL",
+          "description": "Optional public Gantry URL used for links in Teams messages (e.g. https://gantry.example.com)."
+        },
+        "titlePrefix": {
+          "type": "string",
+          "title": "Title Prefix",
+          "description": "Short prefix shown in notification titles.",
+          "default": "Gantry"
+        },
+        "notifyOnStart": {
+          "type": "boolean",
+          "title": "Notify On Start",
+          "description": "Send a message when an action run is created.",
+          "default": true
+        },
+        "notifyOnSuccess": {
+          "type": "boolean",
+          "title": "Notify On Success",
+          "description": "Send a message when an action run completes successfully.",
+          "default": true
+        },
+        "notifyOnFailure": {
+          "type": "boolean",
+          "title": "Notify On Failure",
+          "description": "Send a message when an action run fails.",
+          "default": true
+        }
+      },
+      "required": ["incomingWebhookSecret"]
+    },
+    "entityPanels": [],
+    "actionTypes": []
+  },
+  {
     "name": "datadog",
     "title": "Datadog",
     "description": "Embed SLO status, error rates, and service metrics panels on Service entities.",

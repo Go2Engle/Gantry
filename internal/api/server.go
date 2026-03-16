@@ -73,6 +73,7 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 		Dispatcher: dispatcher.New(database, eventBus),
 		DataDir:    cfg.DataDir,
 	}
+	h.InitTeamsNotifier()
 
 	// Health check routes (public).
 	r.Get("/healthz", h.Healthz)
