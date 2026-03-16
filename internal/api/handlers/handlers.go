@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go2engle/gantry/internal/auth"
 	"github.com/go2engle/gantry/internal/db"
@@ -30,6 +31,10 @@ type Handlers struct {
 	DataDir    string // root data directory, used for GitOps repo storage
 
 	teamsNotifierOnce sync.Once
+	teamsCfgMu        sync.RWMutex
+	cachedTeamsConfig teamsPluginConfig
+	cachedTeamsOK     bool
+	cachedTeamsExpiry time.Time
 }
 
 // writeJSON serializes v as JSON and writes it to the response with the given

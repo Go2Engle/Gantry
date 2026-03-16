@@ -44,7 +44,10 @@ func (h *Handlers) InitTeamsNotifier() {
 }
 
 func (h *Handlers) handleTeamsActionTriggered(event events.Event) {
-	cfg, ok := h.loadTeamsPluginConfig(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cfg, ok := h.loadTeamsPluginConfig(ctx)
 	if !ok || !cfg.NotifyOnStart {
 		return
 	}
@@ -53,7 +56,7 @@ func (h *Handlers) handleTeamsActionTriggered(event events.Event) {
 	actionName, _ := event.Data["actionName"].(string)
 	triggeredBy, _ := event.Data["triggeredBy"].(string)
 
-	run, actionEntity := h.lookupTeamsActionContext(context.Background(), runID, actionName)
+	run, actionEntity := h.lookupTeamsActionContext(ctx, runID, actionName)
 	actionLabel := teamsActionLabel(actionEntity, actionName)
 
 	facts := []teamsMessageFacts{
@@ -85,7 +88,10 @@ func (h *Handlers) handleTeamsActionRunUpdated(event events.Event) {
 		return
 	}
 
-	cfg, ok := h.loadTeamsPluginConfig(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cfg, ok := h.loadTeamsPluginConfig(ctx)
 	if !ok {
 		return
 	}
@@ -99,7 +105,7 @@ func (h *Handlers) handleTeamsActionRunUpdated(event events.Event) {
 	runID, _ := event.Data["runId"].(string)
 	actionName, _ := event.Data["actionName"].(string)
 
-	run, actionEntity := h.lookupTeamsActionContext(context.Background(), runID, actionName)
+	run, actionEntity := h.lookupTeamsActionContext(ctx, runID, actionName)
 	actionLabel := teamsActionLabel(actionEntity, actionName)
 
 	title := "Action succeeded"
@@ -150,8 +156,37 @@ func (h *Handlers) loadTeamsPluginConfig(ctx context.Context) (teamsPluginConfig
 		TitlePrefix:     "Gantry",
 	}
 
+	now := time.Now()
+
+	h.teamsCfgMu.RLock()
+	if now.Before(h.cachedTeamsExpiry) {
+		cachedCfg := h.cachedTeamsConfig
+		cachedOK := h.cachedTeamsOK
+		h.teamsCfgMu.RUnlock()
+		return cachedCfg, cachedOK
+	}
+	h.teamsCfgMu.RUnlock()
+
+	h.teamsCfgMu.Lock()
+	defer h.teamsCfgMu.Unlock()
+
+	now = time.Now()
+	if now.Before(h.cachedTeamsExpiry) {
+		return h.cachedTeamsConfig, h.cachedTeamsOK
+	}
+
 	plugin, err := h.DB.GetPlugin(ctx, "teams")
-	if err != nil || plugin == nil || !plugin.Enabled || plugin.Config == nil {
+	if err != nil {
+		log.Printf("teams plugin: failed to load plugin config: %v", err)
+		h.cachedTeamsConfig = cfg
+		h.cachedTeamsOK = false
+		h.cachedTeamsExpiry = time.Time{}
+		return cfg, false
+	}
+	if plugin == nil || !plugin.Enabled || plugin.Config == nil {
+		h.cachedTeamsConfig = cfg
+		h.cachedTeamsOK = false
+		h.cachedTeamsExpiry = now.Add(60 * time.Second)
 		return cfg, false
 	}
 
@@ -173,7 +208,11 @@ func (h *Handlers) loadTeamsPluginConfig(ctx context.Context) (teamsPluginConfig
 		cfg.NotifyOnFailure = v
 	}
 
-	return cfg, cfg.IncomingWebhookSecret != ""
+	h.cachedTeamsConfig = cfg
+	h.cachedTeamsOK = cfg.IncomingWebhookSecret != ""
+	h.cachedTeamsExpiry = now.Add(60 * time.Second)
+
+	return cfg, h.cachedTeamsOK
 }
 
 func (h *Handlers) lookupTeamsActionContext(ctx context.Context, runID, actionName string) (*db.ActionRun, *entity.Entity) {
