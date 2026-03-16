@@ -87,7 +87,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// 6. Write env file (for secrets).
-	if err := writeEnvFile(configDir, adminPassword); err != nil {
+	if err := writeEnvFile(configDir, adminPassword, userName); err != nil {
 		return err
 	}
 
@@ -175,8 +175,14 @@ func createDirectories(dataDir, configDir, userName, _ string) error {
 	if err != nil {
 		return fmt.Errorf("looking up user %s: %w", userName, err)
 	}
-	uid, _ := strconv.Atoi(u.Uid)
-	gid, _ := strconv.Atoi(u.Gid)
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return fmt.Errorf("parsing UID %q for user %s: %w", u.Uid, userName, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("parsing GID %q for user %s: %w", u.Gid, userName, err)
+	}
 
 	// Create data directory.
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
@@ -196,8 +202,9 @@ func createDirectories(dataDir, configDir, userName, _ string) error {
 	return nil
 }
 
-// writeEnvFile writes the environment file for secrets (mode 0600).
-func writeEnvFile(configDir, adminPassword string) error {
+// writeEnvFile writes the environment file for secrets (mode 0600),
+// owned by the service user so the launchd/systemd process can read it.
+func writeEnvFile(configDir, adminPassword, serviceUser string) error {
 	envPath := filepath.Join(configDir, "gantry.env")
 
 	// Don't overwrite an existing env file.
@@ -216,6 +223,26 @@ func writeEnvFile(configDir, adminPassword string) error {
 	if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("writing environment file: %w", err)
 	}
+
+	// Chown to the service user so the process can read it.
+	if os.Geteuid() == 0 && serviceUser != "" {
+		u, err := user.Lookup(serviceUser)
+		if err != nil {
+			return fmt.Errorf("looking up service user %s for env file ownership: %w", serviceUser, err)
+		}
+		uid, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			return fmt.Errorf("parsing UID for %s: %w", serviceUser, err)
+		}
+		gid, err := strconv.Atoi(u.Gid)
+		if err != nil {
+			return fmt.Errorf("parsing GID for %s: %w", serviceUser, err)
+		}
+		if err := os.Chown(envPath, uid, gid); err != nil {
+			return fmt.Errorf("setting ownership on %s: %w", envPath, err)
+		}
+	}
+
 	fmt.Printf("  Created environment file: %s (mode 0600)\n", envPath)
 
 	return nil
@@ -252,6 +279,9 @@ func readAdminPassword(filePath string) (string, error) {
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		return strings.TrimSpace(scanner.Text()), nil
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("reading password from stdin: %w", err)
 	}
 
 	return "", nil

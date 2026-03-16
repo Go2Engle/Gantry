@@ -52,14 +52,31 @@ const systemdServicePath = "/etc/systemd/system/gantry.service"
 const launchdPlistPath = "/Library/LaunchDaemons/com.gantry.server.plist"
 const defaultBinaryPath = "/usr/local/bin/gantry"
 
-// launchdLaunchScript is the wrapper that sources gantry.env before exec'ing the binary.
+// launchdLaunchScript is the wrapper that loads gantry.env before exec'ing the binary.
+// Reads KEY=VALUE pairs line-by-line without shell evaluation to prevent injection.
 const launchdLaunchScript = `#!/bin/sh
-# Source environment variables (secrets, config overrides).
+# Load environment variables (secrets, config overrides) safely.
+# Each line must be KEY=VALUE; comments and blanks are skipped.
 ENV_FILE="{{.ConfigDir}}/gantry.env"
 if [ -f "$ENV_FILE" ]; then
-    set -a
-    . "$ENV_FILE"
-    set +a
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and comments.
+        case "$line" in
+            ''|\#*) continue ;;
+        esac
+        # Split on first '='.
+        key="${line%%=*}"
+        value="${line#*=}"
+        # Validate key is a shell-safe variable name.
+        case "$key" in
+            *[!A-Za-z0-9_]*) continue ;;
+        esac
+        # Strip optional surrounding quotes from value.
+        case "$value" in
+            \'*\'|\"*\") value="${value#?}"; value="${value%?}" ;;
+        esac
+        export "$key=$value"
+    done < "$ENV_FILE"
 fi
 exec /usr/local/bin/gantry serve --port {{.Port}} --db "{{.DataDir}}/gantry.db"
 `
@@ -199,7 +216,11 @@ func detectService() serviceInfo {
 // requireRoot checks that the current process is running as root.
 func requireRoot() error {
 	if os.Geteuid() != 0 {
-		return fmt.Errorf("this command must be run as root (try: sudo gantry %s)", os.Args[1])
+		cmdHint := "<command>"
+		if len(os.Args) > 1 {
+			cmdHint = os.Args[1]
+		}
+		return fmt.Errorf("this command must be run as root (try: sudo gantry %s)", cmdHint)
 	}
 	return nil
 }
