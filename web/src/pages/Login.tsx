@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, Github } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import ThemeToggle from '../components/ThemeToggle';
 
 export default function Login() {
   const { login } = useAuth();
+  const { theme } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -48,8 +50,8 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Branding */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gantry-accent)] text-2xl font-bold text-[var(--gantry-bg-primary)]">
-            G
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gantry-accent)]">
+            <img src={theme === 'dark' ? '/logo-black.png' : '/logo-white.png'} alt="Gantry" className="h-10 w-10 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">
             Welcome to Gantry

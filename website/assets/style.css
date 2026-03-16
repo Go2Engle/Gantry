@@ -603,6 +603,25 @@ a { text-decoration: none; color: inherit; }
   font-weight: 700;
 }
 
+.product-brand-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.product-brand-logo--light {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .product-brand-logo--light {
+    display: block;
+  }
+  .product-brand-logo--dark {
+    display: none;
+  }
+}
+
 .product-brand-text {
   font-size: 18px;
   font-weight: 600;
