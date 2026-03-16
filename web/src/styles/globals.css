@@ -16,6 +16,10 @@
   --gantry-danger: #ff3b30;
 }
 
+html {
+  color-scheme: light;
+}
+
 .dark {
   --gantry-bg-primary: #1c1c1e;
   --gantry-bg-secondary: #111113;
@@ -30,6 +34,10 @@
   --gantry-danger: #ff453a;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   background-color: var(--gantry-bg-primary);
   color: var(--gantry-text-primary);
@@ -38,6 +46,26 @@ body {
 @layer base {
   * {
     @apply border-[var(--gantry-border)];
+    scrollbar-color: var(--gantry-bg-tertiary) var(--gantry-bg-secondary);
+  }
+
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--gantry-bg-secondary);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--gantry-bg-tertiary);
+    border: 3px solid var(--gantry-bg-secondary);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--gantry-border);
   }
 }
 
