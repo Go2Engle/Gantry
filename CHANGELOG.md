@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/Go2Engle/Gantry/compare/v0.3.0...v0.4.0) (2026-03-16)
+
+
+### Features
+
+* add install script for Gantry with checksum verification and OS detection ([54ff87a](https://github.com/Go2Engle/Gantry/commit/54ff87adb536b35f29a4d434eda451a402022cb9))
+* add logo images and update branding in various components ([#12](https://github.com/Go2Engle/Gantry/issues/12)) ([2c98ff0](https://github.com/Go2Engle/Gantry/commit/2c98ff0967b00b44ac5c6ad35c19428f9c5c78f7))
+* implement required field validation and error handling in forms ([#10](https://github.com/Go2Engle/Gantry/issues/10)) ([e995387](https://github.com/Go2Engle/Gantry/commit/e995387d11a1210c50ba21bad9eaaadbc61d44b4))
+
+
+### Bug Fixes
+
+* enhance version display in upgrade process and add unit tests fo… ([#11](https://github.com/Go2Engle/Gantry/issues/11)) ([a29f54a](https://github.com/Go2Engle/Gantry/commit/a29f54afe01a6e93999af48e2f18dbfb0a1ef384))
+
 ## [0.3.0](https://github.com/Go2Engle/Gantry/compare/v0.2.0...v0.3.0) (2026-03-16)
 
 
