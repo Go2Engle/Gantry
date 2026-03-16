@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { ENTITY_KINDS } from '../lib/types';
+import { pruneEmpty } from '../lib/utils';
 import type { Entity, JsonSchema } from '../lib/types';
 import EntityCard from '../components/EntityCard';
 import EntityTable from '../components/EntityTable';
@@ -118,15 +119,13 @@ export default function Catalog() {
       const owner = (raw._owner as string) || '';
       const description = (raw._description as string) || '';
 
-      // Build spec, stripping metadata prefixed keys and empty values
+      // Strip metadata-prefixed keys, then deep-prune empty values
       // so the backend doesn't see "" for optional enum fields.
-      const spec: Record<string, any> = {};
+      const rawSpec: Record<string, any> = {};
       for (const [key, value] of Object.entries(raw)) {
-        if (key.startsWith('_')) continue;
-        if (value === '' || value === undefined || value === null) continue;
-        if (Array.isArray(value) && value.length === 0) continue;
-        spec[key] = value;
+        if (!key.startsWith('_')) rawSpec[key] = value;
       }
+      const spec = pruneEmpty(rawSpec);
 
       const newEntity: Entity = {
         kind: createKind,

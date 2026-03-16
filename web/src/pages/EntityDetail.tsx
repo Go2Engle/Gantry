@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ChevronRight, Pencil, Trash2, X, ExternalLink, LayoutDashboard, BookOpen, FileText, Github, MessageSquare, Bell, Activity, Cpu, CircleHelp, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
+import { pruneEmpty } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 import type { Entity, JsonSchema, AuditEntry, GraphData, EntityLink, PluginRegistryEntry } from '../lib/types';
 import SchemaForm from '../components/SchemaForm';
@@ -178,13 +179,8 @@ export default function EntityDetail() {
   const handleUpdate = async (raw: Record<string, any>) => {
     if (!entity || !kind || !name) return;
     try {
-      // Strip empty values so the backend doesn't see "" for optional enum fields.
-      const spec: Record<string, any> = {};
-      for (const [key, value] of Object.entries(raw)) {
-        if (value === '' || value === undefined || value === null) continue;
-        if (Array.isArray(value) && value.length === 0) continue;
-        spec[key] = value;
-      }
+      // Deep-prune empty values so the backend doesn't see "" for optional enum fields.
+      const spec = pruneEmpty(raw);
       const updated = await api.updateEntity(kind, name, {
         ...entity,
         metadata: {

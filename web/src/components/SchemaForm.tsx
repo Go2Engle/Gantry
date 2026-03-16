@@ -482,11 +482,11 @@ export default function SchemaForm({
           )}
           <button
             type="submit"
-            disabled={submitted && !isValid}
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] ${
-              submitted && !isValid
-                ? 'cursor-not-allowed bg-[var(--gantry-accent)]/50'
-                : 'bg-[var(--gantry-accent)] hover:bg-[var(--gantry-accent-hover)]'
+            disabled={!isValid}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${
+              !isValid
+                ? 'cursor-not-allowed bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)]'
+                : 'bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]'
             }`}
           >
             {submitLabel}
