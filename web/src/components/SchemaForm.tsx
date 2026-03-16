@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { JsonSchema } from '../lib/types';
 import EntityPicker from './EntityPicker';
@@ -84,17 +84,47 @@ function getDefaultValue(schema: JsonSchema): any {
   }
 }
 
+/** Check if a single value is "empty" for validation purposes. */
+function isEmpty(value: any, schema: JsonSchema): boolean {
+  if (value === undefined || value === null) return true;
+  if (schema.type === 'string' && value === '') return true;
+  if (schema.type === 'array' && Array.isArray(value) && value.length === 0) return true;
+  return false;
+}
+
+/** Collect names of required fields that are empty. */
+function getMissingRequired(
+  schema: JsonSchema,
+  values: Record<string, any>,
+): string[] {
+  const required = schema.required || [];
+  const properties = schema.properties || {};
+  const missing: string[] = [];
+  for (const key of required) {
+    const propSchema = properties[key];
+    if (!propSchema) continue;
+    if (isEmpty(values[key], propSchema)) {
+      missing.push(key);
+    }
+  }
+  return missing;
+}
+
 interface FieldProps {
   name: string;
   schema: JsonSchema;
   value: any;
   onChange: (value: any) => void;
   required?: boolean;
+  error?: boolean;
 }
 
-function FormField({ name, schema, value, onChange, required }: FieldProps) {
+function FormField({ name, schema, value, onChange, required, error }: FieldProps) {
   const label = schema.title || name;
   const description = schema.description;
+  const borderClass = error
+    ? 'border-[var(--gantry-danger)] focus:border-[var(--gantry-danger)] focus:ring-[var(--gantry-danger)]'
+    : 'border-[var(--gantry-border)] focus:border-[var(--gantry-accent)] focus:ring-[var(--gantry-accent)]';
 
   if (schema.enum) {
     return (
@@ -109,7 +139,7 @@ function FormField({ name, schema, value, onChange, required }: FieldProps) {
         <select
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+          className={`w-full rounded-lg border bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-1 ${borderClass}`}
         >
           <option value="">Select...</option>
           {schema.enum.map((opt: any) => (
@@ -118,6 +148,7 @@ function FormField({ name, schema, value, onChange, required }: FieldProps) {
             </option>
           ))}
         </select>
+        {error && <p className="text-xs text-[var(--gantry-danger)]">This field is required</p>}
       </div>
     );
   }
@@ -170,8 +201,9 @@ function FormField({ name, schema, value, onChange, required }: FieldProps) {
           onChange={(e) =>
             onChange(e.target.value === '' ? '' : Number(e.target.value))
           }
-          className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+          className={`w-full rounded-lg border bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-1 ${borderClass}`}
         />
+        {error && <p className="text-xs text-[var(--gantry-danger)]">This field is required</p>}
       </div>
     );
   }
@@ -306,6 +338,7 @@ function FormField({ name, schema, value, onChange, required }: FieldProps) {
           value={value ?? ''}
           onChange={onChange}
         />
+        {error && <p className="text-xs text-[var(--gantry-danger)]">This field is required</p>}
       </div>
     );
   }
@@ -329,8 +362,9 @@ function FormField({ name, schema, value, onChange, required }: FieldProps) {
           onChange={(e) => onChange(e.target.value)}
           rows={4}
           maxLength={schema.maxLength}
-          className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+          className={`w-full rounded-lg border bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-1 ${borderClass}`}
         />
+        {error && <p className="text-xs text-[var(--gantry-danger)]">This field is required</p>}
       </div>
     );
   }
@@ -350,8 +384,9 @@ function FormField({ name, schema, value, onChange, required }: FieldProps) {
         onChange={(e) => onChange(e.target.value)}
         minLength={schema.minLength}
         maxLength={schema.maxLength}
-        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+        className={`w-full rounded-lg border bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-1 ${borderClass}`}
       />
+      {error && <p className="text-xs text-[var(--gantry-danger)]">This field is required</p>}
     </div>
   );
 }
@@ -360,10 +395,12 @@ function ObjectFields({
   schema,
   value,
   onChange,
+  errors,
 }: {
   schema: JsonSchema;
   value: Record<string, any>;
   onChange: (value: Record<string, any>) => void;
+  errors?: string[];
 }) {
   const properties = schema.properties || {};
   const required = schema.required || [];
@@ -378,6 +415,7 @@ function ObjectFields({
           value={value[key] ?? getDefaultValue(propSchema)}
           onChange={(newVal) => onChange({ ...value, [key]: newVal })}
           required={required.includes(key)}
+          error={errors ? errors.includes(key) : false}
         />
       ))}
     </div>
@@ -404,12 +442,23 @@ export default function SchemaForm({
     return defaults;
   });
 
+  const [submitted, setSubmitted] = useState(false);
+
+  const missingFields = useMemo(
+    () => getMissingRequired(schema, values),
+    [schema, values],
+  );
+
+  const isValid = missingFields.length === 0;
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+      setSubmitted(true);
+      if (missingFields.length > 0) return;
       onSubmit(values);
     },
-    [values, onSubmit],
+    [values, onSubmit, missingFields],
   );
 
   return (
@@ -418,6 +467,7 @@ export default function SchemaForm({
         schema={schema}
         value={values}
         onChange={setValues}
+        errors={submitted ? missingFields : undefined}
       />
       {!hideActions && (
         <div className="flex items-center justify-end gap-3 border-t border-[var(--gantry-border)] pt-4">
@@ -432,7 +482,12 @@ export default function SchemaForm({
           )}
           <button
             type="submit"
-            className="rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
+            disabled={submitted && !isValid}
+            className={`rounded-lg px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] ${
+              submitted && !isValid
+                ? 'cursor-not-allowed bg-[var(--gantry-accent)]/50'
+                : 'bg-[var(--gantry-accent)] hover:bg-[var(--gantry-accent-hover)]'
+            }`}
           >
             {submitLabel}
           </button>

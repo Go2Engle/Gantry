@@ -175,9 +175,16 @@ export default function EntityDetail() {
     setEditing(true);
   }
 
-  const handleUpdate = async (spec: Record<string, any>) => {
+  const handleUpdate = async (raw: Record<string, any>) => {
     if (!entity || !kind || !name) return;
     try {
+      // Strip empty values so the backend doesn't see "" for optional enum fields.
+      const spec: Record<string, any> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (value === '' || value === undefined || value === null) continue;
+        if (Array.isArray(value) && value.length === 0) continue;
+        spec[key] = value;
+      }
       const updated = await api.updateEntity(kind, name, {
         ...entity,
         metadata: {

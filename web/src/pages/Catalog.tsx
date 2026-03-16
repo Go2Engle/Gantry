@@ -111,16 +111,22 @@ export default function Catalog() {
     setCreateStep('kind');
   };
 
-  const handleCreate = async (spec: Record<string, any>) => {
+  const handleCreate = async (raw: Record<string, any>) => {
     try {
-      const name = (spec._name as string) || '';
-      const title = (spec._title as string) || '';
-      const owner = (spec._owner as string) || '';
-      const description = (spec._description as string) || '';
-      delete spec._name;
-      delete spec._title;
-      delete spec._owner;
-      delete spec._description;
+      const name = (raw._name as string) || '';
+      const title = (raw._title as string) || '';
+      const owner = (raw._owner as string) || '';
+      const description = (raw._description as string) || '';
+
+      // Build spec, stripping metadata prefixed keys and empty values
+      // so the backend doesn't see "" for optional enum fields.
+      const spec: Record<string, any> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (key.startsWith('_')) continue;
+        if (value === '' || value === undefined || value === null) continue;
+        if (Array.isArray(value) && value.length === 0) continue;
+        spec[key] = value;
+      }
 
       const newEntity: Entity = {
         kind: createKind,
@@ -138,6 +144,7 @@ export default function Catalog() {
 
   const createSchema: JsonSchema = useMemo(() => {
     const kindSchema = schemas[createKind.toLowerCase()] || { type: 'object', properties: {} };
+    const kindRequired: string[] = (kindSchema as any).required || [];
     return {
       type: 'object',
       properties: {
@@ -147,7 +154,7 @@ export default function Catalog() {
         _description: { type: 'string', title: 'Description' },
         ...(kindSchema as any).properties,
       },
-      required: ['_name'],
+      required: ['_name', ...kindRequired],
     };
   }, [schemas, createKind]);
 
