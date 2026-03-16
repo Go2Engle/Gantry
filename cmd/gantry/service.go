@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	htmltemplate "html/template"
 	"os"
 	"os/exec"
 	"runtime"
@@ -54,10 +55,11 @@ const defaultBinaryPath = "/usr/local/bin/gantry"
 
 // launchdLaunchScript is the wrapper that loads gantry.env before exec'ing the binary.
 // Reads KEY=VALUE pairs line-by-line without shell evaluation to prevent injection.
+// ConfigDir and DataDir are single-quoted to prevent shell interpretation.
 const launchdLaunchScript = `#!/bin/sh
 # Load environment variables (secrets, config overrides) safely.
 # Each line must be KEY=VALUE; comments and blanks are skipped.
-ENV_FILE="{{.ConfigDir}}/gantry.env"
+ENV_FILE='{{.ConfigDir}}/gantry.env'
 if [ -f "$ENV_FILE" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip empty lines and comments.
@@ -78,7 +80,7 @@ if [ -f "$ENV_FILE" ]; then
         export "$key=$value"
     done < "$ENV_FILE"
 fi
-exec /usr/local/bin/gantry serve --port {{.Port}} --db "{{.DataDir}}/gantry.db"
+exec /usr/local/bin/gantry serve --port {{.Port}} --db '{{.DataDir}}/gantry.db'
 `
 
 // writeLaunchScript renders and writes the gantry-launch.sh wrapper for launchd.
@@ -110,7 +112,7 @@ Wants=network-online.target
 Type=simple
 User={{.User}}
 Group={{.Group}}
-ExecStart=/usr/local/bin/gantry serve --port {{.Port}} --db {{.DataDir}}/gantry.db
+ExecStart=/usr/local/bin/gantry serve --port {{.Port}} --db "{{.DataDir}}/gantry.db"
 WorkingDirectory={{.DataDir}}
 Restart=on-failure
 RestartSec=5
@@ -344,24 +346,28 @@ func findUnusedDarwinID(entityType, idKey string, low, high int) (int, error) {
 
 // renderServiceFile renders the service file template for the given init system.
 func renderServiceFile(sys initSystem, data serviceTemplateData) (string, error) {
-	var tmplStr string
+	var buf bytes.Buffer
+
 	switch sys {
 	case initSystemd:
-		tmplStr = systemdTemplate
+		tmpl, err := template.New("service").Parse(systemdTemplate)
+		if err != nil {
+			return "", fmt.Errorf("parsing template: %w", err)
+		}
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return "", fmt.Errorf("rendering template: %w", err)
+		}
 	case initLaunchd:
-		tmplStr = launchdTemplate
+		// Use html/template for XML-safe escaping of values in the plist.
+		tmpl, err := htmltemplate.New("service").Parse(launchdTemplate)
+		if err != nil {
+			return "", fmt.Errorf("parsing template: %w", err)
+		}
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return "", fmt.Errorf("rendering template: %w", err)
+		}
 	default:
 		return "", fmt.Errorf("unsupported init system: %s", sys)
-	}
-
-	tmpl, err := template.New("service").Parse(tmplStr)
-	if err != nil {
-		return "", fmt.Errorf("parsing template: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("rendering template: %w", err)
 	}
 
 	return buf.String(), nil

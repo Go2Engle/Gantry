@@ -215,6 +215,9 @@ func writeEnvFile(configDir, adminPassword, serviceUser string) error {
 
 	var content string
 	if adminPassword != "" {
+		if strings.ContainsAny(adminPassword, "\r\n") {
+			return fmt.Errorf("admin password must not contain newline characters")
+		}
 		content = fmt.Sprintf("GANTRY_ADMIN_PASSWORD=%s\n", adminPassword)
 	} else {
 		content = "# Add environment variables here (e.g., GANTRY_ADMIN_PASSWORD, GANTRY_ENCRYPTION_KEY)\n"
@@ -287,7 +290,8 @@ func readAdminPassword(filePath string) (string, error) {
 	return "", nil
 }
 
-// copyBinary copies the current executable to the target path.
+// copyBinary copies the current executable to the target path atomically.
+// Uses a temp file + rename to avoid leaving a partial binary on failure.
 func copyBinary(destPath string) error {
 	srcPath, err := os.Executable()
 	if err != nil {
@@ -305,7 +309,8 @@ func copyBinary(destPath string) error {
 	}
 
 	// Ensure parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+	destDir := filepath.Dir(destPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("creating binary directory: %w", err)
 	}
 
@@ -315,14 +320,32 @@ func copyBinary(destPath string) error {
 	}
 	defer src.Close()
 
-	dst, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	// Write to a temp file in the same directory, then atomically rename.
+	tmp, err := os.CreateTemp(destDir, ".gantry-install-*")
 	if err != nil {
-		return fmt.Errorf("creating destination binary: %w", err)
+		return fmt.Errorf("creating temp file for binary: %w", err)
 	}
-	defer dst.Close()
+	tmpPath := tmp.Name()
 
-	if _, err := io.Copy(dst, src); err != nil {
+	if _, err := io.Copy(tmp, src); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
 		return fmt.Errorf("copying binary: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("syncing binary: %w", err)
+	}
+	tmp.Close()
+
+	if err := os.Chmod(tmpPath, 0755); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("setting binary permissions: %w", err)
+	}
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("installing binary: %w", err)
 	}
 
 	fmt.Printf("  Installed binary: %s\n", destPath)
