@@ -60,7 +60,8 @@ const config = {
         title: 'Gantry',
         logo: {
           alt: 'Gantry Logo',
-          src: 'img/logo-white.png',
+          src: 'img/logo-black.png',
+          srcDark: 'img/logo-white.png',
         },
         items: [
           {
