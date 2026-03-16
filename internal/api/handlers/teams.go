@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -275,9 +277,14 @@ func postTeamsWebhook(cfg teamsPluginConfig, payload teamsWebhookPayload) error 
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, cfg.IncomingWebhookSecret, bytes.NewReader(data))
+	parsed, err := url.Parse(cfg.IncomingWebhookSecret)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return errors.New("teams webhook URL must be an absolute https URL")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, parsed.String(), bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return errors.New("build request failed")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Gantry/1.0 TeamsNotifier")
@@ -285,7 +292,7 @@ func postTeamsWebhook(cfg teamsPluginConfig, payload teamsWebhookPayload) error 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post webhook: %w", err)
+		return errors.New("post webhook failed")
 	}
 	defer resp.Body.Close()
 
