@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Gantry Plugin"
+  short_description: "Build Gantry plugins end to end"
+  default_prompt: "Use $create-gantry-plugin to add a new Gantry plugin to this Gantry repo end to end."
