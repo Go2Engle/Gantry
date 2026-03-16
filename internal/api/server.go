@@ -95,7 +95,8 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 	// API v1 routes.
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.RateLimit)
-		// Public auth endpoints.
+		// Public endpoints.
+		api.Get("/version", h.GetVersion)
 		api.Post("/auth/login", h.Login)
 		// GitHub SSO — public; used by login page and OAuth redirect flow.
 		api.Get("/auth/github/config", h.GetGitHubSSOConfig)
@@ -105,9 +106,6 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 		// Authenticated routes.
 		api.Group(func(protected chi.Router) {
 			protected.Use(middleware.RequireAuth(authSvc, database))
-
-			// Version endpoint.
-			protected.Get("/version", h.GetVersion)
 
 			// Auth endpoints.
 			protected.Get("/auth/me", h.GetMe)

@@ -1,3 +1,7 @@
+export interface VersionResponse {
+  version: string;
+}
+
 export interface Entity {
   kind: string;
   apiVersion: string;
