@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"github.com/go2engle/gantry/internal/events"
 	"github.com/go2engle/gantry/internal/metrics"
 	"github.com/go2engle/gantry/internal/search"
+	"github.com/go2engle/gantry/web"
 )
 
 // Server is the Gantry HTTP server.
@@ -219,12 +221,19 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 		api.With(middleware.RequireWebSocketAuth(authSvc, database)).Get("/ws", wsHub.ServeWS)
 	})
 
-	// Serve frontend static files from web/dist if the directory exists.
-	// Uses SPA fallback: unmatched routes serve index.html.
+	// Serve frontend static files.
+	// In dev mode, prefer the on-disk web/dist directory for hot-reload.
+	// In production, use the embedded filesystem built into the binary.
 	webDir := filepath.Join("web", "dist")
 	if info, err := os.Stat(webDir); err == nil && info.IsDir() {
 		spaHandler := spaFileServer(http.Dir(webDir))
 		r.NotFound(spaHandler.ServeHTTP)
+	} else if distFS, err := fs.Sub(web.DistFS, "dist"); err == nil {
+		// Check that the embedded FS actually has content (index.html).
+		if _, err := distFS.Open("index.html"); err == nil {
+			spaHandler := spaFileServer(http.FS(distFS))
+			r.NotFound(spaHandler.ServeHTTP)
+		}
 	}
 
 	return &Server{
