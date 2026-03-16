@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Go2Engle/Gantry/compare/v0.4.0...v0.5.0) (2026-03-16)
+
+
+### Features
+
+* add version display in API and UI components ([#13](https://github.com/Go2Engle/Gantry/issues/13)) ([7cd7765](https://github.com/Go2Engle/Gantry/commit/7cd7765b344509832ef75616f126fe0f6b6b6630))
+
 ## [0.4.0](https://github.com/Go2Engle/Gantry/compare/v0.3.0...v0.4.0) (2026-03-16)
 
 
