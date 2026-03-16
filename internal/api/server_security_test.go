@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -138,6 +139,59 @@ func TestAPIKeyDoesNotInheritOwnerGroupRole(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestLoginReturnsEffectiveAdminPermissionsFromGroupMembership(t *testing.T) {
+	env := newTestServerEnv(t)
+	user, _ := env.createUser(t, "group-admin-login", "viewer")
+
+	if err := env.db.AddUserToGroupByName(context.Background(), user.ID, "admins"); err != nil {
+		t.Fatalf("AddUserToGroupByName: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"group-admin-login","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	env.server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Token string `json:"token"`
+		User  struct {
+			ID            string          `json:"id"`
+			UserID        string          `json:"userId"`
+			Role          string          `json:"role"`
+			EffectiveRole string          `json:"effectiveRole"`
+			Groups        []string        `json:"groups"`
+			Permissions   map[string]bool `json:"permissions"`
+		} `json:"user"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+
+	if resp.Token == "" {
+		t.Fatal("expected login token")
+	}
+	if resp.User.ID != user.ID || resp.User.UserID != user.ID {
+		t.Fatalf("expected user identifiers %q, got id=%q userId=%q", user.ID, resp.User.ID, resp.User.UserID)
+	}
+	if resp.User.Role != "viewer" {
+		t.Fatalf("expected direct role viewer, got %q", resp.User.Role)
+	}
+	if resp.User.EffectiveRole != "admin" {
+		t.Fatalf("expected effective role admin, got %q", resp.User.EffectiveRole)
+	}
+	if !resp.User.Permissions["admin"] {
+		t.Fatalf("expected admin permission in login response, got %#v", resp.User.Permissions)
+	}
+	if len(resp.User.Groups) != 1 || resp.User.Groups[0] != "admins" {
+		t.Fatalf("expected admins group, got %#v", resp.User.Groups)
 	}
 }
 

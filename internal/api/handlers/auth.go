@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -19,8 +20,23 @@ type loginRequest struct {
 
 // loginResponse represents the JSON response returned on successful login.
 type loginResponse struct {
-	Token string   `json:"token"`
-	User  *db.User `json:"user"`
+	Token string           `json:"token"`
+	User  authUserResponse `json:"user"`
+}
+
+// authUserResponse is the normalized auth payload returned by both login and
+// current-user endpoints. It includes the user's direct role plus their
+// computed effective role, groups, and permission map.
+type authUserResponse struct {
+	ID            string          `json:"id"`
+	UserID        string          `json:"userId"`
+	Username      string          `json:"username"`
+	DisplayName   string          `json:"displayName,omitempty"`
+	Email         string          `json:"email,omitempty"`
+	Role          string          `json:"role"`
+	EffectiveRole string          `json:"effectiveRole"`
+	Groups        []string        `json:"groups"`
+	Permissions   map[string]bool `json:"permissions"`
 }
 
 // registerRequest represents the JSON body for user registration.
@@ -60,13 +76,13 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build the auth.User needed by GenerateToken.
-	authUser := &auth.User{
+	tokenUser := &auth.User{
 		ID:       user.ID,
 		Username: user.Username,
 		Role:     user.Role,
 	}
 
-	token, err := h.Auth.GenerateToken(authUser)
+	token, err := h.Auth.GenerateToken(tokenUser)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
@@ -82,9 +98,11 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 
+	authResponse := h.buildAuthUserResponse(r.Context(), user)
+
 	writeJSON(w, http.StatusOK, loginResponse{
 		Token: token,
-		User:  user,
+		User:  authResponse,
 	})
 }
 
@@ -104,33 +122,30 @@ func (h *Handlers) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	effectiveRole := middleware.GetEffectiveRole(r.Context())
-
-	var groupNames []string
+	authUser := authUserResponse{
+		ID:       claims.UserID,
+		UserID:   claims.UserID,
+		Username: claims.Username,
+		Role:     claims.Role,
+	}
 	if claims.UserID != "" {
-		groups, err := h.DB.ListUserGroups(r.Context(), claims.UserID)
-		if err == nil {
-			for _, g := range groups {
-				groupNames = append(groupNames, g.Name)
-			}
+		if user, err := h.DB.GetUserByID(r.Context(), claims.UserID); err == nil {
+			authUser = h.buildAuthUserResponse(r.Context(), user)
+		} else {
+			authUser.EffectiveRole = middleware.GetEffectiveRole(r.Context())
+			authUser.Groups = []string{}
+			authUser.Permissions = auth.RolePermissions(authUser.EffectiveRole)
 		}
+	} else {
+		authUser.EffectiveRole = middleware.GetEffectiveRole(r.Context())
+		authUser.Groups = []string{}
+		authUser.Permissions = auth.RolePermissions(authUser.EffectiveRole)
 	}
-	if groupNames == nil {
-		groupNames = []string{}
+	if authUser.Permissions == nil {
+		authUser.Permissions = map[string]bool{}
 	}
 
-	// Look up the effective role's permissions so the frontend can do
-	// fine-grained checks (e.g. show "New Entity" only if write is granted).
-	permissions := auth.RolePermissions(effectiveRole)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"userId":        claims.UserID,
-		"username":      claims.Username,
-		"role":          claims.Role,
-		"effectiveRole": effectiveRole,
-		"groups":        groupNames,
-		"permissions":   permissions,
-	})
+	writeJSON(w, http.StatusOK, authUser)
 }
 
 // Register handles POST /auth/register. It creates a new user account.
@@ -211,6 +226,36 @@ type updateUserRequest struct {
 	DisplayName string `json:"displayName"`
 	Email       string `json:"email"`
 	Role        string `json:"role"`
+}
+
+func (h *Handlers) buildAuthUserResponse(ctx context.Context, user *db.User) authUserResponse {
+	resp := authUserResponse{
+		ID:          user.ID,
+		UserID:      user.ID,
+		Username:    user.Username,
+		DisplayName: user.DisplayName,
+		Email:       user.Email,
+		Role:        user.Role,
+		Groups:      []string{},
+	}
+
+	groupRoles := []string{}
+	if groups, err := h.DB.ListUserGroups(ctx, user.ID); err == nil {
+		resp.Groups = make([]string, 0, len(groups))
+		groupRoles = make([]string, 0, len(groups))
+		for _, g := range groups {
+			resp.Groups = append(resp.Groups, g.Name)
+			groupRoles = append(groupRoles, g.Role)
+		}
+	}
+
+	resp.EffectiveRole = auth.EffectiveRole(user.Role, groupRoles)
+	resp.Permissions = auth.RolePermissions(resp.EffectiveRole)
+	if resp.Permissions == nil {
+		resp.Permissions = map[string]bool{}
+	}
+
+	return resp
 }
 
 // UpdateUser handles PUT /auth/users/{id}. Allows admins to update a user's
