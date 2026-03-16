@@ -55,11 +55,11 @@ const defaultBinaryPath = "/usr/local/bin/gantry"
 
 // launchdLaunchScript is the wrapper that loads gantry.env before exec'ing the binary.
 // Reads KEY=VALUE pairs line-by-line without shell evaluation to prevent injection.
-// ConfigDir and DataDir are single-quoted to prevent shell interpretation.
+// ConfigDir and DataDir are POSIX-single-quote-escaped via the sq template function.
 const launchdLaunchScript = `#!/bin/sh
 # Load environment variables (secrets, config overrides) safely.
 # Each line must be KEY=VALUE; comments and blanks are skipped.
-ENV_FILE='{{.ConfigDir}}/gantry.env'
+ENV_FILE={{sq .ConfigDir}}/gantry.env
 if [ -f "$ENV_FILE" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip empty lines and comments.
@@ -80,12 +80,19 @@ if [ -f "$ENV_FILE" ]; then
         export "$key=$value"
     done < "$ENV_FILE"
 fi
-exec /usr/local/bin/gantry serve --port {{.Port}} --db '{{.DataDir}}/gantry.db'
+exec /usr/local/bin/gantry serve --port {{.Port}} --db {{sq .DataDir}}/gantry.db
 `
+
+// singleQuoteEscape wraps s in POSIX single quotes, escaping any embedded single
+// quotes so the result is safe to use as a shell word in sh scripts.
+func singleQuoteEscape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
 
 // writeLaunchScript renders and writes the gantry-launch.sh wrapper for launchd.
 func writeLaunchScript(data serviceTemplateData) error {
-	tmpl, err := template.New("launch-script").Parse(launchdLaunchScript)
+	funcMap := template.FuncMap{"sq": singleQuoteEscape}
+	tmpl, err := template.New("launch-script").Funcs(funcMap).Parse(launchdLaunchScript)
 	if err != nil {
 		return fmt.Errorf("parsing launch script template: %w", err)
 	}
@@ -118,15 +125,15 @@ Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
 
-Environment=GANTRY_DATA_DIR={{.DataDir}}
+Environment="GANTRY_DATA_DIR={{.DataDir}}"
 EnvironmentFile=-{{.ConfigDir}}/gantry.env
 
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths={{.DataDir}}
-ReadOnlyPaths={{.ConfigDir}}
+ReadWritePaths="{{.DataDir}}"
+ReadOnlyPaths="{{.ConfigDir}}"
 PrivateTmp=true
 
 [Install]

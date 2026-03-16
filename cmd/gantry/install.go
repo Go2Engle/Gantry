@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,7 @@ Requires root privileges (sudo).`,
 	cmd.Flags().String("user", "gantry", "System user to run the service as")
 	cmd.Flags().String("group", "gantry", "System group to run the service as")
 	cmd.Flags().String("admin-password-file", "", "Path to a file containing the initial admin password")
+	cmd.Flags().Bool("admin-password-stdin", false, "Read the initial admin password from stdin (for piped use)")
 	cmd.Flags().Bool("no-start", false, "Don't start the service after installation")
 
 	return cmd
@@ -67,9 +69,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	userName, _ := cmd.Flags().GetString("user")
 	groupName, _ := cmd.Flags().GetString("group")
 	adminPasswordFile, _ := cmd.Flags().GetString("admin-password-file")
+	adminPasswordStdin, _ := cmd.Flags().GetBool("admin-password-stdin")
 	noStart, _ := cmd.Flags().GetBool("no-start")
 
-	adminPassword, err := readAdminPassword(adminPasswordFile)
+	adminPassword, err := readAdminPassword(adminPasswordFile, adminPasswordStdin)
 	if err != nil {
 		return fmt.Errorf("reading admin password: %w", err)
 	}
@@ -170,18 +173,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 // createDirectories creates the data and config directories with proper ownership.
 func createDirectories(dataDir, configDir, userName, _ string) error {
-	// Look up UID/GID.
-	u, err := user.Lookup(userName)
+	// Look up UID/GID (platform-aware to handle CGO_ENABLED=0 on Darwin).
+	uid, gid, err := lookupUserIDs(userName)
 	if err != nil {
-		return fmt.Errorf("looking up user %s: %w", userName, err)
-	}
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return fmt.Errorf("parsing UID %q for user %s: %w", u.Uid, userName, err)
-	}
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		return fmt.Errorf("parsing GID %q for user %s: %w", u.Gid, userName, err)
+		return err
 	}
 
 	// Create data directory.
@@ -204,56 +199,56 @@ func createDirectories(dataDir, configDir, userName, _ string) error {
 
 // writeEnvFile writes the environment file for secrets (mode 0600),
 // owned by the service user so the launchd/systemd process can read it.
+// If the file already exists, the write is skipped but ownership/permissions
+// are still normalized so re-running install repairs any drift.
 func writeEnvFile(configDir, adminPassword, serviceUser string) error {
 	envPath := filepath.Join(configDir, "gantry.env")
 
-	// Don't overwrite an existing env file.
-	if _, err := os.Stat(envPath); err == nil {
-		fmt.Printf("  Environment file already exists: %s\n", envPath)
-		return nil
-	}
+	// Check whether the file already exists.
+	_, statErr := os.Stat(envPath)
+	fileExists := statErr == nil
 
-	var content string
-	if adminPassword != "" {
-		if strings.ContainsAny(adminPassword, "\r\n") {
+	if !fileExists {
+		// Validate password before writing.
+		if adminPassword != "" && strings.ContainsAny(adminPassword, "\r\n") {
 			return fmt.Errorf("admin password must not contain newline characters")
 		}
-		content = fmt.Sprintf("GANTRY_ADMIN_PASSWORD=%s\n", adminPassword)
+		var content string
+		if adminPassword != "" {
+			content = fmt.Sprintf("GANTRY_ADMIN_PASSWORD=%s\n", adminPassword)
+		} else {
+			content = "# Add environment variables here (e.g., GANTRY_ADMIN_PASSWORD, GANTRY_ENCRYPTION_KEY)\n"
+		}
+		if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
+			return fmt.Errorf("writing environment file: %w", err)
+		}
+		fmt.Printf("  Created environment file: %s (mode 0600)\n", envPath)
 	} else {
-		content = "# Add environment variables here (e.g., GANTRY_ADMIN_PASSWORD, GANTRY_ENCRYPTION_KEY)\n"
+		fmt.Printf("  Environment file already exists: %s\n", envPath)
+		// Normalize permissions on the existing file.
+		if err := os.Chmod(envPath, 0600); err != nil {
+			return fmt.Errorf("normalizing permissions on %s: %w", envPath, err)
+		}
 	}
 
-	if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
-		return fmt.Errorf("writing environment file: %w", err)
-	}
-
-	// Chown to the service user so the process can read it.
+	// Always normalize ownership so the service user can read the file.
 	if os.Geteuid() == 0 && serviceUser != "" {
-		u, err := user.Lookup(serviceUser)
+		uid, gid, err := lookupUserIDs(serviceUser)
 		if err != nil {
 			return fmt.Errorf("looking up service user %s for env file ownership: %w", serviceUser, err)
-		}
-		uid, err := strconv.Atoi(u.Uid)
-		if err != nil {
-			return fmt.Errorf("parsing UID for %s: %w", serviceUser, err)
-		}
-		gid, err := strconv.Atoi(u.Gid)
-		if err != nil {
-			return fmt.Errorf("parsing GID for %s: %w", serviceUser, err)
 		}
 		if err := os.Chown(envPath, uid, gid); err != nil {
 			return fmt.Errorf("setting ownership on %s: %w", envPath, err)
 		}
 	}
 
-	fmt.Printf("  Created environment file: %s (mode 0600)\n", envPath)
-
 	return nil
 }
 
-// readAdminPassword reads the admin password from a file, TTY prompt, or stdin.
-// Returns empty string if no password source is available (non-interactive, no file).
-func readAdminPassword(filePath string) (string, error) {
+// readAdminPassword reads the admin password from a file, TTY prompt, or piped stdin.
+// Piped stdin is only consumed when stdinAllowed is true (--admin-password-stdin flag).
+// Returns empty string if no password source is available.
+func readAdminPassword(filePath string, stdinAllowed bool) (string, error) {
 	// 1. If --admin-password-file was provided, read from file.
 	if filePath != "" {
 		data, err := os.ReadFile(filePath)
@@ -278,7 +273,10 @@ func readAdminPassword(filePath string) (string, error) {
 		return strings.TrimSpace(string(pwBytes)), nil
 	}
 
-	// 3. If stdin is piped, read one line.
+	// 3. Only read from piped stdin when explicitly requested via --admin-password-stdin.
+	if !stdinAllowed {
+		return "", nil
+	}
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		return strings.TrimSpace(scanner.Text()), nil
@@ -288,6 +286,44 @@ func readAdminPassword(filePath string) (string, error) {
 	}
 
 	return "", nil
+}
+
+// lookupUserIDs returns the numeric UID and GID for the given user name.
+// On Darwin, user.Lookup requires CGO which is disabled (CGO_ENABLED=0);
+// fall back to id(1) instead, which works regardless of the directory service.
+func lookupUserIDs(userName string) (uid, gid int, err error) {
+	if runtime.GOOS == "darwin" {
+		uidOut, err := execCmdOutput("id", "-u", userName)
+		if err != nil {
+			return 0, 0, fmt.Errorf("looking up UID for user %s: %w", userName, err)
+		}
+		uid, err = strconv.Atoi(strings.TrimSpace(uidOut))
+		if err != nil {
+			return 0, 0, fmt.Errorf("parsing UID %q for user %s: %w", strings.TrimSpace(uidOut), userName, err)
+		}
+		gidOut, err := execCmdOutput("id", "-g", userName)
+		if err != nil {
+			return 0, 0, fmt.Errorf("looking up GID for user %s: %w", userName, err)
+		}
+		gid, err = strconv.Atoi(strings.TrimSpace(gidOut))
+		if err != nil {
+			return 0, 0, fmt.Errorf("parsing GID %q for user %s: %w", strings.TrimSpace(gidOut), userName, err)
+		}
+		return uid, gid, nil
+	}
+	u, err := user.Lookup(userName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("looking up user %s: %w", userName, err)
+	}
+	uid, err = strconv.Atoi(u.Uid)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parsing UID %q for user %s: %w", u.Uid, userName, err)
+	}
+	gid, err = strconv.Atoi(u.Gid)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parsing GID %q for user %s: %w", u.Gid, userName, err)
+	}
+	return uid, gid, nil
 }
 
 // copyBinary copies the current executable to the target path atomically.
