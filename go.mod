@@ -12,6 +12,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/cobra v1.8.1
 	golang.org/x/crypto v0.45.0
+	golang.org/x/term v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.33.1
 )

@@ -26,7 +26,7 @@ func TestCompareVersions(t *testing.T) {
 		{"dev", "dev", 0},
 		{"v1.0.0", "1.0.0", 0},
 		{"v1.0.0", "v1.0.1", -1},
-		{"1.0.0-rc1", "1.0.0", 0}, // pre-release suffix stripped to numeric
+		{"1.0.0-rc1", "1.0.0", -1}, // prerelease < release per semver
 		{"0.1.0", "0.1.0", 0},
 		{"0.2.0", "0.1.0", 1},
 		{"1.0.0", "0.99.99", 1},
@@ -208,8 +208,8 @@ func TestReplaceBinary(t *testing.T) {
 		t.Errorf("expected 'new binary', got %q", string(data))
 	}
 
-	// Verify .old was cleaned up.
-	if _, err := os.Stat(currentPath + ".old"); !os.IsNotExist(err) {
-		t.Error("expected .old file to be removed")
+	// Verify .old is preserved for rollback.
+	if _, err := os.Stat(currentPath + ".old"); os.IsNotExist(err) {
+		t.Error("expected .old file to be preserved for rollback")
 	}
 }

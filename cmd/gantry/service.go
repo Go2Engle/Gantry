@@ -41,16 +41,46 @@ type serviceInfo struct {
 
 // serviceTemplateData holds the data used to render service file templates.
 type serviceTemplateData struct {
-	User     string
-	Group    string
-	Port     int
-	DataDir  string
+	User      string
+	Group     string
+	Port      int
+	DataDir   string
 	ConfigDir string
 }
 
 const systemdServicePath = "/etc/systemd/system/gantry.service"
 const launchdPlistPath = "/Library/LaunchDaemons/com.gantry.server.plist"
 const defaultBinaryPath = "/usr/local/bin/gantry"
+
+// launchdLaunchScript is the wrapper that sources gantry.env before exec'ing the binary.
+const launchdLaunchScript = `#!/bin/sh
+# Source environment variables (secrets, config overrides).
+ENV_FILE="{{.ConfigDir}}/gantry.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    . "$ENV_FILE"
+    set +a
+fi
+exec /usr/local/bin/gantry serve --port {{.Port}} --db "{{.DataDir}}/gantry.db"
+`
+
+// writeLaunchScript renders and writes the gantry-launch.sh wrapper for launchd.
+func writeLaunchScript(data serviceTemplateData) error {
+	tmpl, err := template.New("launch-script").Parse(launchdLaunchScript)
+	if err != nil {
+		return fmt.Errorf("parsing launch script template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("rendering launch script: %w", err)
+	}
+	scriptPath := data.ConfigDir + "/gantry-launch.sh"
+	if err := os.WriteFile(scriptPath, buf.Bytes(), 0755); err != nil {
+		return fmt.Errorf("writing launch script: %w", err)
+	}
+	fmt.Printf("  Created launch script: %s\n", scriptPath)
+	return nil
+}
 
 // systemd unit template
 const systemdTemplate = `[Unit]
@@ -84,7 +114,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 `
 
-// launchd plist template
+// launchd plist template — uses a wrapper script that sources gantry.env
 const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -94,12 +124,7 @@ const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <string>com.gantry.server</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/gantry</string>
-        <string>serve</string>
-        <string>--port</string>
-        <string>{{.Port}}</string>
-        <string>--db</string>
-        <string>{{.DataDir}}/gantry.db</string>
+        <string>{{.ConfigDir}}/gantry-launch.sh</string>
     </array>
     <key>UserName</key>
     <string>{{.User}}</string>
@@ -276,7 +301,7 @@ func createSystemUserDarwin(user, group string) error {
 func findUnusedDarwinID(entityType, idKey string, low, high int) (int, error) {
 	out, err := execCmdOutput("dscl", ".", "-list", "/"+entityType, idKey)
 	if err != nil {
-		return low, nil // If we can't list, just try the low end.
+		return 0, fmt.Errorf("failed to list Darwin %s IDs: %w", entityType, err)
 	}
 	used := make(map[int]bool)
 	for _, line := range strings.Split(out, "\n") {

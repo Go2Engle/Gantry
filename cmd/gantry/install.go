@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func installCmd() *cobra.Command {
@@ -33,7 +36,7 @@ Requires root privileges (sudo).`,
 	cmd.Flags().String("config-dir", "/etc/gantry", "Configuration directory")
 	cmd.Flags().String("user", "gantry", "System user to run the service as")
 	cmd.Flags().String("group", "gantry", "System group to run the service as")
-	cmd.Flags().String("admin-password", "", "Initial admin password")
+	cmd.Flags().String("admin-password-file", "", "Path to a file containing the initial admin password")
 	cmd.Flags().Bool("no-start", false, "Don't start the service after installation")
 
 	return cmd
@@ -63,8 +66,13 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	configDir, _ := cmd.Flags().GetString("config-dir")
 	userName, _ := cmd.Flags().GetString("user")
 	groupName, _ := cmd.Flags().GetString("group")
-	adminPassword, _ := cmd.Flags().GetString("admin-password")
+	adminPasswordFile, _ := cmd.Flags().GetString("admin-password-file")
 	noStart, _ := cmd.Flags().GetBool("no-start")
+
+	adminPassword, err := readAdminPassword(adminPasswordFile)
+	if err != nil {
+		return fmt.Errorf("reading admin password: %w", err)
+	}
 
 	fmt.Print("\n  Installing Gantry as a system service...\n\n")
 
@@ -107,6 +115,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		unitPath = systemdServicePath
 	case initLaunchd:
 		unitPath = launchdPlistPath
+		// Write the wrapper script that sources gantry.env before exec'ing the binary.
+		if err := writeLaunchScript(tmplData); err != nil {
+			return fmt.Errorf("writing launch script: %w", err)
+		}
 	}
 
 	if err := os.WriteFile(unitPath, []byte(content), 0644); err != nil {
@@ -207,6 +219,42 @@ func writeEnvFile(configDir, adminPassword string) error {
 	fmt.Printf("  Created environment file: %s (mode 0600)\n", envPath)
 
 	return nil
+}
+
+// readAdminPassword reads the admin password from a file, TTY prompt, or stdin.
+// Returns empty string if no password source is available (non-interactive, no file).
+func readAdminPassword(filePath string) (string, error) {
+	// 1. If --admin-password-file was provided, read from file.
+	if filePath != "" {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("reading password file %s: %w", filePath, err)
+		}
+		pw := strings.TrimRight(string(data), "\r\n")
+		if pw == "" {
+			return "", fmt.Errorf("password file %s is empty", filePath)
+		}
+		return pw, nil
+	}
+
+	// 2. If stdin is a terminal, prompt interactively.
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Print("  Enter initial admin password (leave empty to skip): ")
+		pwBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println() // newline after hidden input
+		if err != nil {
+			return "", fmt.Errorf("reading password from terminal: %w", err)
+		}
+		return strings.TrimSpace(string(pwBytes)), nil
+	}
+
+	// 3. If stdin is piped, read one line.
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		return strings.TrimSpace(scanner.Text()), nil
+	}
+
+	return "", nil
 }
 
 // copyBinary copies the current executable to the target path.

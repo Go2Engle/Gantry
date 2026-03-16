@@ -91,8 +91,7 @@ func TestRenderServiceFileLaunchd(t *testing.T) {
 	// Verify key elements are present.
 	checks := []string{
 		"<string>com.gantry.server</string>",
-		"<string>/usr/local/bin/gantry</string>",
-		"<string>8080</string>",
+		"<string>/etc/gantry/gantry-launch.sh</string>",
 		"<string>gantry</string>",
 		"<string>/var/lib/gantry</string>",
 		"<key>RunAtLoad</key>",

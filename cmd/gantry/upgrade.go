@@ -158,6 +158,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	// If running as a service, prefer the standard binary path.
 	svc := detectService()
+	wasRunning := svc.IsRunning
 	if svc.IsInstalled {
 		targetPath = defaultBinaryPath
 	}
@@ -170,7 +171,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	// 8. Stop service if running.
-	if svc.IsRunning && !noRestart {
+	if wasRunning && !noRestart {
 		fmt.Println("  Stopping gantry service...")
 		if err := stopService(svc); err != nil {
 			return fmt.Errorf("stopping service: %w", err)
@@ -180,12 +181,18 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// 9. Replace the binary.
 	fmt.Println("  If interrupted, restore with: mv " + targetPath + ".old " + targetPath)
 	if err := replaceBinary(targetPath, newBinaryPath); err != nil {
+		// Attempt to restart if the service was running before we stopped it.
+		if wasRunning && !noRestart {
+			fmt.Println("  Attempting to restart service after failed upgrade...")
+			svc = detectService()
+			_ = startService(svc)
+		}
 		return fmt.Errorf("replacing binary: %w", err)
 	}
 	fmt.Printf("  Binary updated: %s\n", targetPath)
 
-	// 10. Restart service if applicable.
-	if svc.IsInstalled && !noRestart {
+	// 10. Restart service if it was running before upgrade.
+	if wasRunning && !noRestart {
 		fmt.Println("  Starting gantry service...")
 		// Refresh service info after stop.
 		svc = detectService()
@@ -439,11 +446,10 @@ func extractFromZip(archivePath, destDir string) (string, error) {
 
 // replaceBinary replaces the binary at targetPath with the one at newBinaryPath.
 // Uses a rename-swap strategy that is safe even for the currently running binary.
+// Preserves targetPath+".old" for callers to use as rollback; callers are
+// responsible for cleaning it up after a successful restart.
 func replaceBinary(targetPath, newBinaryPath string) error {
 	oldPath := targetPath + ".old"
-
-	// Remove any leftover .old file from a previous upgrade.
-	os.Remove(oldPath)
 
 	// Rename current binary to .old (safe: OS keeps inode alive for running process).
 	if err := os.Rename(targetPath, oldPath); err != nil {
@@ -475,15 +481,16 @@ func replaceBinary(targetPath, newBinaryPath string) error {
 		return fmt.Errorf("copying new binary: %w", err)
 	}
 
-	// Remove the old binary.
-	os.Remove(oldPath)
-
 	return nil
 }
 
 // compareVersions compares two semver strings.
 // Returns -1 if a < b, 0 if a == b, 1 if a > b.
 // "dev" is always considered older than any release version.
+// Handles prerelease identifiers per semver rules:
+//   - A version without prerelease has higher precedence than one with (1.0.0 > 1.0.0-rc1).
+//   - Prerelease identifiers are compared dot-separated: numeric identifiers are
+//     compared as integers; alphanumeric identifiers are compared lexicographically.
 func compareVersions(a, b string) int {
 	a = strings.TrimPrefix(a, "v")
 	b = strings.TrimPrefix(b, "v")
@@ -498,16 +505,20 @@ func compareVersions(a, b string) int {
 		return 1
 	}
 
-	aParts := strings.SplitN(a, ".", 3)
-	bParts := strings.SplitN(b, ".", 3)
+	// Split version from prerelease: "1.2.3-rc.1" -> "1.2.3", "rc.1"
+	aVersion, aPrerelease := splitPrerelease(a)
+	bVersion, bPrerelease := splitPrerelease(b)
+
+	aParts := strings.SplitN(aVersion, ".", 3)
+	bParts := strings.SplitN(bVersion, ".", 3)
 
 	for i := 0; i < 3; i++ {
 		var av, bv int
 		if i < len(aParts) {
-			av, _ = strconv.Atoi(strings.Split(aParts[i], "-")[0]) // strip pre-release suffix
+			av, _ = strconv.Atoi(aParts[i])
 		}
 		if i < len(bParts) {
-			bv, _ = strconv.Atoi(strings.Split(bParts[i], "-")[0])
+			bv, _ = strconv.Atoi(bParts[i])
 		}
 		if av < bv {
 			return -1
@@ -517,10 +528,85 @@ func compareVersions(a, b string) int {
 		}
 	}
 
+	// Numeric parts are equal — compare prerelease.
+	return comparePrereleases(aPrerelease, bPrerelease)
+}
+
+// splitPrerelease splits "1.2.3-rc.1" into ("1.2.3", "rc.1").
+func splitPrerelease(v string) (version, pre string) {
+	idx := strings.Index(v, "-")
+	if idx == -1 {
+		return v, ""
+	}
+	return v[:idx], v[idx+1:]
+}
+
+// comparePrereleases compares prerelease strings per semver 2.0:
+//   - No prerelease > any prerelease (release beats RC).
+//   - Dot-separated identifiers; numeric compared as integers, else lexicographic.
+//   - Fewer identifiers < more identifiers when all preceding are equal.
+func comparePrereleases(a, b string) int {
+	if a == b {
+		return 0
+	}
+	// No prerelease = higher precedence.
+	if a == "" {
+		return 1 // a is release, b is prerelease → a > b
+	}
+	if b == "" {
+		return -1 // a is prerelease, b is release → a < b
+	}
+
+	aIds := strings.Split(a, ".")
+	bIds := strings.Split(b, ".")
+
+	limit := len(aIds)
+	if len(bIds) < limit {
+		limit = len(bIds)
+	}
+
+	for i := 0; i < limit; i++ {
+		aNum, aErr := strconv.Atoi(aIds[i])
+		bNum, bErr := strconv.Atoi(bIds[i])
+
+		switch {
+		case aErr == nil && bErr == nil:
+			// Both numeric.
+			if aNum < bNum {
+				return -1
+			}
+			if aNum > bNum {
+				return 1
+			}
+		case aErr == nil:
+			// Numeric < alphanumeric.
+			return -1
+		case bErr == nil:
+			// Alphanumeric > numeric.
+			return 1
+		default:
+			// Both alphanumeric — lexicographic.
+			if aIds[i] < bIds[i] {
+				return -1
+			}
+			if aIds[i] > bIds[i] {
+				return 1
+			}
+		}
+	}
+
+	// All compared identifiers are equal; more identifiers = greater.
+	if len(aIds) < len(bIds) {
+		return -1
+	}
+	if len(aIds) > len(bIds) {
+		return 1
+	}
 	return 0
 }
 
-// checkWritePermission checks if the current process can write to the given path.
+// checkWritePermission checks if the current process can create/rename files
+// in the directory containing path, which is what replaceBinary requires.
 func checkWritePermission(path string) error {
 	dir := filepath.Dir(path)
 	info, err := os.Stat(dir)
@@ -531,11 +617,13 @@ func checkWritePermission(path string) error {
 		return fmt.Errorf("%s is not a directory", dir)
 	}
 
-	// Try opening the file for writing to check actual permission.
-	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	// Probe by creating and immediately removing a temp file in the directory.
+	f, err := os.CreateTemp(dir, ".gantry-writecheck-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot write to directory %s: %w", dir, err)
 	}
+	name := f.Name()
 	f.Close()
+	os.Remove(name)
 	return nil
 }
