@@ -42,6 +42,25 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
+func TestDisplayVersion(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"0.3.0", "0.3.0"},
+		{"v0.3.0", "0.3.0"},
+		{"dev", "dev"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			if got := displayVersion(tt.in); got != tt.want {
+				t.Errorf("displayVersion(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestVerifyChecksum(t *testing.T) {
 	// Create a temp file with known content.
 	tmpDir := t.TempDir()

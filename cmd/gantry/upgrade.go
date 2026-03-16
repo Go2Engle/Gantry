@@ -61,7 +61,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	noRestart, _ := cmd.Flags().GetBool("no-restart")
 
-	fmt.Printf("  Current version: %s\n", Version)
+	currentVersion := displayVersion(Version)
+	fmt.Printf("  Current version: %s\n", currentVersion)
 
 	// 1. Fetch the target release.
 	var release *githubRelease
@@ -80,19 +81,20 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	newVersion := release.TagName
-	fmt.Printf("  Target version:  %s\n\n", newVersion)
+	displayTargetVersion := displayVersion(newVersion)
+	fmt.Printf("  Target version:  %s\n\n", displayTargetVersion)
 
 	// 2. Compare versions.
 	cmp := compareVersions(Version, strings.TrimPrefix(newVersion, "v"))
 	if cmp == 0 && !force {
-		fmt.Printf("  Already up to date (%s)\n", Version)
+		fmt.Printf("  Already up to date (%s)\n", currentVersion)
 		return nil
 	}
 	if Version == "dev" {
 		fmt.Println("  Note: current version is a development build; version comparison may not be meaningful.")
 	}
 	if cmp > 0 && !force {
-		fmt.Printf("  Warning: target version %s is older than current version %s\n", newVersion, Version)
+		fmt.Printf("  Warning: target version %s is older than current version %s\n", displayTargetVersion, currentVersion)
 		fmt.Println("  Use --force to downgrade.")
 		return nil
 	}
@@ -204,9 +206,16 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// 11. Print success.
 	fmt.Println()
 	fmt.Printf("  Gantry upgraded successfully!\n")
-	fmt.Printf("    %s → %s\n\n", Version, newVersion)
+	fmt.Printf("    %s -> %s\n\n", currentVersion, displayTargetVersion)
 
 	return nil
+}
+
+func displayVersion(v string) string {
+	if v == "dev" {
+		return v
+	}
+	return strings.TrimPrefix(v, "v")
 }
 
 // fetchLatestRelease fetches the latest release from GitHub.
