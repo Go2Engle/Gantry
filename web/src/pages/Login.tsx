@@ -13,11 +13,14 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     api.getGitHubSSOConfig()
       .then((cfg) => setSsoEnabled(cfg.ssoEnabled))
       .catch(() => {}); // SSO check is non-critical
+
+    api.getVersion().then((v) => setAppVersion(v.version)).catch(() => {});
 
     // Check for SSO error in URL params (e.g. redirected back from OAuth callback).
     const params = new URLSearchParams(window.location.search);
@@ -140,7 +143,7 @@ export default function Login() {
         </div>
 
         <p className="mt-6 text-center text-xs text-[var(--gantry-text-secondary)]">
-          Gantry Internal Developer Platform v0.1.0
+          Gantry Internal Developer Platform{appVersion ? ` v${appVersion}` : ''}
         </p>
       </div>
     </div>

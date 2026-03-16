@@ -156,7 +156,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	})
 
 	// Create the API server.
-	srv := api.NewServer(cfg, database, authService, eventBus, validator, searchService, wsHub)
+	srv := api.NewServer(cfg, database, authService, eventBus, validator, searchService, wsHub, Version)
 
 	// Initialize GitOps service if the plugin is installed and enabled.
 	srv.Handlers.InitGitOps()

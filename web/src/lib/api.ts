@@ -36,6 +36,8 @@ export function getToken(): string | null {
 }
 
 export const api = {
+  getVersion: () => request<{ version: string }>('GET', '/version'),
+
   login: (username: string, password: string) =>
     request<{ token: string; user: User }>('POST', '/auth/login', { username, password }),
 

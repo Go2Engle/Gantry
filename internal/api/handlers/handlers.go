@@ -29,6 +29,7 @@ type Handlers struct {
 	Dispatcher *dispatcher.Manager
 	GitOps     *gitops.Service
 	DataDir    string // root data directory, used for GitOps repo storage
+	Version    string // build-time version string
 
 	teamsNotifierOnce sync.Once
 	teamsCfgMu        sync.RWMutex

@@ -64,7 +64,6 @@ const navItems: NavItem[] = [
     })),
   },
   { label: 'Actions', path: '/actions', icon: Zap },
-  { label: 'Settings', path: '/settings', icon: Settings },
 ];
 
 export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
@@ -305,6 +304,20 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
                 </Link>
               </li>
             )}
+            <li>
+              <Link
+                to="/settings"
+                className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive('/settings')
+                    ? 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]'
+                    : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]'
+                }`}
+                title={collapsed ? 'Settings' : undefined}
+              >
+                <Settings className="h-5 w-5 shrink-0" />
+                {!collapsed && <span className="truncate">Settings</span>}
+              </Link>
+            </li>
           </ul>
         </nav>
 

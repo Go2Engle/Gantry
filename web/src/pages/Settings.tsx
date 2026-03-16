@@ -24,8 +24,12 @@ export default function Settings() {
   const [pwSuccess, setPwSuccess] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
 
+  // Version
+  const [appVersion, setAppVersion] = useState('');
+
   useEffect(() => {
     api.listAPIKeys().then((keys) => setAPIKeys(keys ?? [])).catch(() => {});
+    api.getVersion().then((v) => setAppVersion(v.version)).catch(() => {});
   }, []);
 
   const handleCreateKey = async () => {
@@ -297,7 +301,7 @@ export default function Settings() {
           <dl className="mt-4 space-y-2">
             <div className="flex items-center justify-between">
               <dt className="text-sm text-[var(--gantry-text-secondary)]">Version</dt>
-              <dd className="text-sm font-medium text-[var(--gantry-text-primary)]">0.1.0</dd>
+              <dd className="text-sm font-medium text-[var(--gantry-text-primary)]">{appVersion || '—'}</dd>
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-sm text-[var(--gantry-text-secondary)]">License</dt>
