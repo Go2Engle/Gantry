@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/Go2Engle/Gantry/compare/v0.2.0...v0.3.0) (2026-03-16)
+
+
+### Features
+
+* add Microsoft Teams Notifications plugin for action lifecycle updates ([#5](https://github.com/Go2Engle/Gantry/issues/5)) ([c3adc5c](https://github.com/Go2Engle/Gantry/commit/c3adc5c0adf7e06aea3d6e6d32d2161fe0aee57f))
+* Ganty install/update/uninstall command ([#6](https://github.com/Go2Engle/Gantry/issues/6)) ([d8aef27](https://github.com/Go2Engle/Gantry/commit/d8aef27c6f90456b48827d0233377ccbae44ba8f))
+
 ## [0.2.0](https://github.com/Go2Engle/Gantry/compare/v0.1.0...v0.2.0) (2026-03-13)
 
 
