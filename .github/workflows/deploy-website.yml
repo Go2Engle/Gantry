@@ -38,9 +38,9 @@ jobs:
         if: hashFiles('website/docs/package.json') != ''
         working-directory: website/docs
         env:
-          DOCS_SITE_URL: https://GantryIDP.dev
-          DOCS_BASE_URL: /Gantry/docs/
-          DOCS_HOME_URL: /Gantry/
+          DOCS_SITE_URL: https://gantryidp.dev
+          DOCS_BASE_URL: /docs/
+          DOCS_HOME_URL: /
         run: |
           npm ci
           npm run build
