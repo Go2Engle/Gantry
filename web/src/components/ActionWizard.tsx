@@ -272,6 +272,8 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
     return true;
   };
 
+  const maxRoleLevel = availableRoles.length > 0 ? Math.max(...availableRoles.map((x) => x.level)) : 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="flex h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-[var(--gantry-bg-primary)] shadow-2xl">
@@ -652,7 +654,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
                   <option value="">Any authenticated user</option>
                   {availableRoles.map((r) => (
                     <option key={r.name} value={r.name}>
-                      {r.displayName || r.name}{r.level < Math.max(...availableRoles.map((x) => x.level)) ? ' and above' : ' only'}
+                      {r.displayName || r.name}{r.level < maxRoleLevel ? ' and above' : ' only'}
                     </option>
                   ))}
                 </select>
