@@ -190,21 +190,30 @@ func getHarborConfig(cfg map[string]any) (harborPluginConfig, error) {
 	return c, nil
 }
 
-// GetHarborRepositories returns repositories for a given project.
-func (h *Handlers) GetHarborRepositories(w http.ResponseWriter, r *http.Request) {
+// ensureHarborConfig checks the harbor plugin is installed, enabled, and configured.
+// Returns the parsed config or writes an HTTP error and returns a non-nil error.
+func (h *Handlers) ensureHarborConfig(w http.ResponseWriter, r *http.Request) (harborPluginConfig, error) {
 	p, err := h.DB.GetPlugin(r.Context(), "harbor")
 	if err != nil || p == nil {
 		writeError(w, http.StatusNotFound, "harbor plugin not installed")
-		return
+		return harborPluginConfig{}, fmt.Errorf("not installed")
 	}
 	if !p.Enabled {
 		writeError(w, http.StatusBadRequest, "harbor plugin is not enabled")
-		return
+		return harborPluginConfig{}, fmt.Errorf("not enabled")
 	}
-
 	cfg, err := getHarborConfig(p.Config)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return harborPluginConfig{}, err
+	}
+	return cfg, nil
+}
+
+// GetHarborRepositories returns repositories for a given project.
+func (h *Handlers) GetHarborRepositories(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.ensureHarborConfig(w, r)
+	if err != nil {
 		return
 	}
 
@@ -231,19 +240,8 @@ func (h *Handlers) GetHarborRepositories(w http.ResponseWriter, r *http.Request)
 
 // GetHarborArtifacts returns artifacts for a given repository.
 func (h *Handlers) GetHarborArtifacts(w http.ResponseWriter, r *http.Request) {
-	p, err := h.DB.GetPlugin(r.Context(), "harbor")
-	if err != nil || p == nil {
-		writeError(w, http.StatusNotFound, "harbor plugin not installed")
-		return
-	}
-	if !p.Enabled {
-		writeError(w, http.StatusBadRequest, "harbor plugin is not enabled")
-		return
-	}
-
-	cfg, err := getHarborConfig(p.Config)
+	cfg, err := h.ensureHarborConfig(w, r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -358,19 +356,8 @@ func parseScanOverview(raw json.RawMessage) *HarborVulnSummary {
 
 // GetHarborVulnerabilities returns vulnerabilities for a specific artifact.
 func (h *Handlers) GetHarborVulnerabilities(w http.ResponseWriter, r *http.Request) {
-	p, err := h.DB.GetPlugin(r.Context(), "harbor")
-	if err != nil || p == nil {
-		writeError(w, http.StatusNotFound, "harbor plugin not installed")
-		return
-	}
-	if !p.Enabled {
-		writeError(w, http.StatusBadRequest, "harbor plugin is not enabled")
-		return
-	}
-
-	cfg, err := getHarborConfig(p.Config)
+	cfg, err := h.ensureHarborConfig(w, r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -447,19 +434,8 @@ func (h *Handlers) GetHarborVulnerabilities(w http.ResponseWriter, r *http.Reque
 
 // GetHarborSummary returns aggregated vulnerability counts across all repos in the default project.
 func (h *Handlers) GetHarborSummary(w http.ResponseWriter, r *http.Request) {
-	p, err := h.DB.GetPlugin(r.Context(), "harbor")
-	if err != nil || p == nil {
-		writeError(w, http.StatusNotFound, "harbor plugin not installed")
-		return
-	}
-	if !p.Enabled {
-		writeError(w, http.StatusBadRequest, "harbor plugin is not enabled")
-		return
-	}
-
-	cfg, err := getHarborConfig(p.Config)
+	cfg, err := h.ensureHarborConfig(w, r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

@@ -90,6 +90,15 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
 
 type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor';
 
+const TAB_LABELS: Partial<Record<Tab, string>> = {
+  relationships: 'Dependencies',
+  kubernetes: 'Kubernetes',
+  github: 'GitHub',
+  argocd: 'ArgoCD',
+  apidocs: 'API Docs',
+  harbor: 'Harbor',
+};
+
 export default function EntityDetail() {
   const { kind, name } = useParams<{ kind: string; name: string }>();
   const [searchParams] = useSearchParams();
@@ -347,7 +356,7 @@ export default function EntityDetail() {
                     : 'border-transparent text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
                 }`}
               >
-                {t === 'relationships' ? 'Dependencies' : t === 'kubernetes' ? 'Kubernetes' : t === 'github' ? 'GitHub' : t === 'argocd' ? 'ArgoCD' : t === 'apidocs' ? 'API Docs' : t === 'harbor' ? 'Harbor' : t}
+                {TAB_LABELS[t] || t}
                 {t === 'activity' && activity.length > 0 && (
                   <span className="ml-1.5 rounded-full bg-[var(--gantry-bg-tertiary)] px-1.5 py-0.5 text-xs">
                     {activity.length}
