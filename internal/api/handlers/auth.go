@@ -314,6 +314,11 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		user.Role = req.Role
 	}
 	if req.SSOOnly != nil {
+		// When toggling false→true, clear the stored password hash so no
+		// lingering credentials remain for the now-SSO-only account.
+		if *req.SSOOnly && !user.SSOOnly {
+			h.DB.UpdateUserPassword(r.Context(), user.ID, "")
+		}
 		user.SSOOnly = *req.SSOOnly
 	}
 
