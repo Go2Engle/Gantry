@@ -5,6 +5,8 @@ import { Plus, Trash2, Shield, Users, KeyRound, Globe } from 'lucide-react';
 import { api } from '../lib/api';
 import type { User } from '../lib/types';
 
+const MIN_PASSWORD_LENGTH = 8;
+
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   'platform-engineer': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
@@ -79,6 +81,10 @@ export default function UsersPage() {
 
   const handleResetPassword = async () => {
     if (!resetUserId || !resetPassword.trim()) return;
+    if (resetPassword.trim().length < MIN_PASSWORD_LENGTH) {
+      setResetError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      return;
+    }
     setResetError('');
     setResetSuccess('');
     setResetting(true);
@@ -140,7 +146,7 @@ export default function UsersPage() {
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
                   <div>
-                    <label className="text-xs font-medium text-[var(--gantry-text-primary)]">SSO-only account</label>
+                    <label id="sso-switch-label" className="text-xs font-medium text-[var(--gantry-text-primary)]">SSO-only account</label>
                     <p className="text-[10px] leading-tight text-[var(--gantry-text-secondary)]">
                       User must sign in via SSO provider
                     </p>
@@ -150,13 +156,14 @@ export default function UsersPage() {
                   type="button"
                   role="switch"
                   aria-checked={newSSOOnly}
+                  aria-labelledby="sso-switch-label"
                   onClick={() => { setNewSSOOnly(!newSSOOnly); setNewPassword(''); }}
                   className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors ${
                     newSSOOnly ? 'bg-[var(--gantry-accent)]' : 'bg-[var(--gantry-border)]'
                   }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-[var(--gantry-bg-primary)] shadow-sm transition-transform ${
                       newSSOOnly ? 'translate-x-4' : 'translate-x-0.5'
                     } mt-0.5`}
                   />
@@ -165,7 +172,7 @@ export default function UsersPage() {
 
               <div>
                 <label className="block text-xs font-medium text-[var(--gantry-text-secondary)]">
-                  Username <span className="text-red-500">*</span>
+                  Username <span className="text-[var(--gantry-danger)]">*</span>
                 </label>
                 <input
                   type="text"
@@ -178,7 +185,7 @@ export default function UsersPage() {
               {!newSSOOnly && (
                 <div>
                   <label className="block text-xs font-medium text-[var(--gantry-text-secondary)]">
-                    Password <span className="text-red-500">*</span>
+                    Password <span className="text-[var(--gantry-danger)]">*</span>
                   </label>
                   <input
                     type="password"
@@ -212,7 +219,7 @@ export default function UsersPage() {
             </div>
 
             {createError && (
-              <p className="mt-3 text-xs text-red-500">{createError}</p>
+              <p className="mt-3 text-xs text-[var(--gantry-danger)]">{createError}</p>
             )}
 
             <button
@@ -279,7 +286,7 @@ export default function UsersPage() {
                                 <span className="text-xs text-[var(--gantry-text-secondary)]">(you)</span>
                               )}
                               {u.ssoOnly && (
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--gantry-accent)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--gantry-accent)]">
                                   <Globe className="h-2.5 w-2.5" />
                                   SSO
                                 </span>
@@ -347,16 +354,19 @@ export default function UsersPage() {
       {resetUserId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setResetUserId(null)}>
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-password-title"
             className="w-full max-w-sm rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-base font-semibold text-[var(--gantry-text-primary)]">Reset Password</h3>
+            <h3 id="reset-password-title" className="text-base font-semibold text-[var(--gantry-text-primary)]">Reset Password</h3>
             <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
               Set a new password for <strong>{resetUser?.displayName || resetUser?.username}</strong>
             </p>
             <div className="mt-4">
               <label className="block text-xs font-medium text-[var(--gantry-text-secondary)]">
-                New Password <span className="text-red-500">*</span>
+                New Password <span className="text-[var(--gantry-danger)]">*</span>
               </label>
               <input
                 type="password"
@@ -368,8 +378,8 @@ export default function UsersPage() {
                 onKeyDown={(e) => { if (e.key === 'Enter') handleResetPassword(); }}
               />
             </div>
-            {resetError && <p className="mt-2 text-xs text-red-500">{resetError}</p>}
-            {resetSuccess && <p className="mt-2 text-xs text-green-600 dark:text-green-400">{resetSuccess}</p>}
+            {resetError && <p className="mt-2 text-xs text-[var(--gantry-danger)]">{resetError}</p>}
+            {resetSuccess && <p className="mt-2 text-xs text-[var(--gantry-accent)]">{resetSuccess}</p>}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setResetUserId(null)}
@@ -379,7 +389,7 @@ export default function UsersPage() {
               </button>
               <button
                 onClick={handleResetPassword}
-                disabled={resetting || !resetPassword.trim() || resetPassword.trim().length < 8}
+                disabled={resetting || !resetPassword.trim() || resetPassword.trim().length < MIN_PASSWORD_LENGTH}
                 className="rounded-lg bg-[var(--gantry-accent)] px-3 py-1.5 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)] disabled:opacity-50"
               >
                 {resetting ? 'Resetting…' : 'Reset Password'}

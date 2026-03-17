@@ -55,6 +55,7 @@ func allMigrations(dbType string) []string {
 			display_name  TEXT,
 			email         TEXT,
 			role          TEXT NOT NULL DEFAULT 'viewer',
+			sso_only      INTEGER NOT NULL DEFAULT 0,
 			created_at    TIMESTAMP,
 			updated_at    TIMESTAMP
 		)`,

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/go2engle/gantry/internal/config"
@@ -164,6 +165,10 @@ func (d *DB) Migrate() error {
 	return nil
 }
 
+// pgDuplicateColumnRe matches PostgreSQL's duplicate-column error message:
+// "column \"...\" of relation \"...\" already exists".
+var pgDuplicateColumnRe = regexp.MustCompile(`column ".*" of relation ".*" already exists`)
+
 // isDuplicateColumnErr returns true if the error is a "duplicate column" error
 // from an ALTER TABLE ADD COLUMN statement (safe to ignore on re-run).
 func isDuplicateColumnErr(err error) bool {
@@ -172,9 +177,11 @@ func isDuplicateColumnErr(err error) bool {
 	}
 	msg := err.Error()
 	// SQLite: "duplicate column name: ..."
-	// PostgreSQL: "column ... of relation ... already exists"
-	return strings.Contains(msg, "duplicate column") ||
-		strings.Contains(msg, "already exists")
+	if strings.Contains(msg, "duplicate column") {
+		return true
+	}
+	// PostgreSQL: "column \"...\" of relation \"...\" already exists"
+	return pgDuplicateColumnRe.MatchString(msg)
 }
 
 // IsSQLite returns true if the underlying database is SQLite.

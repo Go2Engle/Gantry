@@ -449,5 +449,24 @@ func (h *Handlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Audit log — record who reset whose password (never log the plaintext).
+	claims := middleware.GetClaims(r.Context())
+	userName := ""
+	userID := ""
+	if claims != nil {
+		userName = claims.Username
+		userID = claims.UserID
+	}
+	h.DB.CreateAuditEntry(r.Context(), &db.AuditEntry{
+		UserID:       userID,
+		UserName:     userName,
+		Action:       "user.password_reset",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+		ResourceName: user.Username,
+		Source:       "api",
+		IPAddress:    clientIP(r),
+	})
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password reset successfully"})
 }
