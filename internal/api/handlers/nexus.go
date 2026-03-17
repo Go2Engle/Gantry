@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sync"
@@ -67,22 +68,38 @@ func nexusCacheGet(key string) ([]byte, bool) {
 	return entry.data, true
 }
 
+const maxNexusCacheEntries = 200
+
 func nexusCacheSet(key string, data []byte) {
 	nexusCacheMu.Lock()
 	defer nexusCacheMu.Unlock()
 	if nexusCacheEntries == nil {
 		nexusCacheEntries = make(map[string]nexusCacheEntry)
 	}
-	now := time.Now()
-	// Evict expired entries to prevent unbounded growth.
-	for k, v := range nexusCacheEntries {
-		if now.After(v.expiresAt) {
-			delete(nexusCacheEntries, k)
-		}
-	}
 	nexusCacheEntries[key] = nexusCacheEntry{
 		data:      data,
-		expiresAt: now.Add(60 * time.Second),
+		expiresAt: time.Now().Add(60 * time.Second),
+	}
+	// Evict if over capacity: remove expired first, then oldest entries.
+	if len(nexusCacheEntries) > maxNexusCacheEntries {
+		now := time.Now()
+		for k, v := range nexusCacheEntries {
+			if now.After(v.expiresAt) {
+				delete(nexusCacheEntries, k)
+			}
+		}
+		// If still over capacity, remove nearest-expiry entries.
+		for len(nexusCacheEntries) > maxNexusCacheEntries {
+			var oldestKey string
+			var oldestExp time.Time
+			for k, v := range nexusCacheEntries {
+				if oldestKey == "" || v.expiresAt.Before(oldestExp) {
+					oldestKey = k
+					oldestExp = v.expiresAt
+				}
+			}
+			delete(nexusCacheEntries, oldestKey)
+		}
 	}
 }
 
@@ -219,7 +236,8 @@ func (h *Handlers) GetNexusComponents(w http.ResponseWriter, r *http.Request) {
 	path := "/service/rest/v1/search?" + params.Encode()
 	body, err := nexusRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch components: "+err.Error())
+		log.Printf("[nexus] failed to fetch components (path=%s): %v", path, err)
+		writeError(w, http.StatusBadGateway, "failed to fetch components from Nexus")
 		return
 	}
 
@@ -275,7 +293,8 @@ func (h *Handlers) GetNexusAssets(w http.ResponseWriter, r *http.Request) {
 	path := "/service/rest/v1/search/assets?" + params.Encode()
 	body, err := nexusRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch assets: "+err.Error())
+		log.Printf("[nexus] failed to fetch assets (path=%s): %v", path, err)
+		writeError(w, http.StatusBadGateway, "failed to fetch assets from Nexus")
 		return
 	}
 

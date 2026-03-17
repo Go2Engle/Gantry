@@ -138,9 +138,11 @@ export default function Catalog() {
       const nexusName = (raw._nexus_name as string) || '';
       const nexusRepo = (raw._nexus_repository as string) || '';
       const nexusGroup = (raw._nexus_group as string) || '';
-      if (nexusName) annotations['nexus-repository-manager/name'] = nexusName;
-      if (nexusRepo) annotations['nexus-repository-manager/repository'] = nexusRepo;
-      if (nexusGroup) annotations['nexus-repository-manager/group'] = nexusGroup;
+      if (nexusName) {
+        annotations['nexus-repository-manager/name'] = nexusName;
+        if (nexusRepo) annotations['nexus-repository-manager/repository'] = nexusRepo;
+        if (nexusGroup) annotations['nexus-repository-manager/group'] = nexusGroup;
+      }
 
       const newEntity: Entity = {
         kind: createKind,
