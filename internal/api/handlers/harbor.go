@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Harbor response types.
@@ -75,7 +77,8 @@ func capitalizeFirst(s string) string {
 	if s == "" {
 		return s
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	r, size := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[size:]
 }
 
 // In-memory cache for Harbor API responses.

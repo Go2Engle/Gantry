@@ -326,10 +326,7 @@ export default function EntityDetail() {
           entity.metadata.annotations?.['argocd.io/appName']
         );
         const hasAPIDocs = !!(entity.spec?.apiDocsUrl) && (entity.kind === 'Service' || entity.kind === 'API');
-        const hasHarbor = !!(
-          entity.metadata.annotations?.['harbor.io/project'] ||
-          entity.metadata.annotations?.['harbor.io/repository']
-        );
+        const hasHarbor = !!entity.metadata.annotations?.['harbor.io/project'];
         const tabs: Tab[] = ['overview', 'relationships', 'yaml', 'activity'];
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
