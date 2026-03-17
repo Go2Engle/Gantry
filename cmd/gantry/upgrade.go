@@ -106,7 +106,10 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	if !yes {
 		fmt.Print("  Continue? [y/N] ")
 		reader := bufio.NewReader(os.Stdin)
-		answer, _ := reader.ReadString('\n')
+		answer, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
 		answer = strings.TrimSpace(strings.ToLower(answer))
 		if answer != "y" && answer != "yes" {
 			fmt.Println("  Aborted.")
