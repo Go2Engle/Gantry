@@ -668,7 +668,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
                   onClick={() => setRequireApproval((v) => !v)}
                   className={`relative h-5 w-9 rounded-full transition-colors ${requireApproval ? 'bg-[var(--gantry-accent)]' : 'bg-[var(--gantry-border)]'}`}
                 >
-                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${requireApproval ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-[var(--gantry-bg-primary)] shadow transition-transform ${requireApproval ? 'translate-x-4' : 'translate-x-0.5'}`} />
                 </div>
                 <div>
                   <span className="text-sm font-medium text-[var(--gantry-text-primary)]">Require approval</span>
