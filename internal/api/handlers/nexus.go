@@ -136,7 +136,11 @@ func nexusRequest(ctx context.Context, baseURL, username, password, path string)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("nexus API returned %d: %s", resp.StatusCode, string(body))
+		excerpt := string(body)
+		if len(excerpt) > 200 {
+			excerpt = excerpt[:200] + "…(truncated)"
+		}
+		return nil, fmt.Errorf("nexus API returned %d: %s", resp.StatusCode, excerpt)
 	}
 
 	nexusCacheSet(reqURL, body)
@@ -167,6 +171,37 @@ func getNexusConfig(cfg map[string]any) (nexusPluginConfig, error) {
 		c.URL = c.URL[:len(c.URL)-1]
 	}
 	return c, nil
+}
+
+// nexusPaginatedSearch fetches all pages of a Nexus search endpoint,
+// following continuationToken until exhausted. maxPages caps the loop to
+// prevent runaway requests against very large result sets.
+func nexusPaginatedSearch(ctx context.Context, cfg nexusPluginConfig, basePath string) ([]json.RawMessage, error) {
+	const maxPages = 20
+	var allItems []json.RawMessage
+	path := basePath
+
+	for page := 0; page < maxPages; page++ {
+		body, err := nexusRequest(ctx, cfg.URL, cfg.Username, cfg.Password, path)
+		if err != nil {
+			return nil, err
+		}
+		var resp nexusSearchResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return nil, fmt.Errorf("failed to parse nexus response: %w", err)
+		}
+		allItems = append(allItems, resp.Items...)
+		if resp.ContinuationToken == "" {
+			break
+		}
+		// Append or replace continuationToken query param.
+		sep := "&"
+		if basePath == "" {
+			sep = "?"
+		}
+		path = basePath + sep + "continuationToken=" + url.QueryEscape(resp.ContinuationToken)
+	}
+	return allItems, nil
 }
 
 // ensureNexusConfig checks the nexus plugin is installed, enabled, and configured.
@@ -233,22 +268,16 @@ func (h *Handlers) GetNexusComponents(w http.ResponseWriter, r *http.Request) {
 		params.Set("format", format)
 	}
 
-	path := "/service/rest/v1/search?" + params.Encode()
-	body, err := nexusRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
+	basePath := "/service/rest/v1/search?" + params.Encode()
+	allItems, err := nexusPaginatedSearch(r.Context(), cfg, basePath)
 	if err != nil {
-		log.Printf("[nexus] failed to fetch components (path=%s): %v", path, err)
+		log.Printf("[nexus] failed to fetch components (path=%s): %v", basePath, err)
 		writeError(w, http.StatusBadGateway, "failed to fetch components from Nexus")
 		return
 	}
 
-	var searchResp nexusSearchResponse
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to parse nexus response")
-		return
-	}
-
-	components := make([]NexusComponent, 0, len(searchResp.Items))
-	for _, raw := range searchResp.Items {
+	components := make([]NexusComponent, 0, len(allItems))
+	for _, raw := range allItems {
 		var c NexusComponent
 		if err := json.Unmarshal(raw, &c); err != nil {
 			continue
@@ -290,22 +319,16 @@ func (h *Handlers) GetNexusAssets(w http.ResponseWriter, r *http.Request) {
 		params.Set("repository", repository)
 	}
 
-	path := "/service/rest/v1/search/assets?" + params.Encode()
-	body, err := nexusRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
+	basePath := "/service/rest/v1/search/assets?" + params.Encode()
+	allItems, err := nexusPaginatedSearch(r.Context(), cfg, basePath)
 	if err != nil {
-		log.Printf("[nexus] failed to fetch assets (path=%s): %v", path, err)
+		log.Printf("[nexus] failed to fetch assets (path=%s): %v", basePath, err)
 		writeError(w, http.StatusBadGateway, "failed to fetch assets from Nexus")
 		return
 	}
 
-	var searchResp nexusSearchResponse
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to parse nexus response")
-		return
-	}
-
-	assets := make([]NexusAsset, 0, len(searchResp.Items))
-	for _, raw := range searchResp.Items {
+	assets := make([]NexusAsset, 0, len(allItems))
+	for _, raw := range allItems {
 		var a NexusAsset
 		if err := json.Unmarshal(raw, &a); err != nil {
 			continue
