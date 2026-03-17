@@ -186,10 +186,12 @@ export default function EntityDetail() {
       const spec = pruneEmpty(raw);
       // Merge plugin annotations with existing annotations.
       const annotations = { ...(entity.metadata.annotations || {}) };
-      if (editMeta.harborProject) {
-        annotations['harbor.io/project'] = editMeta.harborProject;
-        if (editMeta.harborRepository) {
-          annotations['harbor.io/repository'] = editMeta.harborRepository;
+      const harborProject = editMeta.harborProject?.trim();
+      const harborRepo = editMeta.harborRepository?.trim();
+      if (harborProject) {
+        annotations['harbor.io/project'] = harborProject;
+        if (harborRepo) {
+          annotations['harbor.io/repository'] = harborRepo;
         } else {
           delete annotations['harbor.io/repository'];
         }

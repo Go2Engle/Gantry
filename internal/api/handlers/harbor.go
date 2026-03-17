@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 )
+
+// Shared HTTP client for all Harbor API requests.
+var harborHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // Harbor response types.
 
@@ -124,7 +128,7 @@ func harborCacheSet(key string, data []byte) {
 	}
 }
 
-func harborRequest(client *http.Client, baseURL, username, password, path string) ([]byte, error) {
+func harborRequest(ctx context.Context, baseURL, username, password, path string) ([]byte, error) {
 	reqURL := strings.TrimRight(baseURL, "/") + path
 
 	// Check cache first.
@@ -132,14 +136,14 @@ func harborRequest(client *http.Client, baseURL, username, password, path string
 		return cached, nil
 	}
 
-	req, err := http.NewRequest("GET", reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Gantry/1.0 Harbor")
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
 
-	resp, err := client.Do(req)
+	resp, err := harborHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -209,9 +213,8 @@ func (h *Handlers) GetHarborRepositories(w http.ResponseWriter, r *http.Request)
 		project = cfg.DefaultProject
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	path := fmt.Sprintf("/api/v2.0/projects/%s/repositories?page_size=100", url.PathEscape(project))
-	body, err := harborRequest(client, cfg.URL, cfg.Username, cfg.Password, path)
+	body, err := harborRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch repositories: "+err.Error())
 		return
@@ -251,10 +254,9 @@ func (h *Handlers) GetHarborArtifacts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	path := fmt.Sprintf("/api/v2.0/projects/%s/repositories/%s/artifacts?with_tag=true&with_scan_overview=true&page_size=50",
 		url.PathEscape(project), url.PathEscape(repository))
-	body, err := harborRequest(client, cfg.URL, cfg.Username, cfg.Password, path)
+	body, err := harborRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch artifacts: "+err.Error())
 		return
@@ -334,31 +336,19 @@ func parseScanOverview(raw json.RawMessage) *HarborVulnSummary {
 
 		s := &HarborVulnSummary{Total: report.Summary.Total}
 		for sev, count := range report.Summary.Summary {
-			switch sev {
-			case "Critical":
+			switch strings.ToLower(sev) {
+			case "critical":
 				s.Critical = count
-			case "High":
+			case "high":
 				s.High = count
-			case "Medium":
+			case "medium":
 				s.Medium = count
-			case "Low":
+			case "low":
 				s.Low = count
-			case "None":
+			case "none":
 				s.None = count
-			case "Unknown":
+			case "unknown":
 				s.Unknown = count
-			default:
-				// Handle numeric severity keys (some scanners use ints).
-				switch strings.ToLower(sev) {
-				case "critical":
-					s.Critical = count
-				case "high":
-					s.High = count
-				case "medium":
-					s.Medium = count
-				case "low":
-					s.Low = count
-				}
 			}
 		}
 		return s
@@ -392,10 +382,9 @@ func (h *Handlers) GetHarborVulnerabilities(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	path := fmt.Sprintf("/api/v2.0/projects/%s/repositories/%s/artifacts/%s/additions/vulnerabilities",
 		url.PathEscape(project), url.PathEscape(repository), url.PathEscape(reference))
-	body, err := harborRequest(client, cfg.URL, cfg.Username, cfg.Password, path)
+	body, err := harborRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, path)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch vulnerabilities: "+err.Error())
 		return
@@ -474,11 +463,11 @@ func (h *Handlers) GetHarborSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	ctx := r.Context()
 
 	// Fetch repositories.
 	repoPath := fmt.Sprintf("/api/v2.0/projects/%s/repositories?page_size=100", url.PathEscape(cfg.DefaultProject))
-	repoBody, err := harborRequest(client, cfg.URL, cfg.Username, cfg.Password, repoPath)
+	repoBody, err := harborRequest(ctx, cfg.URL, cfg.Username, cfg.Password, repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch repositories: "+err.Error())
 		return
@@ -509,7 +498,7 @@ func (h *Handlers) GetHarborSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			artPath := fmt.Sprintf("/api/v2.0/projects/%s/repositories/%s/artifacts?with_scan_overview=true&page_size=1",
 				url.PathEscape(cfg.DefaultProject), url.PathEscape(relName))
-			artBody, err := harborRequest(client, cfg.URL, cfg.Username, cfg.Password, artPath)
+			artBody, err := harborRequest(ctx, cfg.URL, cfg.Username, cfg.Password, artPath)
 			if err != nil {
 				mu.Lock()
 				errs++
