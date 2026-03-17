@@ -348,16 +348,38 @@ func TestWebSocketHandshakeAcceptsSessionCookieAuth(t *testing.T) {
 }
 
 func TestHealthCheckProxyAllowsLoopbackTargets(t *testing.T) {
+	// Spin up a local server on loopback to act as the health endpoint.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"UP"}`))
+	}))
+	defer upstream.Close()
+
 	env := newTestServerEnv(t)
 	_, token := env.createUser(t, "health-user", "viewer")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health-check?url=http://127.0.0.1/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health-check?url="+upstream.URL+"/healthz", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	env.server.Router().ServeHTTP(rec, req)
 
-	// Should not be forbidden — the proxy allows internal targets.
-	if rec.Code == http.StatusForbidden {
-		t.Fatalf("expected non-403, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result["reachable"] != true {
+		t.Fatalf("expected reachable=true, got %v", result["reachable"])
+	}
+	if result["statusCode"] != float64(200) {
+		t.Fatalf("expected statusCode=200, got %v", result["statusCode"])
+	}
+	body, _ := result["body"].(string)
+	if body != `{"status":"UP"}` {
+		t.Fatalf("expected upstream body, got %q", body)
 	}
 }
