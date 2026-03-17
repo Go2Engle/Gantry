@@ -347,7 +347,7 @@ func TestWebSocketHandshakeAcceptsSessionCookieAuth(t *testing.T) {
 	}
 }
 
-func TestHealthCheckProxyRejectsLoopbackTargets(t *testing.T) {
+func TestHealthCheckProxyAllowsLoopbackTargets(t *testing.T) {
 	env := newTestServerEnv(t)
 	_, token := env.createUser(t, "health-user", "viewer")
 
@@ -356,7 +356,8 @@ func TestHealthCheckProxyRejectsLoopbackTargets(t *testing.T) {
 	rec := httptest.NewRecorder()
 	env.server.Router().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	// Should not be forbidden — the proxy allows internal targets.
+	if rec.Code == http.StatusForbidden {
+		t.Fatalf("expected non-403, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

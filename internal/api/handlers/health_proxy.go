@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"context"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -26,10 +24,6 @@ func (h *Handlers) HealthCheckProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if parsed.User != nil {
 		writeError(w, http.StatusBadRequest, "url must not contain userinfo")
-		return
-	}
-	if err := ensurePublicTarget(r.Context(), parsed.Hostname()); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -70,52 +64,3 @@ func (h *Handlers) HealthCheckProxy(w http.ResponseWriter, r *http.Request) {
 		"body":       string(body),
 	})
 }
-
-func ensurePublicTarget(ctx context.Context, host string) error {
-	if host == "" {
-		return errForbiddenTarget("missing host")
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		if !isPublicIP(ip) {
-			return errForbiddenTarget("private and loopback targets are not allowed")
-		}
-		return nil
-	}
-
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil || len(addrs) == 0 {
-		return errForbiddenTarget("unable to resolve target host")
-	}
-	for _, addr := range addrs {
-		if !isPublicIP(addr.IP) {
-			return errForbiddenTarget("private and loopback targets are not allowed")
-		}
-	}
-	return nil
-}
-
-func isPublicIP(ip net.IP) bool {
-	if ip == nil {
-		return false
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() ||
-		ip.IsMulticast() || ip.IsUnspecified() {
-		return false
-	}
-	if v4 := ip.To4(); v4 != nil {
-		if v4[0] == 169 && v4[1] == 254 {
-			return false
-		}
-	}
-	return true
-}
-
-func errForbiddenTarget(msg string) error {
-	return &targetError{msg: msg}
-}
-
-type targetError struct {
-	msg string
-}
-
-func (e *targetError) Error() string { return e.msg }
