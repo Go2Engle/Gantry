@@ -317,7 +317,10 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		// When toggling false→true, clear the stored password hash so no
 		// lingering credentials remain for the now-SSO-only account.
 		if *req.SSOOnly && !user.SSOOnly {
-			h.DB.UpdateUserPassword(r.Context(), user.ID, "")
+			if err := h.DB.UpdateUserPassword(r.Context(), user.ID, ""); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to clear password for SSO-only conversion")
+				return
+			}
 		}
 		user.SSOOnly = *req.SSOOnly
 	}
