@@ -135,6 +135,12 @@ export default function Catalog() {
       const harborRepo = (raw._harbor_repository as string) || '';
       if (harborProject) annotations['harbor.io/project'] = harborProject;
       if (harborRepo) annotations['harbor.io/repository'] = harborRepo;
+      const nexusName = (raw._nexus_name as string) || '';
+      const nexusRepo = (raw._nexus_repository as string) || '';
+      const nexusGroup = (raw._nexus_group as string) || '';
+      if (nexusName) annotations['nexus-repository-manager/name'] = nexusName;
+      if (nexusRepo) annotations['nexus-repository-manager/repository'] = nexusRepo;
+      if (nexusGroup) annotations['nexus-repository-manager/group'] = nexusGroup;
 
       const newEntity: Entity = {
         kind: createKind,
@@ -154,6 +160,7 @@ export default function Catalog() {
     const kindSchema = schemas[createKind.toLowerCase()] || { type: 'object', properties: {} };
     const kindRequired: string[] = (kindSchema as any).required || [];
     const showHarbor = enabledPlugins.has('harbor') && (createKind === 'Service' || createKind === 'Infrastructure');
+    const showNexus = enabledPlugins.has('nexus-repository-manager') && (createKind === 'Service' || createKind === 'Infrastructure');
     return {
       type: 'object',
       properties: {
@@ -165,6 +172,11 @@ export default function Catalog() {
         ...(showHarbor ? {
           _harbor_project: { type: 'string', title: 'Harbor Project', description: 'Harbor registry project name (e.g. my-project)' },
           _harbor_repository: { type: 'string', title: 'Harbor Repository', description: 'Harbor repository path within the project (e.g. my-app)' },
+        } : {}),
+        ...(showNexus ? {
+          _nexus_name: { type: 'string', title: 'Nexus Component Name', description: 'Name of the component or Docker image in Nexus (e.g. my-app)' },
+          _nexus_repository: { type: 'string', title: 'Nexus Repository', description: 'Nexus repository name (e.g. docker-hosted)' },
+          _nexus_group: { type: 'string', title: 'Nexus Group', description: 'Maven group or namespace (e.g. com.example)' },
         } : {}),
       },
       required: ['_name', ...kindRequired],

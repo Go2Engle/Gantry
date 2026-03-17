@@ -12,7 +12,7 @@ const SYNCABLE_PLUGINS = new Set(['kubernetes', 'github', 'argocd']);
 
 // Plugins with full backend + frontend implementations.
 // Anything not in this set is shown as "Coming Soon" and cannot be enabled.
-const IMPLEMENTED_PLUGINS = new Set(['github', 'kubernetes', 'argocd', 'status-monitor', 'gitops', 'teams', 'harbor']);
+const IMPLEMENTED_PLUGINS = new Set(['github', 'kubernetes', 'argocd', 'status-monitor', 'gitops', 'teams', 'harbor', 'nexus-repository-manager']);
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },

@@ -1,4 +1,4 @@
-import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse } from './types';
+import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset } from './types';
 
 let authToken: string | null = localStorage.getItem('gantry_token');
 
@@ -158,6 +158,22 @@ export const api = {
     request<HarborVulnerability[]>('GET', `/plugins/harbor/vulnerabilities?project=${encodeURIComponent(project)}&repository=${encodeURIComponent(repository)}&reference=${encodeURIComponent(reference)}`),
   getHarborSummary: () =>
     request<HarborSummaryResponse>('GET', '/plugins/harbor/summary'),
+
+  // Nexus Repository Manager
+  getNexusComponents: (name: string, repository?: string, group?: string, format?: string) => {
+    const params = new URLSearchParams();
+    if (name) params.set('name', name);
+    if (repository) params.set('repository', repository);
+    if (group) params.set('group', group);
+    if (format) params.set('format', format);
+    return request<NexusComponent[]>('GET', `/plugins/nexus-repository-manager/components?${params.toString()}`);
+  },
+  getNexusAssets: (name?: string, repository?: string) => {
+    const params = new URLSearchParams();
+    if (name) params.set('name', name);
+    if (repository) params.set('repository', repository);
+    return request<NexusAsset[]>('GET', `/plugins/nexus-repository-manager/assets?${params.toString()}`);
+  },
 
   // Status Monitor
   getStatusMonitorStatuses: () =>

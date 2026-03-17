@@ -12,6 +12,7 @@ import GitHubTab from '../components/GitHubTab';
 import ArgoCDTab from '../components/ArgoCDTab';
 import APIDocsTab from '../components/APIDocsTab';
 import HarborTab from '../components/HarborTab';
+import NexusTab from '../components/NexusTab';
 
 const ACTION_COLORS: Record<string, string> = {
   'entity.created': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -88,7 +89,7 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
   other:     <CircleHelp className="h-3.5 w-3.5" />,
 };
 
-type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor';
+type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor' | 'nexus';
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   relationships: 'Dependencies',
@@ -97,6 +98,7 @@ const TAB_LABELS: Partial<Record<Tab, string>> = {
   argocd: 'ArgoCD',
   apidocs: 'API Docs',
   harbor: 'Harbor',
+  nexus: 'Nexus',
 };
 
 export default function EntityDetail() {
@@ -114,7 +116,7 @@ export default function EntityDetail() {
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [editMeta, setEditMeta] = useState({ title: '', description: '', owner: '', tags: '', harborProject: '', harborRepository: '' });
+  const [editMeta, setEditMeta] = useState({ title: '', description: '', owner: '', tags: '', harborProject: '', harborRepository: '', nexusName: '', nexusRepository: '', nexusGroup: '' });
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [enabledPlugins, setEnabledPlugins] = useState<Set<string>>(new Set());
@@ -184,6 +186,9 @@ export default function EntityDetail() {
       tags: (entity.metadata.tags ?? []).join(', '),
       harborProject: entity.metadata.annotations?.['harbor.io/project'] ?? '',
       harborRepository: entity.metadata.annotations?.['harbor.io/repository'] ?? '',
+      nexusName: entity.metadata.annotations?.['nexus-repository-manager/name'] ?? '',
+      nexusRepository: entity.metadata.annotations?.['nexus-repository-manager/repository'] ?? '',
+      nexusGroup: entity.metadata.annotations?.['nexus-repository-manager/group'] ?? '',
     });
     setEditing(true);
   }
@@ -207,6 +212,26 @@ export default function EntityDetail() {
       } else {
         delete annotations['harbor.io/project'];
         delete annotations['harbor.io/repository'];
+      }
+      const nxName = editMeta.nexusName?.trim();
+      const nxRepo = editMeta.nexusRepository?.trim();
+      const nxGroup = editMeta.nexusGroup?.trim();
+      if (nxName) {
+        annotations['nexus-repository-manager/name'] = nxName;
+        if (nxRepo) {
+          annotations['nexus-repository-manager/repository'] = nxRepo;
+        } else {
+          delete annotations['nexus-repository-manager/repository'];
+        }
+        if (nxGroup) {
+          annotations['nexus-repository-manager/group'] = nxGroup;
+        } else {
+          delete annotations['nexus-repository-manager/group'];
+        }
+      } else {
+        delete annotations['nexus-repository-manager/name'];
+        delete annotations['nexus-repository-manager/repository'];
+        delete annotations['nexus-repository-manager/group'];
       }
       const updated = await api.updateEntity(kind, name, {
         ...entity,
@@ -338,12 +363,14 @@ export default function EntityDetail() {
         );
         const hasAPIDocs = !!(entity.spec?.apiDocsUrl) && (entity.kind === 'Service' || entity.kind === 'API');
         const hasHarbor = !!entity.metadata.annotations?.['harbor.io/project'];
+        const hasNexus = !!entity.metadata.annotations?.['nexus-repository-manager/name'];
         const tabs: Tab[] = ['overview', 'relationships', 'yaml', 'activity'];
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
         if (hasArgoCD && entity.kind === 'Service' && enabledPlugins.has('argocd')) tabs.splice(1, 0, 'argocd');
         if (hasAPIDocs) tabs.splice(1, 0, 'apidocs');
         if (hasHarbor && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('harbor')) tabs.splice(1, 0, 'harbor');
+        if (hasNexus && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('nexus-repository-manager')) tabs.splice(1, 0, 'nexus');
         return (
           <div className="mt-6 flex gap-1 border-b border-[var(--gantry-border)]">
             {tabs.map((t) => (
@@ -790,6 +817,10 @@ export default function EntityDetail() {
           <HarborTab entity={entity} />
         )}
 
+        {tab === 'nexus' && (
+          <NexusTab entity={entity} />
+        )}
+
         {tab === 'relationships' && (
           graphLoading ? (
             <div className="flex items-center justify-center py-16">
@@ -914,6 +945,50 @@ export default function EntityDetail() {
                         value={editMeta.harborRepository}
                         placeholder="my-app"
                         onChange={(e) => setEditMeta((m) => ({ ...m, harborRepository: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Nexus Repository Manager plugin annotations */}
+              {enabledPlugins.has('nexus-repository-manager') && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--gantry-text-secondary)] mb-4">
+                    Nexus Repository Manager
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Component Name</label>
+                      <p className="text-xs text-[var(--gantry-text-secondary)] mb-1.5">Name of the component or Docker image in Nexus</p>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                        value={editMeta.nexusName}
+                        placeholder="my-app"
+                        onChange={(e) => setEditMeta((m) => ({ ...m, nexusName: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Repository</label>
+                      <p className="text-xs text-[var(--gantry-text-secondary)] mb-1.5">Nexus repository name (optional)</p>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                        value={editMeta.nexusRepository}
+                        placeholder="docker-hosted"
+                        onChange={(e) => setEditMeta((m) => ({ ...m, nexusRepository: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Group</label>
+                      <p className="text-xs text-[var(--gantry-text-secondary)] mb-1.5">Maven group or namespace (optional)</p>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                        value={editMeta.nexusGroup}
+                        placeholder="com.example"
+                        onChange={(e) => setEditMeta((m) => ({ ...m, nexusGroup: e.target.value }))}
                       />
                     </div>
                   </div>

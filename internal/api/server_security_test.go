@@ -56,7 +56,7 @@ func newTestServerEnv(t *testing.T) *testServerEnv {
 	}
 
 	authSvc := auth.NewService(cfg.JWTSecret)
-	server := NewServer(cfg, database, authSvc, events.New(), nil, search.New(database.DB), websocket.NewHub())
+	server := NewServer(cfg, database, authSvc, events.New(), nil, search.New(database.DB), websocket.NewHub(), "test")
 
 	return &testServerEnv{
 		server:  server,

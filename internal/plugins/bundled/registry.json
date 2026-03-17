@@ -699,5 +699,52 @@
     },
     "entityPanels": ["Service", "Infrastructure"],
     "actionTypes": []
+  },
+  {
+    "name": "nexus-repository-manager",
+    "title": "Nexus Repository Manager",
+    "description": "Browse build artifacts, Docker images, and package versions from Sonatype Nexus Repository Manager on entity pages.",
+    "longDescription": "The Nexus Repository Manager plugin connects Gantry to your Sonatype Nexus instance, enriching Service and Infrastructure entities with live artifact data — component versions, asset details, download links, and repository metadata.\n\nOnce installed, any entity with a `nexus-repository-manager/name` annotation will automatically show a Nexus tab listing matching components and their assets. Supports all repository formats including Maven, npm, Docker, PyPI, NuGet, and raw.",
+    "features": [
+      "Component and asset browser on Service and Infrastructure entities",
+      "View component versions, formats, and repository locations",
+      "Expandable asset details with download URLs, file sizes, and content types",
+      "Supports all Nexus repository formats (Maven, npm, Docker, PyPI, NuGet, raw, etc.)",
+      "Annotation-driven setup — no code required",
+      "In-memory caching with 60-second TTL for Nexus API responses"
+    ],
+    "version": "1.0.0",
+    "author": "Gantry",
+    "category": "integration",
+    "homepage": "https://help.sonatype.com/en/sonatype-nexus-repository.html",
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "title": "Nexus URL",
+          "description": "Base URL of your Nexus Repository Manager instance (e.g. https://nexus.example.com)"
+        },
+        "username": {
+          "type": "string",
+          "title": "Username",
+          "description": "Nexus username for API authentication (optional for anonymous access)"
+        },
+        "password": {
+          "type": "string",
+          "title": "Password",
+          "description": "Nexus password or API token",
+          "secret": true
+        },
+        "defaultRepository": {
+          "type": "string",
+          "title": "Default Repository",
+          "description": "Default repository to search when no repository annotation is set on the entity."
+        }
+      },
+      "required": ["url"]
+    },
+    "entityPanels": ["Service", "Infrastructure"],
+    "actionTypes": []
   }
 ]

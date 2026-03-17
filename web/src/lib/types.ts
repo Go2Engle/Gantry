@@ -465,6 +465,29 @@ export interface HarborSummaryResponse {
   repositories: number;
 }
 
+// ─── Nexus Repository Manager ─────────────────────────────────────────────
+
+export interface NexusAsset {
+  downloadUrl: string;
+  path: string;
+  id: string;
+  repository: string;
+  format: string;
+  contentType: string;
+  lastModified: string;
+  fileSize: number;
+}
+
+export interface NexusComponent {
+  id: string;
+  repository: string;
+  format: string;
+  group: string;
+  name: string;
+  version: string;
+  assets: NexusAsset[];
+}
+
 export interface DashboardConfig {
   announcements: DashboardAnnouncement[];
   quickLinks: DashboardQuickLink[];
