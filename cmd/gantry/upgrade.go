@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
+	"bufio"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -52,6 +53,7 @@ Requires root privileges if the binary is in a system path.`,
 	cmd.Flags().String("version", "", "Specific version to install (e.g., v1.2.3; default: latest)")
 	cmd.Flags().Bool("force", false, "Upgrade even if already at the target version")
 	cmd.Flags().Bool("no-restart", false, "Don't restart the service after upgrade")
+	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 
 	return cmd
 }
@@ -60,6 +62,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	targetVersion, _ := cmd.Flags().GetString("version")
 	force, _ := cmd.Flags().GetBool("force")
 	noRestart, _ := cmd.Flags().GetBool("no-restart")
+	yes, _ := cmd.Flags().GetBool("yes")
 
 	currentVersion := displayVersion(Version)
 	fmt.Printf("  Current version: %s\n", currentVersion)
@@ -99,7 +102,20 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// 3. Find the correct asset.
+	// 3. Confirm with user.
+	if !yes {
+		fmt.Print("  Continue? [y/N] ")
+		reader := bufio.NewReader(os.Stdin)
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Println("  Aborted.")
+			return nil
+		}
+		fmt.Println()
+	}
+
+	// 4. Find the correct asset.
 	ver := strings.TrimPrefix(newVersion, "v")
 	asset, err := findAsset(release, ver)
 	if err != nil {
@@ -111,7 +127,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// 4. Download the archive and checksums.
+	// 5. Download the archive and checksums.
 	fmt.Printf("  Downloading %s...\n", asset.Name)
 	archivePath, err := downloadFile(asset.BrowserDownloadURL)
 	if err != nil {
@@ -125,7 +141,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 	defer os.Remove(checksumsPath)
 
-	// 5. Verify checksum.
+	// 6. Verify checksum.
 	checksumsData, err := os.ReadFile(checksumsPath)
 	if err != nil {
 		return fmt.Errorf("reading checksums: %w", err)
@@ -135,7 +151,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("  Checksum verified (SHA-256)")
 
-	// 6. Extract binary.
+	// 7. Extract binary.
 	tempDir, err := os.MkdirTemp("", "gantry-upgrade-*")
 	if err != nil {
 		return fmt.Errorf("creating temp directory: %w", err)
@@ -148,7 +164,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("  Extracted binary")
 
-	// 7. Determine target path and check permissions.
+	// 8. Determine target path and check permissions.
 	targetPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("determining current binary path: %w", err)
@@ -172,7 +188,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 8. Stop service if running.
+	// 9. Stop service if running.
 	if wasRunning && !noRestart {
 		fmt.Println("  Stopping gantry service...")
 		if err := stopService(svc); err != nil {
@@ -180,7 +196,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 9. Replace the binary.
+	// 10. Replace the binary.
 	fmt.Println("  If interrupted, restore with: mv " + targetPath + ".old " + targetPath)
 	if err := replaceBinary(targetPath, newBinaryPath); err != nil {
 		// Attempt to restart if the service was running before we stopped it.
@@ -193,7 +209,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("  Binary updated: %s\n", targetPath)
 
-	// 10. Restart service if it was running before upgrade.
+	// 11. Restart service if it was running before upgrade.
 	if wasRunning && !noRestart {
 		fmt.Println("  Starting gantry service...")
 		// Refresh service info after stop.
@@ -203,7 +219,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 11. Print success.
+	// 12. Print success.
 	fmt.Println()
 	fmt.Printf("  Gantry upgraded successfully!\n")
 	fmt.Printf("    %s -> %s\n\n", currentVersion, displayTargetVersion)
