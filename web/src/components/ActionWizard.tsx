@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Loader2, AlertCircle, Github, Webhook, Zap, Check, Download, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
-import type { Entity, ActionInputDef, GitHubWorkflow } from '../lib/types';
+import type { Entity, ActionInputDef, GitHubWorkflow, Role } from '../lib/types';
 import ActionFormBuilder from './ActionFormBuilder';
 
 interface Props {
@@ -61,12 +61,13 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
   const [error, setError] = useState('');
 
   // Step 1: Basic
+  // For new actions: name is auto-derived from title. For edits: name is fixed.
   const [name, setName] = useState(existing?.metadata.name ?? '');
-  const [title, setTitle] = useState(existing?.metadata.title ?? '');
+  const [title, setTitle] = useState(existing?.metadata.title ?? existing?.metadata.name ?? '');
   const [description, setDescription] = useState(existing?.metadata.description ?? '');
   const [owner, setOwner] = useState(existing?.metadata.owner ?? '');
   const [category, setCategory] = useState(existing?.spec?.category ?? '');
-  const [autoSlug] = useState(!existing);
+  const isNew = !existing;
 
   // Step 2: Type & Config
   const [actionType, setActionType] = useState<ActionType>(
@@ -98,12 +99,56 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
   );
 
   // Step 4: Permissions
-  const [allowedRoles, setAllowedRoles] = useState<string>(
-    (existing?.spec?.permissions?.allowedRoles as string[] | undefined)?.join(', ') ?? ''
-  );
+  // minRole: empty = any authenticated user; otherwise = minimum role required to execute
+  const [minRole, setMinRole] = useState<string>('');
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [requireApproval, setRequireApproval] = useState<boolean>(
     existing?.spec?.permissions?.requireApproval ?? false
   );
+
+  // Load roles for permissions dropdown
+  useEffect(() => {
+    const fallback: Role[] = [
+      { id: 'viewer', name: 'viewer', displayName: 'Viewer', level: 1, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+      { id: 'developer', name: 'developer', displayName: 'Developer', level: 2, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+      { id: 'platform-engineer', name: 'platform-engineer', displayName: 'Platform Engineer', level: 3, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+      { id: 'admin', name: 'admin', displayName: 'Admin', level: 4, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+    ];
+    api.listRoles().then((roles) => {
+      const sorted = [...roles].sort((a, b) => a.level - b.level);
+      setAvailableRoles(sorted.length > 0 ? sorted : fallback);
+      // Derive min role from existing entity
+      const existingRoles = (existing?.spec?.permissions?.allowedRoles as string[] | undefined) ?? [];
+      if (existingRoles.length > 0) {
+        let minLevel = Infinity;
+        let minRoleName = '';
+        for (const rName of existingRoles) {
+          const found = (sorted.length > 0 ? sorted : fallback).find((r) => r.name === rName);
+          if (found && found.level < minLevel) {
+            minLevel = found.level;
+            minRoleName = rName;
+          }
+        }
+        if (minRoleName) setMinRole(minRoleName);
+      }
+    }).catch(() => {
+      setAvailableRoles(fallback);
+      const existingRoles = (existing?.spec?.permissions?.allowedRoles as string[] | undefined) ?? [];
+      if (existingRoles.length > 0) {
+        const sorted = [...fallback].sort((a, b) => a.level - b.level);
+        let minLevel = Infinity;
+        let minRoleName = '';
+        for (const rName of existingRoles) {
+          const found = sorted.find((r) => r.name === rName);
+          if (found && found.level < minLevel) {
+            minLevel = found.level;
+            minRoleName = rName;
+          }
+        }
+        if (minRoleName) setMinRole(minRoleName);
+      }
+    });
+  }, []);
 
   // Load workflows when repo URL changes
   useEffect(() => {
@@ -151,10 +196,16 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
       config = { url: webhookConfig.url, method: webhookConfig.method, ...(Object.keys(headers).length > 0 ? { headers } : {}) };
     }
 
-    const roles = allowedRoles
-      .split(',')
-      .map((r) => r.trim())
-      .filter(Boolean);
+    // Expand minRole to all roles at or above the selected level
+    let allowedRolesArr: string[] = [];
+    if (minRole) {
+      const minRoleObj = availableRoles.find((r) => r.name === minRole);
+      if (minRoleObj) {
+        allowedRolesArr = availableRoles
+          .filter((r) => r.level >= minRoleObj.level)
+          .map((r) => r.name);
+      }
+    }
 
     const cleanInputs = inputs.map((inp) => {
       const clean: ActionInputDef = { name: inp.name, type: inp.type };
@@ -180,9 +231,9 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
         ...(category ? { category } : {}),
         ...(Object.keys(config).length > 0 ? { config } : {}),
         ...(cleanInputs.length > 0 ? { inputs: cleanInputs } : {}),
-        ...((roles.length > 0 || requireApproval) ? {
+        ...((allowedRolesArr.length > 0 || requireApproval) ? {
           permissions: {
-            ...(roles.length > 0 ? { allowedRoles: roles } : {}),
+            ...(allowedRolesArr.length > 0 ? { allowedRoles: allowedRolesArr } : {}),
             ...(requireApproval ? { requireApproval: true } : {}),
           },
         } : {}),
@@ -192,7 +243,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
 
   const handleSave = async () => {
     setError('');
-    if (!name) { setError('Name is required'); setStep(0); return; }
+    if (!title) { setError('Title is required'); setStep(0); return; }
 
     setSaving(true);
     try {
@@ -212,7 +263,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
   };
 
   const canAdvance = () => {
-    if (step === 0) return name.length > 0;
+    if (step === 0) return title.trim().length > 0;
     if (step === 1) {
       if (actionType === 'github-action') return ghConfig.repoUrl.length > 0 && ghConfig.workflow.length > 0;
       if (actionType === 'webhook') return webhookConfig.url.length > 0;
@@ -282,37 +333,28 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
             <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-[var(--gantry-text-primary)]">
-                  Name <span className="text-[var(--gantry-danger)]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => {
-                    if (autoSlug) setName(slugify(e.target.value));
-                    else setName(e.target.value);
-                  }}
-                  placeholder="e.g. deploy-service"
-                  className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                />
-                <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">Unique identifier (slug); used in the API URL.</p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[var(--gantry-text-primary)]">
-                  Title
+                  Title <span className="text-[var(--gantry-danger)]">*</span>
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => {
                     setTitle(e.target.value);
-                    if (autoSlug && !existing) {
-                      setName(slugify(e.target.value));
-                    }
+                    if (isNew) setName(slugify(e.target.value));
                   }}
                   placeholder="e.g. Deploy Service"
                   className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                 />
+                {isNew && name && (
+                  <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">
+                    Slug: <span className="font-mono">{name}</span>
+                  </p>
+                )}
+                {!isNew && (
+                  <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">
+                    Slug: <span className="font-mono">{name}</span> (cannot be changed after creation)
+                  </p>
+                )}
               </div>
 
               <div>
@@ -600,17 +642,22 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
             <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-[var(--gantry-text-primary)]">
-                  Allowed Roles
+                  Minimum Role Required
                 </label>
-                <input
-                  type="text"
-                  value={allowedRoles}
-                  onChange={(e) => setAllowedRoles(e.target.value)}
-                  placeholder="viewer, developer, platform-engineer, admin"
-                  className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                />
+                <select
+                  value={minRole}
+                  onChange={(e) => setMinRole(e.target.value)}
+                  className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                >
+                  <option value="">Any authenticated user</option>
+                  {availableRoles.map((r) => (
+                    <option key={r.name} value={r.name}>
+                      {r.displayName || r.name}{r.level < Math.max(...availableRoles.map((x) => x.level)) ? ' and above' : ' only'}
+                    </option>
+                  ))}
+                </select>
                 <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">
-                  Comma-separated list of roles that may execute this action. Leave blank to allow all roles.
+                  Users with the selected role or a higher role can execute this action.
                 </p>
               </div>
 
