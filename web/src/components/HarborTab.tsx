@@ -63,6 +63,7 @@ function ArtifactRow({ artifact, project, repoName }: { artifact: HarborArtifact
   function loadVulns() {
     if (vulns.length > 0 || loadingVulns) return;
     setLoadingVulns(true);
+    setVulnError('');
     api
       .getHarborVulnerabilities(project, repoName, artifact.digest)
       .then(setVulns)
@@ -142,7 +143,7 @@ function ArtifactRow({ artifact, project, repoName }: { artifact: HarborArtifact
                         <td className="py-1.5 pr-4 text-[var(--gantry-text-primary)]">{v.package}</td>
                         <td className="py-1.5 pr-4 font-mono text-[var(--gantry-text-secondary)]">{v.version}</td>
                         <td className="py-1.5 pr-4 font-mono text-green-600 dark:text-green-400">{v.fix_version || '—'}</td>
-                        <td className="py-1.5 text-[var(--gantry-text-secondary)]">{v.score ? v.score.toFixed(1) : '—'}</td>
+                        <td className="py-1.5 text-[var(--gantry-text-secondary)]">{v.score != null ? v.score.toFixed(1) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -175,10 +176,15 @@ export default function HarborTab({ entity }: { entity: Entity }) {
   const repository = entity.metadata.annotations?.['harbor.io/repository'] || '';
 
   useEffect(() => {
+    setArtifacts([]);
+    setRepos([]);
+    setSelectedRepo('');
+    setError('');
     if (!project) {
       setLoading(false);
       return;
     }
+    setLoading(true);
 
     if (repository) {
       // Directly fetch artifacts for the specific repository.

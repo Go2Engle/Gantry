@@ -109,6 +109,7 @@ export default function Harbor() {
       return;
     }
     setSelectedDigest(digest);
+    setVulns([]);
     setShowAllVulns(false);
     try {
       const data = await api.getHarborVulnerabilities(project, selectedRepo, digest);
@@ -352,7 +353,7 @@ export default function Harbor() {
                                           <td className="py-1.5 pr-4 text-[var(--gantry-text-primary)]">{v.package}</td>
                                           <td className="py-1.5 pr-4 font-mono text-[var(--gantry-text-secondary)]">{v.version}</td>
                                           <td className="py-1.5 pr-4 font-mono text-green-600 dark:text-green-400">{v.fix_version || '—'}</td>
-                                          <td className="py-1.5 text-[var(--gantry-text-secondary)]">{v.score ? v.score.toFixed(1) : '—'}</td>
+                                          <td className="py-1.5 text-[var(--gantry-text-secondary)]">{v.score != null ? v.score.toFixed(1) : '—'}</td>
                                         </tr>
                                       ))}
                                     </tbody>

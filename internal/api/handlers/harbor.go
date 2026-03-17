@@ -108,9 +108,16 @@ func harborCacheSet(key string, data []byte) {
 	if harborCacheEntries == nil {
 		harborCacheEntries = make(map[string]harborCacheEntry)
 	}
+	now := time.Now()
+	// Evict expired entries to prevent unbounded growth.
+	for k, v := range harborCacheEntries {
+		if now.After(v.expiresAt) {
+			delete(harborCacheEntries, k)
+		}
+	}
 	harborCacheEntries[key] = harborCacheEntry{
 		data:      data,
-		expiresAt: time.Now().Add(60 * time.Second),
+		expiresAt: now.Add(60 * time.Second),
 	}
 }
 
@@ -135,9 +142,13 @@ func harborRequest(client *http.Client, baseURL, username, password, path string
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	const maxBody = 1 << 20 // 1 MiB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(body) > maxBody {
+		return nil, fmt.Errorf("harbor API response exceeded %d bytes", maxBody)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -481,6 +492,7 @@ func (h *Handlers) GetHarborSummary(w http.ResponseWriter, r *http.Request) {
 	// Fetch latest artifact for each repo concurrently.
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+	var errs int
 
 	for _, repo := range repos {
 		wg.Add(1)
@@ -496,6 +508,9 @@ func (h *Handlers) GetHarborSummary(w http.ResponseWriter, r *http.Request) {
 				url.PathEscape(cfg.DefaultProject), url.PathEscape(relName))
 			artBody, err := harborRequest(client, cfg.URL, cfg.Username, cfg.Password, artPath)
 			if err != nil {
+				mu.Lock()
+				errs++
+				mu.Unlock()
 				return
 			}
 
@@ -527,6 +542,11 @@ func (h *Handlers) GetHarborSummary(w http.ResponseWriter, r *http.Request) {
 		}(repo.Name)
 	}
 	wg.Wait()
+
+	if errs > 0 && errs == len(repos) {
+		writeError(w, http.StatusBadGateway, "failed to fetch artifacts from all repositories")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, summary)
 }

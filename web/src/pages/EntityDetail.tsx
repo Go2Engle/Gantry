@@ -188,12 +188,13 @@ export default function EntityDetail() {
       const annotations = { ...(entity.metadata.annotations || {}) };
       if (editMeta.harborProject) {
         annotations['harbor.io/project'] = editMeta.harborProject;
+        if (editMeta.harborRepository) {
+          annotations['harbor.io/repository'] = editMeta.harborRepository;
+        } else {
+          delete annotations['harbor.io/repository'];
+        }
       } else {
         delete annotations['harbor.io/project'];
-      }
-      if (editMeta.harborRepository) {
-        annotations['harbor.io/repository'] = editMeta.harborRepository;
-      } else {
         delete annotations['harbor.io/repository'];
       }
       const updated = await api.updateEntity(kind, name, {
