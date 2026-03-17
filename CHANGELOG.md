@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/Go2Engle/Gantry/compare/v0.5.0...v0.6.0) (2026-03-17)
+
+
+### Features
+
+* add ListView component for entity relationships and toggle betw… ([#20](https://github.com/Go2Engle/Gantry/issues/20)) ([860e6ba](https://github.com/Go2Engle/Gantry/commit/860e6ba79ac185a2d7e271e683dd5217892aa607))
+* add SSO-only user support and password reset functionality ([#18](https://github.com/Go2Engle/Gantry/issues/18)) ([39be33d](https://github.com/Go2Engle/Gantry/commit/39be33d22323b78baeabb29eedd8f7a7eaaee3cd))
+* implement bidirectional sync and file content retrieval for GitOps ([c4db1f7](https://github.com/Go2Engle/Gantry/commit/c4db1f7ace6b53518b7965f1b6a81949a625a959))
+
+
+### Bug Fixes
+
+* enhance ActionWizard with role-based permissions and slug auto-generation ([#15](https://github.com/Go2Engle/Gantry/issues/15)) ([4df1cdd](https://github.com/Go2Engle/Gantry/commit/4df1cddc367e9ff921902d14556afb75df699e84))
+
 ## [0.5.0](https://github.com/Go2Engle/Gantry/compare/v0.4.0...v0.5.0) (2026-03-16)
 
 
