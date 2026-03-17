@@ -185,6 +185,7 @@ func (h *Handlers) GitHubOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			DisplayName:  displayName,
 			Email:        ghUser.Email,
 			Role:         defaultRole,
+			SSOOnly:      true,
 		}
 		if err := h.DB.CreateUser(ctx, newUser); err != nil {
 			// If username already exists (race), try to fetch again.

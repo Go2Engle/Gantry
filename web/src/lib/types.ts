@@ -29,6 +29,7 @@ export interface User {
   displayName?: string;
   email?: string;
   role: string;
+  ssoOnly?: boolean;
   effectiveRole?: string;
   groups?: string[];
   permissions?: Record<string, boolean>;

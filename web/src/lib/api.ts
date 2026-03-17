@@ -95,13 +95,16 @@ export const api = {
 
   listUsers: () => request<User[]>('GET', '/auth/users'),
 
-  createUser: (username: string, password: string, displayName?: string, email?: string, role?: string) =>
-    request<User>('POST', '/auth/register', { username, password, displayName, email, role }),
+  createUser: (username: string, password: string, displayName?: string, email?: string, role?: string, ssoOnly?: boolean) =>
+    request<User>('POST', '/auth/register', { username, password: ssoOnly ? undefined : password, displayName, email, role, ssoOnly }),
 
-  updateUser: (id: string, data: { displayName?: string; email?: string; role?: string }) =>
+  updateUser: (id: string, data: { displayName?: string; email?: string; role?: string; ssoOnly?: boolean }) =>
     request<User>('PUT', `/auth/users/${id}`, data),
 
   deleteUser: (id: string) => request<void>('DELETE', `/auth/users/${id}`),
+
+  resetPassword: (id: string, newPassword: string) =>
+    request<{ message: string }>('PUT', `/auth/users/${id}/password`, { newPassword }),
 
   listAPIKeys: () => request<APIKey[]>('GET', '/auth/apikeys'),
 

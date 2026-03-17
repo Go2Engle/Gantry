@@ -116,6 +116,7 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			// User management (admin only).
 			protected.With(middleware.RequireRole("admin")).Get("/auth/users", h.ListUsers)
 			protected.With(middleware.RequireRole("admin")).Put("/auth/users/{id}", h.UpdateUser)
+			protected.With(middleware.RequireRole("admin")).Put("/auth/users/{id}/password", h.ResetPassword)
 			protected.With(middleware.RequireRole("admin")).Delete("/auth/users/{id}", h.DeleteUser)
 
 			// API key management.

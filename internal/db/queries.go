@@ -26,6 +26,7 @@ type User struct {
 	DisplayName  string    `json:"displayName,omitempty"`
 	Email        string    `json:"email,omitempty"`
 	Role         string    `json:"role"`
+	SSOOnly      bool      `json:"ssoOnly"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -644,7 +645,7 @@ func (d *DB) GetEntityGraph(ctx context.Context, kind, namespace, name string) (
 // GetUserByUsername retrieves a user by their unique username.
 func (d *DB) GetUserByUsername(ctx context.Context, username string) (*User, error) {
 	row := d.queryRow(ctx,
-		`SELECT id, username, password_hash, display_name, email, role, created_at, updated_at
+		`SELECT id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at
 		 FROM users WHERE username = ?`,
 		username,
 	)
@@ -652,9 +653,10 @@ func (d *DB) GetUserByUsername(ctx context.Context, username string) (*User, err
 	u := &User{}
 	var displayName, email sql.NullString
 	var createdAt, updatedAt sql.NullTime
+	var ssoOnly int
 	err := row.Scan(
 		&u.ID, &u.Username, &u.PasswordHash,
-		&displayName, &email, &u.Role,
+		&displayName, &email, &u.Role, &ssoOnly,
 		&createdAt, &updatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -666,6 +668,7 @@ func (d *DB) GetUserByUsername(ctx context.Context, username string) (*User, err
 
 	u.DisplayName = displayName.String
 	u.Email = email.String
+	u.SSOOnly = ssoOnly != 0
 	if createdAt.Valid {
 		u.CreatedAt = createdAt.Time
 	}
@@ -678,7 +681,7 @@ func (d *DB) GetUserByUsername(ctx context.Context, username string) (*User, err
 // ListUsers returns all users ordered by creation date (password hash excluded).
 func (d *DB) ListUsers(ctx context.Context) ([]*User, error) {
 	rows, err := d.queryRows(ctx,
-		`SELECT id, username, display_name, email, role, created_at, updated_at
+		`SELECT id, username, display_name, email, role, sso_only, created_at, updated_at
 		 FROM users ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("listing users: %w", err)
@@ -690,11 +693,13 @@ func (d *DB) ListUsers(ctx context.Context) ([]*User, error) {
 		u := &User{}
 		var displayName, email sql.NullString
 		var createdAt, updatedAt sql.NullTime
-		if err := rows.Scan(&u.ID, &u.Username, &displayName, &email, &u.Role, &createdAt, &updatedAt); err != nil {
+		var ssoOnly int
+		if err := rows.Scan(&u.ID, &u.Username, &displayName, &email, &u.Role, &ssoOnly, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scanning user: %w", err)
 		}
 		u.DisplayName = displayName.String
 		u.Email = email.String
+		u.SSOOnly = ssoOnly != 0
 		if createdAt.Valid {
 			u.CreatedAt = createdAt.Time
 		}
@@ -709,12 +714,13 @@ func (d *DB) ListUsers(ctx context.Context) ([]*User, error) {
 // GetUserByID retrieves a user by their ID.
 func (d *DB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	row := d.queryRow(ctx,
-		`SELECT id, username, password_hash, display_name, email, role, created_at, updated_at
+		`SELECT id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at
 		 FROM users WHERE id = ?`, id)
 	u := &User{}
 	var displayName, email sql.NullString
 	var createdAt, updatedAt sql.NullTime
-	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &displayName, &email, &u.Role, &createdAt, &updatedAt)
+	var ssoOnly int
+	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &displayName, &email, &u.Role, &ssoOnly, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user %q: %w", id, entity.ErrEntityNotFound)
 	}
@@ -723,6 +729,7 @@ func (d *DB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	}
 	u.DisplayName = displayName.String
 	u.Email = email.String
+	u.SSOOnly = ssoOnly != 0
 	if createdAt.Valid {
 		u.CreatedAt = createdAt.Time
 	}
@@ -732,12 +739,12 @@ func (d *DB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return u, nil
 }
 
-// UpdateUser updates the mutable profile fields of a user (displayName, email, role).
+// UpdateUser updates the mutable profile fields of a user (displayName, email, role, sso_only).
 func (d *DB) UpdateUser(ctx context.Context, u *User) error {
 	u.UpdatedAt = time.Now().UTC()
 	_, err := d.exec(ctx,
-		`UPDATE users SET display_name = ?, email = ?, role = ?, updated_at = ? WHERE id = ?`,
-		u.DisplayName, u.Email, u.Role, u.UpdatedAt, u.ID)
+		`UPDATE users SET display_name = ?, email = ?, role = ?, sso_only = ?, updated_at = ? WHERE id = ?`,
+		u.DisplayName, u.Email, u.Role, boolToInt(u.SSOOnly), u.UpdatedAt, u.ID)
 	return err
 }
 
@@ -775,12 +782,13 @@ func (d *DB) InitializeBootstrapAdminPassword(ctx context.Context, authSvc *auth
 // GetUserByEmail retrieves a user by their email address.
 func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	row := d.queryRow(ctx,
-		`SELECT id, username, password_hash, display_name, email, role, created_at, updated_at
+		`SELECT id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at
 		 FROM users WHERE email = ? LIMIT 1`, email)
 	u := &User{}
 	var displayName, emailVal sql.NullString
 	var createdAt, updatedAt sql.NullTime
-	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &displayName, &emailVal, &u.Role, &createdAt, &updatedAt)
+	var ssoOnly int
+	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &displayName, &emailVal, &u.Role, &ssoOnly, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user with email %q: %w", email, entity.ErrEntityNotFound)
 	}
@@ -789,6 +797,7 @@ func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	}
 	u.DisplayName = displayName.String
 	u.Email = emailVal.String
+	u.SSOOnly = ssoOnly != 0
 	if createdAt.Valid {
 		u.CreatedAt = createdAt.Time
 	}
@@ -820,10 +829,10 @@ func (d *DB) CreateUser(ctx context.Context, u *User) error {
 	}
 
 	_, err := d.exec(ctx,
-		`INSERT INTO users (id, username, password_hash, display_name, email, role, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO users (id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Username, u.PasswordHash,
-		u.DisplayName, u.Email, u.Role,
+		u.DisplayName, u.Email, u.Role, boolToInt(u.SSOOnly),
 		u.CreatedAt, u.UpdatedAt,
 	)
 	if err != nil {
@@ -1901,7 +1910,7 @@ func (d *DB) ListUserGroups(ctx context.Context, userID string) ([]*Group, error
 // ListGroupMembers returns all users in a group.
 func (d *DB) ListGroupMembers(ctx context.Context, groupID string) ([]*User, error) {
 	rows, err := d.queryRows(ctx,
-		`SELECT u.id, u.username, u.password_hash, u.display_name, u.email, u.role, u.created_at, u.updated_at
+		`SELECT u.id, u.username, u.password_hash, u.display_name, u.email, u.role, u.sso_only, u.created_at, u.updated_at
 		 FROM users u
 		 JOIN user_groups ug ON u.id = ug.user_id
 		 WHERE ug.group_id = ?
@@ -1915,8 +1924,9 @@ func (d *DB) ListGroupMembers(ctx context.Context, groupID string) ([]*User, err
 		u := &User{}
 		var displayName, email sql.NullString
 		var createdAt, updatedAt sql.NullTime
+		var ssoOnly int
 		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash,
-			&displayName, &email, &u.Role, &createdAt, &updatedAt); err != nil {
+			&displayName, &email, &u.Role, &ssoOnly, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		if displayName.Valid {
@@ -1925,6 +1935,7 @@ func (d *DB) ListGroupMembers(ctx context.Context, groupID string) ([]*User, err
 		if email.Valid {
 			u.Email = email.String
 		}
+		u.SSOOnly = ssoOnly != 0
 		if createdAt.Valid {
 			u.CreatedAt = createdAt.Time.UTC()
 		}

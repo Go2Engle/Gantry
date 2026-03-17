@@ -213,6 +213,13 @@ func allMigrations(dbType string) []string {
 		)`,
 	}
 
+	// ------------------------------------------------------------------
+	// Migration: add sso_only column to users table.
+	// ------------------------------------------------------------------
+	migrations = append(migrations,
+		`ALTER TABLE users ADD COLUMN sso_only INTEGER NOT NULL DEFAULT 0`,
+	)
+
 	// Default admin user — dialect-aware upsert.
 	if dbType == "postgres" {
 		migrations = append(migrations,

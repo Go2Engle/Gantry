@@ -147,15 +147,34 @@ func (d *DB) MigrateEncryptPluginConfigs(ctx context.Context) error {
 
 // Migrate runs all database migrations to bring the schema up to date.
 // Migrations are idempotent (using IF NOT EXISTS) so they are safe to run
-// on every startup.
+// on every startup. ALTER TABLE statements silently skip "duplicate column"
+// errors so they remain safe across restarts.
 func (d *DB) Migrate() error {
 	migrations := allMigrations(d.cfg.DBType)
 	for i, m := range migrations {
 		if _, err := d.Exec(m); err != nil {
+			// ALTER TABLE ADD COLUMN is not idempotent in SQLite/Postgres;
+			// tolerate "duplicate column" errors so migrations can re-run.
+			if isDuplicateColumnErr(err) {
+				continue
+			}
 			return fmt.Errorf("migration %d failed: %w", i+1, err)
 		}
 	}
 	return nil
+}
+
+// isDuplicateColumnErr returns true if the error is a "duplicate column" error
+// from an ALTER TABLE ADD COLUMN statement (safe to ignore on re-run).
+func isDuplicateColumnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// SQLite: "duplicate column name: ..."
+	// PostgreSQL: "column ... of relation ... already exists"
+	return strings.Contains(msg, "duplicate column") ||
+		strings.Contains(msg, "already exists")
 }
 
 // IsSQLite returns true if the underlying database is SQLite.
