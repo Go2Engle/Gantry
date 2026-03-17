@@ -72,8 +72,9 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// SSO-only users cannot log in with username/password.
+	// Return the same generic error to avoid leaking SSO membership.
 	if user.SSOOnly {
-		writeError(w, http.StatusForbidden, "this account requires SSO authentication")
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 
@@ -179,6 +180,10 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if req.Password == "" {
 			writeError(w, http.StatusBadRequest, "password is required for non-SSO users")
+			return
+		}
+		if len(req.Password) < 8 {
+			writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
 			return
 		}
 		var err error

@@ -331,6 +331,7 @@ export default function UsersPage() {
                               onClick={() => { setResetUserId(u.id); setResetPassword(''); setResetError(''); setResetSuccess(''); }}
                               className="rounded p-1.5 text-[var(--gantry-text-secondary)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-accent)]"
                               title="Reset password"
+                              aria-label={`Reset password for ${u.displayName || u.username}`}
                             >
                               <KeyRound className="h-4 w-4" />
                             </button>
@@ -340,6 +341,7 @@ export default function UsersPage() {
                             disabled={u.id === me?.id}
                             className="rounded p-1.5 text-[var(--gantry-text-secondary)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-danger)] disabled:pointer-events-none disabled:opacity-0"
                             title="Delete user"
+                            aria-label={`Delete user ${u.displayName || u.username}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
