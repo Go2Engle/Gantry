@@ -47,6 +47,10 @@ export default function UsersPage() {
     setCreateError('');
     if (!newUsername.trim()) return;
     if (!newSSOOnly && !newPassword.trim()) return;
+    if (!newSSOOnly && newPassword.trim().length < MIN_PASSWORD_LENGTH) {
+      setCreateError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      return;
+    }
     setCreating(true);
     try {
       const created = await api.createUser(

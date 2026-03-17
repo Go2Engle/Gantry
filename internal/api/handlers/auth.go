@@ -450,6 +450,12 @@ func (h *Handlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Audit log — record who reset whose password (never log the plaintext).
+	// db.User.PasswordHash is tagged json:"-" so it is automatically excluded.
+	beforeState, _ := json.Marshal(user)
+	afterState := beforeState // only password hash changed (excluded from JSON)
+	if updated, err := h.DB.GetUserByID(r.Context(), id); err == nil {
+		afterState, _ = json.Marshal(updated)
+	}
 	claims := middleware.GetClaims(r.Context())
 	userName := ""
 	userID := ""
@@ -464,6 +470,8 @@ func (h *Handlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		ResourceType: "user",
 		ResourceID:   user.ID,
 		ResourceName: user.Username,
+		BeforeState:  string(beforeState),
+		AfterState:   string(afterState),
 		Source:       "api",
 		IPAddress:    clientIP(r),
 	})
