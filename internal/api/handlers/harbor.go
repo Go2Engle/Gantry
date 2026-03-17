@@ -194,7 +194,11 @@ func getHarborConfig(cfg map[string]any) (harborPluginConfig, error) {
 // Returns the parsed config or writes an HTTP error and returns a non-nil error.
 func (h *Handlers) ensureHarborConfig(w http.ResponseWriter, r *http.Request) (harborPluginConfig, error) {
 	p, err := h.DB.GetPlugin(r.Context(), "harbor")
-	if err != nil || p == nil {
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "plugin lookup failed")
+		return harborPluginConfig{}, fmt.Errorf("plugin lookup failed: %w", err)
+	}
+	if p == nil {
 		writeError(w, http.StatusNotFound, "harbor plugin not installed")
 		return harborPluginConfig{}, fmt.Errorf("not installed")
 	}
