@@ -213,6 +213,103 @@ function NodeBox({
   );
 }
 
+function ListView({
+  nodes,
+  edges,
+  rootId,
+  filteredKinds,
+  navigate,
+}: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  rootId: string;
+  filteredKinds: Set<string>;
+  navigate: (path: string) => void;
+}) {
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+  // Group edges by direction relative to root
+  const outgoing: { node: GraphNode; relation: string }[] = [];
+  const incoming: { node: GraphNode; relation: string }[] = [];
+
+  for (const edge of edges) {
+    if (edge.from === rootId) {
+      const target = nodeMap.get(edge.to);
+      if (target && !filteredKinds.has(target.kind)) {
+        outgoing.push({ node: target, relation: edge.relation });
+      }
+    }
+    if (edge.to === rootId) {
+      const source = nodeMap.get(edge.from);
+      if (source && !filteredKinds.has(source.kind)) {
+        incoming.push({ node: source, relation: edge.relation });
+      }
+    }
+  }
+
+  const noRelationships = outgoing.length === 0 && incoming.length === 0;
+
+  const renderRow = (node: GraphNode, relation: string) => {
+    const color = kindColor(node.kind);
+    const label = node.title && node.title !== node.name ? node.title : node.name;
+    const url = `/catalog/${node.kind}/${node.name}${node.namespace && node.namespace !== 'default' ? `?namespace=${encodeURIComponent(node.namespace)}` : ''}`;
+
+    return (
+      <button
+        key={`${node.id}-${relation}`}
+        onClick={() => navigate(url)}
+        className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--gantry-bg-tertiary)] group"
+      >
+        <span
+          className="inline-flex items-center shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          style={{ background: color + '18', color }}
+        >
+          {node.kind}
+        </span>
+        <span className="text-sm font-medium text-[var(--gantry-text-primary)] truncate group-hover:underline">
+          {label}
+        </span>
+        <span
+          className="ml-auto shrink-0 text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded"
+          style={{ background: relationColor(relation) + '18', color: relationColor(relation) }}
+        >
+          {RELATION_LABELS[relation] ?? relation}
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="px-4 py-3 space-y-4">
+      {outgoing.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--gantry-text-secondary)] mb-1.5 px-1">
+            Depends on
+          </h4>
+          <div className="space-y-0.5">
+            {outgoing.map(({ node, relation }) => renderRow(node, relation))}
+          </div>
+        </div>
+      )}
+      {incoming.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--gantry-text-secondary)] mb-1.5 px-1">
+            Depended on by
+          </h4>
+          <div className="space-y-0.5">
+            {incoming.map(({ node, relation }) => renderRow(node, relation))}
+          </div>
+        </div>
+      )}
+      {noRelationships && (
+        <p className="py-6 text-center text-xs text-[var(--gantry-text-secondary)]">
+          No relationships defined for this entity yet.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function EntityGraph({
   data,
   rootKind,
@@ -231,6 +328,7 @@ export default function EntityGraph({
   const [scale, setScale] = useState(1);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filteredKinds, setFilteredKinds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'graph' | 'list'>('graph');
 
   // Ref-based drag tracking to avoid stale closures.
   const dragRef = useRef<{ sx: number; sy: number; stx: number; sty: number } | null>(null);
@@ -329,94 +427,125 @@ export default function EntityGraph({
             </button>
           ))}
         </div>
-        <button
-          onClick={resetView}
-          className="shrink-0 rounded-lg border border-[var(--gantry-border)] px-2.5 py-1 text-xs text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)]"
-        >
-          Reset View
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-[var(--gantry-border)] overflow-hidden">
+            <button
+              onClick={() => setViewMode('graph')}
+              className={`px-2.5 py-1 text-xs transition-colors ${viewMode === 'graph' ? 'bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)] font-medium' : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)]'}`}
+            >
+              Graph
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-2.5 py-1 text-xs transition-colors ${viewMode === 'list' ? 'bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)] font-medium' : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)]'}`}
+            >
+              List
+            </button>
+          </div>
+          {viewMode === 'graph' && (
+            <button
+              onClick={resetView}
+              className="shrink-0 rounded-lg border border-[var(--gantry-border)] px-2.5 py-1 text-xs text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)]"
+            >
+              Reset View
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* SVG Canvas */}
-      <svg
-        ref={svgRef}
-        className="w-full select-none"
-        style={{ height: 420, cursor: dragRef.current ? 'grabbing' : 'grab' }}
-        onWheel={handleWheel}
-        onMouseDown={handleSvgMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={stopDrag}
-        onMouseLeave={stopDrag}
-      >
-        <defs>
-          {Object.entries(RELATION_COLORS).map(([relation, color]) => (
-            <marker
-              key={relation}
-              id={`arrow-${relation}`}
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M 0 0 L 7 3 L 0 6 z" fill={color} opacity={0.65} />
-            </marker>
-          ))}
-        </defs>
-        <g transform={`translate(${tx}, ${ty}) scale(${scale})`}>
-          {/* Edges (drawn first so nodes appear on top) */}
-          {visibleEdges.map((edge, i) => (
-            <EdgePath
-              key={i}
-              from={edge.from}
-              to={edge.to}
-              relation={edge.relation}
-              positions={positions}
-              highlighted={highlightedEdges?.has(`${edge.from}→${edge.to}`) ?? false}
-            />
-          ))}
-          {/* Nodes */}
-          {visibleNodes.map((node) => {
-            const pos = positions[node.id];
-            if (!pos) return null;
-            return (
-              <NodeBox
-                key={node.id}
-                node={node}
-                pos={pos}
-                isHovered={hoveredNode === node.id}
-                onMouseDown={nodeMouseDown}
-                onClick={() => navigate(`/catalog/${node.kind}/${node.name}${node.namespace && node.namespace !== 'default' ? `?namespace=${encodeURIComponent(node.namespace)}` : ''}`)}
-                onMouseEnter={() => setHoveredNode(node.id)}
-                onMouseLeave={() => setHoveredNode(null)}
-              />
-            );
-          })}
-        </g>
-      </svg>
+      {viewMode === 'graph' ? (
+        <>
+          {/* SVG Canvas */}
+          <svg
+            ref={svgRef}
+            className="w-full select-none"
+            style={{ height: 420, cursor: dragRef.current ? 'grabbing' : 'grab' }}
+            onWheel={handleWheel}
+            onMouseDown={handleSvgMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={stopDrag}
+            onMouseLeave={stopDrag}
+          >
+            <defs>
+              {Object.entries(RELATION_COLORS).map(([relation, color]) => (
+                <marker
+                  key={relation}
+                  id={`arrow-${relation}`}
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="3"
+                  orient="auto"
+                >
+                  <path d="M 0 0 L 7 3 L 0 6 z" fill={color} opacity={0.65} />
+                </marker>
+              ))}
+            </defs>
+            <g transform={`translate(${tx}, ${ty}) scale(${scale})`}>
+              {/* Edges (drawn first so nodes appear on top) */}
+              {visibleEdges.map((edge, i) => (
+                <EdgePath
+                  key={i}
+                  from={edge.from}
+                  to={edge.to}
+                  relation={edge.relation}
+                  positions={positions}
+                  highlighted={highlightedEdges?.has(`${edge.from}→${edge.to}`) ?? false}
+                />
+              ))}
+              {/* Nodes */}
+              {visibleNodes.map((node) => {
+                const pos = positions[node.id];
+                if (!pos) return null;
+                return (
+                  <NodeBox
+                    key={node.id}
+                    node={node}
+                    pos={pos}
+                    isHovered={hoveredNode === node.id}
+                    onMouseDown={nodeMouseDown}
+                    onClick={() => navigate(`/catalog/${node.kind}/${node.name}${node.namespace && node.namespace !== 'default' ? `?namespace=${encodeURIComponent(node.namespace)}` : ''}`)}
+                    onMouseEnter={() => setHoveredNode(node.id)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                  />
+                );
+              })}
+            </g>
+          </svg>
 
-      {/* Legend */}
-      {usedRelations.length > 0 && (
-        <div className="flex flex-wrap items-center gap-5 border-t border-[var(--gantry-border)] px-4 py-2">
-          {usedRelations.map((relation) => (
-            <div key={relation} className="flex items-center gap-1.5">
-              <svg width="22" height="9" style={{ overflow: 'visible' }}>
-                <line x1="0" y1="4.5" x2="15" y2="4.5" stroke={relationColor(relation)} strokeWidth="1.5" strokeOpacity="0.65" />
-                <polygon points="15,1.5 22,4.5 15,7.5" fill={relationColor(relation)} opacity="0.65" />
-              </svg>
-              <span className="text-xs text-[var(--gantry-text-secondary)]">
-                {RELATION_LABELS[relation] ?? relation}
-              </span>
+          {/* Legend */}
+          {usedRelations.length > 0 && (
+            <div className="flex flex-wrap items-center gap-5 border-t border-[var(--gantry-border)] px-4 py-2">
+              {usedRelations.map((relation) => (
+                <div key={relation} className="flex items-center gap-1.5">
+                  <svg width="22" height="9" style={{ overflow: 'visible' }}>
+                    <line x1="0" y1="4.5" x2="15" y2="4.5" stroke={relationColor(relation)} strokeWidth="1.5" strokeOpacity="0.65" />
+                    <polygon points="15,1.5 22,4.5 15,7.5" fill={relationColor(relation)} opacity="0.65" />
+                  </svg>
+                  <span className="text-xs text-[var(--gantry-text-secondary)]">
+                    {RELATION_LABELS[relation] ?? relation}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* Empty state */}
-      {visibleNodes.length === 1 && visibleEdges.length === 0 && (
-        <p className="pb-4 text-center text-xs text-[var(--gantry-text-secondary)]">
-          No relationships defined for this entity yet.
-        </p>
+          {/* Empty state */}
+          {visibleNodes.length === 1 && visibleEdges.length === 0 && (
+            <p className="pb-4 text-center text-xs text-[var(--gantry-text-secondary)]">
+              No relationships defined for this entity yet.
+            </p>
+          )}
+        </>
+      ) : (
+        /* List View */
+        <ListView
+          nodes={visibleNodes}
+          edges={visibleEdges}
+          rootId={rootId}
+          filteredKinds={filteredKinds}
+          navigate={navigate}
+        />
       )}
     </div>
   );
