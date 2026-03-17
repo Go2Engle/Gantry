@@ -407,6 +407,64 @@ export interface StatusMonitorResult {
   custom?: boolean;
 }
 
+// ─── Harbor ──────────────────────────────────────────────────────────────
+
+export interface HarborRepository {
+  id: number;
+  name: string;
+  project_id: number;
+  description: string;
+  pull_count: number;
+  artifact_count: number;
+  creation_time: string;
+  update_time: string;
+}
+
+export interface HarborTag {
+  name: string;
+  push_time: string;
+  pull_time: string;
+}
+
+export interface HarborVulnSummary {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  none: number;
+  unknown: number;
+  total: number;
+}
+
+export interface HarborArtifact {
+  id: number;
+  digest: string;
+  size: number;
+  push_time: string;
+  pull_time: string;
+  tags: HarborTag[];
+  vulnerability_summary?: HarborVulnSummary;
+}
+
+export interface HarborVulnerability {
+  id: string;
+  severity: string;
+  package: string;
+  version: string;
+  fix_version: string;
+  description: string;
+  score?: number;
+}
+
+export interface HarborSummaryResponse {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  total: number;
+  repositories: number;
+}
+
 export interface DashboardConfig {
   announcements: DashboardAnnouncement[];
   quickLinks: DashboardQuickLink[];

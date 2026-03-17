@@ -1,4 +1,4 @@
-import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse } from './types';
+import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse } from './types';
 
 let authToken: string | null = localStorage.getItem('gantry_token');
 
@@ -148,6 +148,16 @@ export const api = {
 
   refreshArgoCDApp: (appName: string, instance?: string) =>
     request<ArgoCDAppStatus>('POST', `/plugins/argocd/apps/${encodeURIComponent(appName)}/refresh${instance ? `?instance=${encodeURIComponent(instance)}` : ''}`, {}),
+
+  // Harbor
+  getHarborRepositories: (project: string) =>
+    request<HarborRepository[]>('GET', `/plugins/harbor/repositories?project=${encodeURIComponent(project)}`),
+  getHarborArtifacts: (project: string, repository: string) =>
+    request<HarborArtifact[]>('GET', `/plugins/harbor/artifacts?project=${encodeURIComponent(project)}&repository=${encodeURIComponent(repository)}`),
+  getHarborVulnerabilities: (project: string, repository: string, reference: string) =>
+    request<HarborVulnerability[]>('GET', `/plugins/harbor/vulnerabilities?project=${encodeURIComponent(project)}&repository=${encodeURIComponent(repository)}&reference=${encodeURIComponent(reference)}`),
+  getHarborSummary: () =>
+    request<HarborSummaryResponse>('GET', '/plugins/harbor/summary'),
 
   // Status Monitor
   getStatusMonitorStatuses: () =>

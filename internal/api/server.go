@@ -209,6 +209,11 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			protected.With(middleware.RequireRole("admin")).Post("/plugins/gitops/sync", h.TriggerGitOpsSync)
 			protected.With(middleware.RequireRole("admin")).Post("/plugins/gitops/pull", h.TriggerGitOpsPull)
 			protected.With(middleware.RequireRole("admin")).Post("/plugins/gitops/bidisync", h.TriggerGitOpsBidirectionalSync)
+			// Harbor plugin endpoints.
+			protected.Get("/plugins/harbor/repositories", h.GetHarborRepositories)
+			protected.Get("/plugins/harbor/artifacts", h.GetHarborArtifacts)
+			protected.Get("/plugins/harbor/vulnerabilities", h.GetHarborVulnerabilities)
+			protected.Get("/plugins/harbor/summary", h.GetHarborSummary)
 			// ArgoCD-specific plugin endpoints.
 			protected.Get("/plugins/argocd/entity-apps", h.GetArgoCDEntityApps)
 			protected.Get("/plugins/argocd/apps/{appName}", h.GetArgoCDApp)

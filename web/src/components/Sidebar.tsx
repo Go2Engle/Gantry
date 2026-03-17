@@ -22,6 +22,7 @@ import {
   Activity,
   GitBranch,
   Shield,
+  Package,
   X,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -71,6 +72,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [statusMonitorEnabled, setStatusMonitorEnabled] = useState(false);
   const [gitopsEnabled, setGitopsEnabled] = useState(false);
+  const [harborEnabled, setHarborEnabled] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
@@ -87,6 +89,8 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
       if (sm?.enabled) setStatusMonitorEnabled(true);
       const gops = plugins.find((p) => p.name === 'gitops');
       if (gops?.enabled) setGitopsEnabled(true);
+      const hbr = plugins.find((p) => p.name === 'harbor');
+      if (hbr?.enabled) setHarborEnabled(true);
     }).catch(() => {});
   }, []);
 
@@ -221,6 +225,22 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
                 >
                   <Activity className="h-5 w-5 shrink-0" />
                   {!collapsed && <span className="truncate">Status</span>}
+                </Link>
+              </li>
+            )}
+            {harborEnabled && (
+              <li>
+                <Link
+                  to="/harbor"
+                  className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/harbor')
+                      ? 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]'
+                      : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]'
+                  }`}
+                  title={collapsed ? 'Harbor' : undefined}
+                >
+                  <Package className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="truncate">Harbor</span>}
                 </Link>
               </li>
             )}

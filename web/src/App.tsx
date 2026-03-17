@@ -16,6 +16,7 @@ import UsersPage from './pages/Users';
 import Plugins from './pages/Plugins';
 import StatusMonitor from './pages/StatusMonitor';
 import GitOps from './pages/GitOps';
+import Harbor from './pages/Harbor';
 import RBAC from './pages/RBAC';
 
 function AuthenticatedLayout() {
@@ -48,6 +49,7 @@ function AuthenticatedLayout() {
               <Route path="/plugins" element={<Plugins />} />
               <Route path="/status" element={<StatusMonitor />} />
               <Route path="/gitops" element={<GitOps />} />
+              <Route path="/harbor" element={<Harbor />} />
               <Route path="/rbac" element={<RBAC />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

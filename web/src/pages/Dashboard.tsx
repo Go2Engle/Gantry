@@ -33,6 +33,7 @@ import {
   Bell,
   Activity,
   GitBranch,
+  Package,
   Info,
   AlertTriangle,
   AlertCircle,
@@ -56,6 +57,7 @@ import type {
   HistoryEntry,
   StatusMonitorResult,
   GitOpsStatus,
+  HarborSummaryResponse,
 } from '../lib/types';
 import { ENTITY_KINDS } from '../lib/types';
 
@@ -109,6 +111,7 @@ const WIDGET_LABELS: Record<string, string> = {
   recently_updated: 'Recently Updated',
   recently_browsed: 'Recently Browsed',
   gitops_status: 'GitOps Status',
+  harbor_vulns: 'Harbor Vulnerabilities',
 };
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
@@ -122,6 +125,7 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'recently_updated', visible: true, order: 7, width: 'half' },
   { id: 'recently_browsed', visible: true, order: 8, width: 'half' },
   { id: 'gitops_status', visible: true, order: 9, width: 'half' },
+  { id: 'harbor_vulns', visible: true, order: 10, width: 'half' },
 ];
 
 interface KindCount {
@@ -314,6 +318,7 @@ export default function Dashboard() {
   const [statusMonitor, setStatusMonitor] = useState<StatusMonitorResult[]>([]);
   const [statusMonitorLoading, setStatusMonitorLoading] = useState(true);
   const [gitopsStatus, setGitopsStatus] = useState<GitOpsStatus | null>(null);
+  const [harborSummary, setHarborSummary] = useState<HarborSummaryResponse | null>(null);
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -376,6 +381,10 @@ export default function Dashboard() {
         }
       });
 
+    api.getHarborSummary()
+      .then((s) => { if (!cancelled) setHarborSummary(s); })
+      .catch(() => { if (!cancelled) setHarborSummary(null); });
+
     return () => {
       cancelled = true;
     };
@@ -414,10 +423,19 @@ export default function Dashboard() {
     .filter((w) => w.visible)
     .sort((a, b) => a.order - b.order);
 
+  // Plugin widgets that should only appear when data is available (plugin enabled).
+  const pluginWidgetAvailable: Record<string, boolean> = {
+    status_monitor: statusMonitor.length > 0,
+    gitops_status: gitopsStatus !== null,
+    harbor_vulns: harborSummary !== null,
+  };
+
   // Sorted all widgets for edit mode — use editConfig.widgets directly
   // (enterEditMode pre-merges so editConfig always has the full list).
+  // Hide plugin widgets when their plugin is not enabled.
   const sortedEditWidgets = (editConfig?.widgets ?? DEFAULT_WIDGETS)
     .slice()
+    .filter((w) => !(w.id in pluginWidgetAvailable) || pluginWidgetAvailable[w.id])
     .sort((a, b) => a.order - b.order);
 
   function enterEditMode() {
@@ -936,6 +954,54 @@ export default function Dashboard() {
                 )}
               </div>
             )}
+          </div>
+        );
+      }
+
+      case 'harbor_vulns': {
+        if (!harborSummary) return null;
+        return (
+          <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+            <div className="flex items-center justify-between border-b border-[var(--gantry-border)] px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
+                <h2 className="text-base font-semibold text-[var(--gantry-text-primary)]">Harbor Security</h2>
+              </div>
+              <Link to="/harbor" className="flex items-center gap-1 text-sm text-[var(--gantry-accent)] hover:opacity-75">
+                View all <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <div className="text-xs text-[var(--gantry-text-secondary)]">
+                {harborSummary.repositories} repositories scanned
+              </div>
+              {harborSummary.total === 0 ? (
+                <p className="text-sm font-medium text-green-600 dark:text-green-400">No vulnerabilities found</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {harborSummary.critical > 0 && (
+                    <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      {harborSummary.critical} Critical
+                    </span>
+                  )}
+                  {harborSummary.high > 0 && (
+                    <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                      {harborSummary.high} High
+                    </span>
+                  )}
+                  {harborSummary.medium > 0 && (
+                    <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-bold text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                      {harborSummary.medium} Medium
+                    </span>
+                  )}
+                  {harborSummary.low > 0 && (
+                    <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                      {harborSummary.low} Low
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         );
       }

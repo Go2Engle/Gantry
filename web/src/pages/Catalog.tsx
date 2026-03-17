@@ -62,6 +62,7 @@ export default function Catalog() {
   const [createKind, setCreateKind] = useState('Service');
   const [schemas, setSchemas] = useState<Record<string, JsonSchema>>({});
   const [error, setError] = useState('');
+  const [enabledPlugins, setEnabledPlugins] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setLoading(true);
@@ -71,6 +72,7 @@ export default function Catalog() {
 
   useEffect(() => {
     api.listSchemas().then((data) => setSchemas(data || {})).catch(() => {});
+    api.listPlugins().then((plugins) => setEnabledPlugins(new Set(plugins.filter((p) => p.enabled).map((p) => p.name)))).catch(() => {});
   }, []);
 
   const allOwners = useMemo(() => {
@@ -127,10 +129,17 @@ export default function Catalog() {
       }
       const spec = pruneEmpty(rawSpec);
 
+      // Build annotations from plugin-specific fields.
+      const annotations: Record<string, string> = {};
+      const harborProject = (raw._harbor_project as string) || '';
+      const harborRepo = (raw._harbor_repository as string) || '';
+      if (harborProject) annotations['harbor.io/project'] = harborProject;
+      if (harborRepo) annotations['harbor.io/repository'] = harborRepo;
+
       const newEntity: Entity = {
         kind: createKind,
         apiVersion: 'gantry.io/v1',
-        metadata: { name, title, owner, description },
+        metadata: { name, title, owner, description, ...(Object.keys(annotations).length > 0 ? { annotations } : {}) },
         spec,
       };
       const created = await api.createEntity(newEntity);
@@ -144,6 +153,7 @@ export default function Catalog() {
   const createSchema: JsonSchema = useMemo(() => {
     const kindSchema = schemas[createKind.toLowerCase()] || { type: 'object', properties: {} };
     const kindRequired: string[] = (kindSchema as any).required || [];
+    const showHarbor = enabledPlugins.has('harbor') && (createKind === 'Service' || createKind === 'Infrastructure');
     return {
       type: 'object',
       properties: {
@@ -152,10 +162,14 @@ export default function Catalog() {
         _owner: { type: 'string', title: 'Owner', description: 'Team or user that owns this entity', 'x-entity-ref': 'Team' },
         _description: { type: 'string', title: 'Description' },
         ...(kindSchema as any).properties,
+        ...(showHarbor ? {
+          _harbor_project: { type: 'string', title: 'Harbor Project', description: 'Harbor registry project name (e.g. my-project)' },
+          _harbor_repository: { type: 'string', title: 'Harbor Repository', description: 'Harbor repository path within the project (e.g. my-app)' },
+        } : {}),
       },
       required: ['_name', ...kindRequired],
     };
-  }, [schemas, createKind]);
+  }, [schemas, createKind, enabledPlugins]);
 
   return (
     <div>

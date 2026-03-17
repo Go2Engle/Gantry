@@ -651,5 +651,53 @@
       },
       "required": ["repoUrl"]
     }
+  },
+  {
+    "name": "harbor",
+    "title": "Harbor Registry",
+    "description": "Container image browser and vulnerability scanner for entities connected to Harbor.",
+    "longDescription": "The Harbor plugin connects Gantry to your Harbor container registry, enriching Service and Infrastructure entities with live image data — tags, digests, sizes, and vulnerability scan results. Once installed, any entity with a `harbor.io/project` or `harbor.io/repository` annotation will automatically show a Harbor tab with artifact details and security findings.\n\nA dedicated sidebar page lets you browse all repositories and artifacts across your Harbor instance, and a dashboard widget surfaces aggregated vulnerability counts so your team can spot critical issues at a glance.",
+    "features": [
+      "Container image and artifact browser on Service and Infrastructure entities",
+      "Vulnerability scan summary with critical/high/medium/low counts",
+      "Expandable vulnerability details with CVE IDs, fix versions, and CVSS scores",
+      "Full Harbor registry browser in the sidebar",
+      "Dashboard widget showing aggregated vulnerability summary",
+      "In-memory caching with 60-second TTL for Harbor API responses"
+    ],
+    "version": "1.0.0",
+    "author": "Gantry",
+    "category": "integration",
+    "homepage": "https://goharbor.io",
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "title": "Harbor URL",
+          "description": "Base URL of your Harbor instance (e.g. https://registry.example.com)"
+        },
+        "username": {
+          "type": "string",
+          "title": "Username",
+          "description": "Harbor username or robot account name"
+        },
+        "password": {
+          "type": "string",
+          "title": "Password / Token",
+          "description": "Harbor password or robot account token",
+          "secret": true
+        },
+        "defaultProject": {
+          "type": "string",
+          "title": "Default Project",
+          "description": "Default Harbor project for the sidebar browser and dashboard widget.",
+          "default": "library"
+        }
+      },
+      "required": ["url", "username", "password"]
+    },
+    "entityPanels": ["Service", "Infrastructure"],
+    "actionTypes": []
   }
 ]

@@ -11,6 +11,7 @@ import KubernetesTab from '../components/KubernetesTab';
 import GitHubTab from '../components/GitHubTab';
 import ArgoCDTab from '../components/ArgoCDTab';
 import APIDocsTab from '../components/APIDocsTab';
+import HarborTab from '../components/HarborTab';
 
 const ACTION_COLORS: Record<string, string> = {
   'entity.created': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -87,7 +88,7 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
   other:     <CircleHelp className="h-3.5 w-3.5" />,
 };
 
-type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs';
+type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor';
 
 export default function EntityDetail() {
   const { kind, name } = useParams<{ kind: string; name: string }>();
@@ -104,7 +105,7 @@ export default function EntityDetail() {
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [editMeta, setEditMeta] = useState({ title: '', description: '', owner: '', tags: '' });
+  const [editMeta, setEditMeta] = useState({ title: '', description: '', owner: '', tags: '', harborProject: '', harborRepository: '' });
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [enabledPlugins, setEnabledPlugins] = useState<Set<string>>(new Set());
@@ -172,6 +173,8 @@ export default function EntityDetail() {
       description: entity.metadata.description ?? '',
       owner: entity.metadata.owner ?? '',
       tags: (entity.metadata.tags ?? []).join(', '),
+      harborProject: entity.metadata.annotations?.['harbor.io/project'] ?? '',
+      harborRepository: entity.metadata.annotations?.['harbor.io/repository'] ?? '',
     });
     setEditing(true);
   }
@@ -181,6 +184,18 @@ export default function EntityDetail() {
     try {
       // Deep-prune empty values so the backend doesn't see "" for optional enum fields.
       const spec = pruneEmpty(raw);
+      // Merge plugin annotations with existing annotations.
+      const annotations = { ...(entity.metadata.annotations || {}) };
+      if (editMeta.harborProject) {
+        annotations['harbor.io/project'] = editMeta.harborProject;
+      } else {
+        delete annotations['harbor.io/project'];
+      }
+      if (editMeta.harborRepository) {
+        annotations['harbor.io/repository'] = editMeta.harborRepository;
+      } else {
+        delete annotations['harbor.io/repository'];
+      }
       const updated = await api.updateEntity(kind, name, {
         ...entity,
         metadata: {
@@ -189,6 +204,7 @@ export default function EntityDetail() {
           description: editMeta.description || undefined,
           owner: editMeta.owner || undefined,
           tags: editMeta.tags ? editMeta.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+          annotations: Object.keys(annotations).length > 0 ? annotations : undefined,
         },
         spec,
       }, namespace);
@@ -309,11 +325,16 @@ export default function EntityDetail() {
           entity.metadata.annotations?.['argocd.io/appName']
         );
         const hasAPIDocs = !!(entity.spec?.apiDocsUrl) && (entity.kind === 'Service' || entity.kind === 'API');
+        const hasHarbor = !!(
+          entity.metadata.annotations?.['harbor.io/project'] ||
+          entity.metadata.annotations?.['harbor.io/repository']
+        );
         const tabs: Tab[] = ['overview', 'relationships', 'yaml', 'activity'];
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
         if (hasArgoCD && entity.kind === 'Service' && enabledPlugins.has('argocd')) tabs.splice(1, 0, 'argocd');
         if (hasAPIDocs) tabs.splice(1, 0, 'apidocs');
+        if (hasHarbor && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('harbor')) tabs.splice(1, 0, 'harbor');
         return (
           <div className="mt-6 flex gap-1 border-b border-[var(--gantry-border)]">
             {tabs.map((t) => (
@@ -326,7 +347,7 @@ export default function EntityDetail() {
                     : 'border-transparent text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
                 }`}
               >
-                {t === 'relationships' ? 'Dependencies' : t === 'kubernetes' ? 'Kubernetes' : t === 'github' ? 'GitHub' : t === 'argocd' ? 'ArgoCD' : t === 'apidocs' ? 'API Docs' : t}
+                {t === 'relationships' ? 'Dependencies' : t === 'kubernetes' ? 'Kubernetes' : t === 'github' ? 'GitHub' : t === 'argocd' ? 'ArgoCD' : t === 'apidocs' ? 'API Docs' : t === 'harbor' ? 'Harbor' : t}
                 {t === 'activity' && activity.length > 0 && (
                   <span className="ml-1.5 rounded-full bg-[var(--gantry-bg-tertiary)] px-1.5 py-0.5 text-xs">
                     {activity.length}
@@ -756,6 +777,10 @@ export default function EntityDetail() {
           <APIDocsTab entity={entity} />
         )}
 
+        {tab === 'harbor' && (
+          <HarborTab entity={entity} />
+        )}
+
         {tab === 'relationships' && (
           graphLoading ? (
             <div className="flex items-center justify-center py-16">
@@ -852,6 +877,39 @@ export default function EntityDetail() {
                   </div>
                 </div>
               </div>
+
+              {/* Harbor plugin annotations */}
+              {enabledPlugins.has('harbor') && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--gantry-text-secondary)] mb-4">
+                    Harbor Registry
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Harbor Project</label>
+                      <p className="text-xs text-[var(--gantry-text-secondary)] mb-1.5">Project name in Harbor</p>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                        value={editMeta.harborProject}
+                        placeholder="my-project"
+                        onChange={(e) => setEditMeta((m) => ({ ...m, harborProject: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Harbor Repository</label>
+                      <p className="text-xs text-[var(--gantry-text-secondary)] mb-1.5">Repository path within the project</p>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                        value={editMeta.harborRepository}
+                        placeholder="my-app"
+                        onChange={(e) => setEditMeta((m) => ({ ...m, harborRepository: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Spec section */}
               <div>
