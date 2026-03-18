@@ -113,27 +113,55 @@
 }
 
 /* Color mode toggle icon — keep it visible against the dark navbar */
-.navbar__items button[class*='colorModeToggle'] {
+.navbar__items [class*='colorModeToggle'] button,
+.navbar__items button[class*='colorModeToggle'],
+.navbar__items button[class*='toggleButton'],
+.navbar__items button[class*='darkNavbarColorModeToggle'] {
   color: #ffffff;
+  border-radius: 999px;
 }
 
-[data-theme='light'] .navbar__items button[class*='colorModeToggle'] {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+[data-theme='light'] .navbar__items [class*='colorModeToggle'] button,
+[data-theme='light'] .navbar__items button[class*='colorModeToggle'],
+[data-theme='light'] .navbar__items button[class*='toggleButton'],
+[data-theme='light'] .navbar__items button[class*='darkNavbarColorModeToggle'] {
+  color: #1c1c1e;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
-[data-theme='dark'] .navbar__items button[class*='colorModeToggle'] {
+[data-theme='dark'] .navbar__items [class*='colorModeToggle'] button,
+[data-theme='dark'] .navbar__items button[class*='colorModeToggle'],
+[data-theme='dark'] .navbar__items button[class*='toggleButton'],
+[data-theme='dark'] .navbar__items button[class*='darkNavbarColorModeToggle'] {
   color: rgba(255, 255, 255, 0.82);
 }
 
-.navbar__items button[class*='colorModeToggle']:hover {
+.navbar__items [class*='colorModeToggle'] button:hover,
+.navbar__items button[class*='colorModeToggle']:hover,
+.navbar__items button[class*='toggleButton']:hover,
+.navbar__items button[class*='darkNavbarColorModeToggle']:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.16);
 }
 
+[data-theme='light'] .navbar__items [class*='colorModeToggle'] button:hover,
+[data-theme='light'] .navbar__items button[class*='colorModeToggle']:hover,
+[data-theme='light'] .navbar__items button[class*='toggleButton']:hover,
+[data-theme='light'] .navbar__items button[class*='darkNavbarColorModeToggle']:hover {
+  color: #1c1c1e;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.navbar__items [class*='colorModeToggle'] button svg,
+.navbar__items [class*='colorModeToggle'] button path,
 .navbar__items button[class*='colorModeToggle'] svg,
-.navbar__items button[class*='colorModeToggle'] path {
+.navbar__items button[class*='colorModeToggle'] path,
+.navbar__items button[class*='toggleButton'] svg,
+.navbar__items button[class*='toggleButton'] path,
+.navbar__items button[class*='darkNavbarColorModeToggle'] svg,
+.navbar__items button[class*='darkNavbarColorModeToggle'] path {
   fill: currentColor;
   stroke: currentColor;
 }
