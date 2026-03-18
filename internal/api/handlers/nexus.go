@@ -167,10 +167,8 @@ func getNexusConfig(cfg map[string]any) (nexusPluginConfig, error) {
 	if c.URL == "" {
 		return c, fmt.Errorf("nexus plugin requires url")
 	}
-	// Normalise: strip trailing slash so callers can just append /service/rest/...
-	for len(c.URL) > 0 && c.URL[len(c.URL)-1] == '/' {
-		c.URL = c.URL[:len(c.URL)-1]
-	}
+	// Normalise: strip trailing slashes so callers can just append /service/rest/...
+	c.URL = strings.TrimRight(c.URL, "/")
 	return c, nil
 }
 
