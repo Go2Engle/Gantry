@@ -98,12 +98,7 @@
 }
 
 .navbar__logo {
-  filter: brightness(10);
-}
-
-/* Keep logo visible in dark mode too */
-[data-theme='dark'] .navbar__logo {
-  filter: brightness(10);
+  filter: none;
 }
 
 .navbar__link {
@@ -117,13 +112,30 @@
   color: #ffffff;
 }
 
-/* Color mode toggle icon — make it visible on dark navbar */
+/* Color mode toggle icon — keep it visible against the dark navbar */
 .navbar__items button[class*='colorModeToggle'] {
-  color: rgba(255, 255, 255, 0.6);
+  color: #ffffff;
 }
+
+[data-theme='light'] .navbar__items button[class*='colorModeToggle'] {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+[data-theme='dark'] .navbar__items button[class*='colorModeToggle'] {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .navbar__items button[class*='colorModeToggle']:hover {
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.navbar__items button[class*='colorModeToggle'] svg,
+.navbar__items button[class*='colorModeToggle'] path {
+  fill: currentColor;
+  stroke: currentColor;
 }
 
 /* Search bar on dark navbar */
@@ -180,6 +192,7 @@
 [data-theme='light'] .theme-code-block,
 [data-theme='light'] pre {
   background: #0d0d0f !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
 /* Dark mode code block */
@@ -192,6 +205,18 @@
 pre code {
   font-size: 13px !important;
   line-height: 1.85 !important;
+  color: #f5f5f7 !important;
+}
+
+.prism-code,
+.prism-code .token,
+.theme-code-block code {
+  color: #f5f5f7;
+}
+
+.theme-code-block [class*='codeBlockTitle'],
+.theme-code-block [class*='codeBlockContent'] {
+  color: #f5f5f7;
 }
 
 /* Inline code */
@@ -203,8 +228,8 @@ code {
 }
 
 [data-theme='light'] code:not([class*='codeBlock']) {
-  background: rgba(0, 0, 0, 0.05);
-  color: #111111;
+  background: rgba(0, 0, 0, 0.08);
+  color: #1f2937;
 }
 
 [data-theme='dark'] code:not([class*='codeBlock']) {

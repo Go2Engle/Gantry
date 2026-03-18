@@ -60,7 +60,7 @@ const config = {
         title: 'Gantry',
         logo: {
           alt: 'Gantry Logo',
-          src: 'img/logo-black.png',
+          src: 'img/logo-white.png',
           srcDark: 'img/logo-white.png',
         },
         items: [
@@ -122,7 +122,7 @@ const config = {
       },
 
       prism: {
-        theme: prismThemes.github,
+        theme: prismThemes.vsDark,
         darkTheme: prismThemes.dracula,
         additionalLanguages: ['bash', 'yaml', 'go', 'json', 'docker'],
       },
