@@ -281,6 +281,7 @@ func (h *Handlers) GetNexusComponents(w http.ResponseWriter, r *http.Request) {
 	for _, raw := range allItems {
 		var c NexusComponent
 		if err := json.Unmarshal(raw, &c); err != nil {
+			log.Printf("[nexus] skipping component: unmarshal error: %v", err)
 			continue
 		}
 		if c.Assets == nil {
@@ -332,6 +333,7 @@ func (h *Handlers) GetNexusAssets(w http.ResponseWriter, r *http.Request) {
 	for _, raw := range allItems {
 		var a NexusAsset
 		if err := json.Unmarshal(raw, &a); err != nil {
+			log.Printf("[nexus] skipping asset: unmarshal error: %v", err)
 			continue
 		}
 		assets = append(assets, a)
