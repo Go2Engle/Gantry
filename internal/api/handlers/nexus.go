@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -194,10 +195,10 @@ func nexusPaginatedSearch(ctx context.Context, cfg nexusPluginConfig, basePath s
 		if resp.ContinuationToken == "" {
 			break
 		}
-		// Append or replace continuationToken query param.
-		sep := "&"
-		if basePath == "" {
-			sep = "?"
+		// Append continuationToken query param.
+		sep := "?"
+		if strings.Contains(basePath, "?") {
+			sep = "&"
 		}
 		path = basePath + sep + "continuationToken=" + url.QueryEscape(resp.ContinuationToken)
 	}
