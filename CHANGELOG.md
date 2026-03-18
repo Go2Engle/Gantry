@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/Go2Engle/Gantry/compare/v0.6.0...v0.7.0) (2026-03-18)
+
+
+### Features
+
+* add Harbor plugin integration ([#21](https://github.com/Go2Engle/Gantry/issues/21)) ([4092d52](https://github.com/Go2Engle/Gantry/commit/4092d523cb8627429a1b7cbb96dcebb645b499e5))
+* add Nexus Repository Manager plugin integration with components and assets endpoints ([#24](https://github.com/Go2Engle/Gantry/issues/24)) ([28ce025](https://github.com/Go2Engle/Gantry/commit/28ce025abfd6b369261b79d64539156d35d95db2))
+
+
+### Bug Fixes
+
+* update HealthCheckProxy test to allow internal and private IPs ([#23](https://github.com/Go2Engle/Gantry/issues/23)) ([85d73c4](https://github.com/Go2Engle/Gantry/commit/85d73c4b5d1b0d30705c9f623117918eb212c831))
+
 ## [0.6.0](https://github.com/Go2Engle/Gantry/compare/v0.5.0...v0.6.0) (2026-03-17)
 
 
