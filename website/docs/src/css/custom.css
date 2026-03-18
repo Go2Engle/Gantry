@@ -9,6 +9,13 @@
    LIGHT MODE
    ============================================================ */
 :root {
+  --gantry-bg-primary: #ffffff;
+  --gantry-bg-secondary: #f0f0f0;
+  --gantry-bg-tertiary: #e5e5ea;
+  --gantry-text-primary: #111111;
+  --gantry-text-secondary: #636366;
+  --gantry-border: #d5d5d7;
+
   /* Primary / accent — matches website --blue */
   --ifm-color-primary:          #007AFF;
   --ifm-color-primary-dark:     #0066d6;
@@ -56,6 +63,13 @@
    DARK MODE
    ============================================================ */
 [data-theme='dark'] {
+  --gantry-bg-primary: #1c1c1e;
+  --gantry-bg-secondary: #111113;
+  --gantry-bg-tertiary: #2c2c2e;
+  --gantry-text-primary: #f5f5f7;
+  --gantry-text-secondary: #8e8e93;
+  --gantry-border: #38383a;
+
   --ifm-color-primary:          #59abff;
   --ifm-color-primary-dark:     #3a9aff;
   --ifm-color-primary-darker:   #2b92ff;
@@ -117,7 +131,7 @@
 .navbar__items button[class*='colorModeToggle'],
 .navbar__items button[class*='toggleButton'],
 .navbar__items button[class*='darkNavbarColorModeToggle'] {
-  color: #ffffff;
+  color: var(--gantry-bg-primary);
   border-radius: 999px;
 }
 
@@ -125,33 +139,33 @@
 [data-theme='light'] .navbar__items button[class*='colorModeToggle'],
 [data-theme='light'] .navbar__items button[class*='toggleButton'],
 [data-theme='light'] .navbar__items button[class*='darkNavbarColorModeToggle'] {
-  color: #1c1c1e;
-  background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  color: var(--gantry-text-primary);
+  background: var(--gantry-bg-primary);
+  border: 1px solid color-mix(in srgb, var(--gantry-bg-primary) 90%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gantry-border) 60%, transparent);
 }
 
 [data-theme='dark'] .navbar__items [class*='colorModeToggle'] button,
 [data-theme='dark'] .navbar__items button[class*='colorModeToggle'],
 [data-theme='dark'] .navbar__items button[class*='toggleButton'],
 [data-theme='dark'] .navbar__items button[class*='darkNavbarColorModeToggle'] {
-  color: rgba(255, 255, 255, 0.82);
+  color: color-mix(in srgb, var(--gantry-text-primary) 82%, transparent);
 }
 
 .navbar__items [class*='colorModeToggle'] button:hover,
 .navbar__items button[class*='colorModeToggle']:hover,
 .navbar__items button[class*='toggleButton']:hover,
 .navbar__items button[class*='darkNavbarColorModeToggle']:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.16);
+  color: var(--gantry-text-primary);
+  background: color-mix(in srgb, var(--gantry-text-primary) 16%, transparent);
 }
 
 [data-theme='light'] .navbar__items [class*='colorModeToggle'] button:hover,
 [data-theme='light'] .navbar__items button[class*='colorModeToggle']:hover,
 [data-theme='light'] .navbar__items button[class*='toggleButton']:hover,
 [data-theme='light'] .navbar__items button[class*='darkNavbarColorModeToggle']:hover {
-  color: #1c1c1e;
-  background: rgba(255, 255, 255, 0.92);
+  color: var(--gantry-text-primary);
+  background: color-mix(in srgb, var(--gantry-bg-primary) 92%, transparent);
 }
 
 .navbar__items [class*='colorModeToggle'] button svg,
@@ -162,8 +176,8 @@
 .navbar__items button[class*='toggleButton'] path,
 .navbar__items button[class*='darkNavbarColorModeToggle'] svg,
 .navbar__items button[class*='darkNavbarColorModeToggle'] path {
-  fill: currentColor;
-  stroke: currentColor;
+  fill: currentcolor;
+  stroke: currentcolor;
 }
 
 /* Search bar on dark navbar */
