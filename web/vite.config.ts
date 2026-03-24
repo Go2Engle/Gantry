@@ -14,9 +14,13 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['lucide-react'],
+        manualChunks: (id) => {
+          if (/node_modules\/(react|react-dom|react-router-dom)\//.test(id)) {
+            return 'vendor-react'
+          }
+          if (id.includes('node_modules/lucide-react/')) {
+            return 'vendor-ui'
+          }
         }
       }
     }
