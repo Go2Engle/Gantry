@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/Go2Engle/Gantry/compare/v0.7.0...v0.8.0) (2026-03-30)
+
+
+### Features
+
+* **actions:** add entity list dropdown for select fields ([#37](https://github.com/Go2Engle/Gantry/issues/37)) ([3a301a0](https://github.com/Go2Engle/Gantry/commit/3a301a002c5bdc9573dd752d77e84bf9e160c8fb))
+
+
+### Bug Fixes
+
+* **StatusMonitor:** prevent operational and unknown statuses from showing in issues filter ([#35](https://github.com/Go2Engle/Gantry/issues/35)) ([3dd2a0d](https://github.com/Go2Engle/Gantry/commit/3dd2a0d53a77de610d49115c5c429f8c56c11900))
+
 ## [0.7.0](https://github.com/Go2Engle/Gantry/compare/v0.6.0...v0.7.0) (2026-03-18)
 
 
