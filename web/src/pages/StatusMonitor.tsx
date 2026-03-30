@@ -114,7 +114,7 @@ export default function StatusMonitor() {
       return false;
     }
     if (categoryFilter !== 'all' && s.category !== categoryFilter) return false;
-    if (statusFilter === 'issues' && s.status === 'operational') return false;
+    if (statusFilter === 'issues' && (s.status === 'operational' || s.status === 'unknown')) return false;
     return true;
   });
 
@@ -265,11 +265,11 @@ export default function StatusMonitor() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((provider) => {
+          {filtered.map((provider, idx) => {
             const cfg = STATUS_CONFIG[provider.status] || STATUS_CONFIG.unknown;
             return (
               <div
-                key={provider.name}
+                key={provider.custom ? `custom-${provider.name}-${idx}` : provider.name}
                 className="group flex items-center gap-3 rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-3 transition-colors hover:border-[var(--gantry-accent)]/30"
               >
                 {/* Status dot */}
