@@ -57,7 +57,8 @@ function getInputSchema(action: Entity): JsonSchema {
       type: input.type === 'select' ? 'string' : input.type === 'textarea' ? 'string' : input.type || 'string',
       title: input.title || input.name,
       description: input.description,
-      enum: input.type === 'select' ? input.options?.map((o: any) => String(o.value ?? o)) : undefined,
+      enum: input.type === 'select' && !input.entityKind ? input.options?.map((o: any) => String(o.value ?? o)) : undefined,
+      'x-entity-ref': input.type === 'select' && input.entityKind ? input.entityKind : undefined,
       default: input.default,
       format: input.type === 'textarea' ? 'textarea' : undefined,
     };

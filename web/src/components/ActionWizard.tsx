@@ -213,7 +213,8 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
       if (inp.description) clean.description = inp.description;
       if (inp.required) clean.required = true;
       if (inp.default !== undefined && inp.default !== '') clean.default = inp.default;
-      if (inp.type === 'select' && inp.options) clean.options = inp.options.filter(Boolean);
+      if (inp.type === 'select' && inp.entityKind) clean.entityKind = inp.entityKind;
+      else if (inp.type === 'select' && inp.options) clean.options = inp.options.filter(Boolean);
       return clean;
     });
 

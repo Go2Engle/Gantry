@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight, ChevronDown as ExpandIcon, GripVertical } from 'lucide-react';
 import type { ActionInputDef, ActionInputType } from '../lib/types';
+import { ENTITY_KINDS } from '../lib/types';
 
 interface Props {
   inputs: ActionInputDef[];
@@ -247,44 +248,99 @@ export default function ActionFormBuilder({ inputs, onChange }: Props) {
 
                 {/* Options editor for select type */}
                 {inp.type === 'select' && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-[var(--gantry-text-secondary)]">
-                      Options
-                    </label>
-                    <div className="space-y-1.5">
-                      {(inp.options ?? []).map((opt, oi) => (
-                        <div key={oi} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={opt}
-                            onChange={(e) => {
-                              const opts = [...(inp.options ?? [])];
-                              opts[oi] = e.target.value;
-                              update(i, { options: opts });
-                            }}
-                            placeholder={`Option ${oi + 1}`}
-                            className="flex-1 rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1 text-sm text-[var(--gantry-text-primary)] placeholder-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                          />
+                  <div className="space-y-3">
+                    {/* Options source toggle */}
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-[var(--gantry-text-secondary)]">
+                        Options Source
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => update(i, { entityKind: undefined })}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            !inp.entityKind
+                              ? 'bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)]'
+                              : 'bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
+                          }`}
+                        >
+                          Manual List
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => update(i, { entityKind: ENTITY_KINDS[0].name, options: undefined })}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            inp.entityKind
+                              ? 'bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)]'
+                              : 'bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
+                          }`}
+                        >
+                          Entity List
+                        </button>
+                      </div>
+                    </div>
+
+                    {inp.entityKind ? (
+                      /* Entity kind picker */
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-[var(--gantry-text-secondary)]">
+                          Entity Kind
+                        </label>
+                        <select
+                          value={inp.entityKind}
+                          onChange={(e) => update(i, { entityKind: e.target.value })}
+                          className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1.5 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                        >
+                          {ENTITY_KINDS.map((k) => (
+                            <option key={k.name} value={k.name}>{k.name}</option>
+                          ))}
+                        </select>
+                        <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">
+                          Dropdown will be populated with all {inp.entityKind} entities
+                        </p>
+                      </div>
+                    ) : (
+                      /* Manual options editor */
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-[var(--gantry-text-secondary)]">
+                          Options
+                        </label>
+                        <div className="space-y-1.5">
+                          {(inp.options ?? []).map((opt, oi) => (
+                            <div key={oi} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={opt}
+                                onChange={(e) => {
+                                  const opts = [...(inp.options ?? [])];
+                                  opts[oi] = e.target.value;
+                                  update(i, { options: opts });
+                                }}
+                                placeholder={`Option ${oi + 1}`}
+                                className="flex-1 rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1 text-sm text-[var(--gantry-text-primary)] placeholder-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const opts = (inp.options ?? []).filter((_, idx) => idx !== oi);
+                                  update(i, { options: opts });
+                                }}
+                                className="rounded p-1 text-[var(--gantry-danger)] hover:bg-[var(--gantry-bg-tertiary)]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
                           <button
                             type="button"
-                            onClick={() => {
-                              const opts = (inp.options ?? []).filter((_, idx) => idx !== oi);
-                              update(i, { options: opts });
-                            }}
-                            className="rounded p-1 text-[var(--gantry-danger)] hover:bg-[var(--gantry-bg-tertiary)]"
+                            onClick={() => update(i, { options: [...(inp.options ?? []), ''] })}
+                            className="flex items-center gap-1 text-xs text-[var(--gantry-accent)] hover:underline"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Plus className="h-3 w-3" /> Add option
                           </button>
                         </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => update(i, { options: [...(inp.options ?? []), ''] })}
-                        className="flex items-center gap-1 text-xs text-[var(--gantry-accent)] hover:underline"
-                      >
-                        <Plus className="h-3 w-3" /> Add option
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

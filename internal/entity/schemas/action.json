@@ -51,6 +51,10 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "Available options for select-type inputs"
+          },
+          "entityKind": {
+            "type": "string",
+            "description": "When set, dropdown options are populated from entities of this kind (e.g. Service, Environment)"
           }
         },
         "required": ["name", "type"]

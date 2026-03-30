@@ -331,6 +331,8 @@ export interface ActionInputDef {
   required?: boolean;
   default?: string | number | boolean;
   options?: string[];
+  /** When set, dropdown options are populated from entities of this kind. */
+  entityKind?: string;
 }
 
 export interface GitHubWorkflow {
