@@ -89,7 +89,7 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
   other:     <CircleHelp className="h-3.5 w-3.5" />,
 };
 
-type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor' | 'nexus';
+type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis';
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   relationships: 'Dependencies',
@@ -99,6 +99,7 @@ const TAB_LABELS: Partial<Record<Tab, string>> = {
   apidocs: 'API Docs',
   harbor: 'Harbor',
   nexus: 'Nexus',
+  apis: 'APIs',
 };
 
 export default function EntityDetail() {
@@ -122,6 +123,8 @@ export default function EntityDetail() {
   const [enabledPlugins, setEnabledPlugins] = useState<Set<string>>(new Set());
   const [health, setHealth] = useState<{ reachable: boolean; statusCode?: number; latencyMs: number; error?: string } | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [apiEntities, setApiEntities] = useState<Entity[]>([]);
+  const [apisLoading, setApisLoading] = useState(false);
 
   useEffect(() => {
     if (!kind || !name) return;
@@ -176,6 +179,18 @@ export default function EntityDetail() {
       .catch(() => {}) // Graph errors are non-fatal; graph stays null
       .finally(() => setGraphLoading(false));
   }, [tab, kind, name, graphData]);
+
+  useEffect(() => {
+    if (tab !== 'apis' || !entity || entity.kind !== 'Service') return;
+    const providesApis = (entity.spec?.providesApis as string[] | undefined) ?? [];
+    const consumesApis = (entity.spec?.consumesApis as string[] | undefined) ?? [];
+    const allNames = Array.from(new Set([...providesApis, ...consumesApis]));
+    if (allNames.length === 0 || apiEntities.length > 0) return;
+    setApisLoading(true);
+    Promise.all(allNames.map((n) => api.getEntity('API', n, namespace).catch(() => null)))
+      .then((results) => setApiEntities(results.filter((e): e is Entity => e !== null)))
+      .finally(() => setApisLoading(false));
+  }, [tab, entity, namespace, apiEntities.length]);
 
   function openEdit() {
     if (!entity) return;
@@ -364,6 +379,9 @@ export default function EntityDetail() {
         const hasAPIDocs = !!(entity.spec?.apiDocsUrl) && (entity.kind === 'Service' || entity.kind === 'API');
         const hasHarbor = !!entity.metadata.annotations?.['harbor.io/project'];
         const hasNexus = !!entity.metadata.annotations?.['nexus-repository-manager/name'];
+        const serviceProvidedApis = (entity.spec?.providesApis as string[] | undefined) ?? [];
+        const serviceConsumedApis = (entity.spec?.consumesApis as string[] | undefined) ?? [];
+        const hasApis = entity.kind === 'Service' && (serviceProvidedApis.length > 0 || serviceConsumedApis.length > 0);
         const tabs: Tab[] = ['overview', 'relationships', 'yaml', 'activity'];
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
@@ -371,6 +389,7 @@ export default function EntityDetail() {
         if (hasAPIDocs) tabs.splice(1, 0, 'apidocs');
         if (hasHarbor && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('harbor')) tabs.splice(1, 0, 'harbor');
         if (hasNexus && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('nexus-repository-manager')) tabs.splice(1, 0, 'nexus');
+        if (hasApis) tabs.splice(1, 0, 'apis');
         return (
           <div className="mt-6 flex gap-1 border-b border-[var(--gantry-border)]">
             {tabs.map((t) => (
@@ -834,6 +853,78 @@ export default function EntityDetail() {
             </p>
           )
         )}
+
+        {tab === 'apis' && (() => {
+          const provides = (entity.spec?.providesApis as string[] | undefined) ?? [];
+          const consumes = (entity.spec?.consumesApis as string[] | undefined) ?? [];
+          if (apisLoading) {
+            return (
+              <div className="flex items-center justify-center py-16">
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--gantry-accent)] border-t-transparent" />
+              </div>
+            );
+          }
+          const byName = Object.fromEntries(apiEntities.map((e) => [e.metadata.name, e]));
+
+          function ApiSection({ title, names }: { title: string; names: string[] }) {
+            if (names.length === 0) return null;
+            return (
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-[var(--gantry-text-primary)]">{title}</h3>
+                <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] overflow-hidden">
+                  <table className="min-w-full divide-y divide-[var(--gantry-border)]">
+                    <thead>
+                      <tr className="bg-[var(--gantry-bg-secondary)]">
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Lifecycle</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--gantry-border)]">
+                      {names.map((n) => {
+                        const e = byName[n];
+                        return (
+                          <tr key={n} className="hover:bg-[var(--gantry-bg-secondary)]">
+                            <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">
+                              <Link to={`/entities/API/${n}`} className="text-[var(--gantry-accent)] hover:underline">
+                                {e?.metadata.title || n}
+                              </Link>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-sm text-[var(--gantry-text-secondary)]">
+                              {e?.spec?.type ? (
+                                <span className="rounded-full bg-[var(--gantry-bg-tertiary)] px-2.5 py-0.5 text-xs">
+                                  {String(e.spec.type)}
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-sm text-[var(--gantry-text-secondary)]">
+                              {e?.spec?.lifecycle ? (
+                                <span className="rounded-full bg-[var(--gantry-bg-tertiary)] px-2.5 py-0.5 text-xs">
+                                  {String(e.spec.lifecycle)}
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-[var(--gantry-text-secondary)]">
+                              {e?.metadata.description ?? '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-6">
+              <ApiSection title="Provided APIs" names={provides} />
+              <ApiSection title="Consumed APIs" names={consumes} />
+            </div>
+          );
+        })()}
       </div>
 
       {/* Edit Slide-over */}
