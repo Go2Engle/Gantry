@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/Go2Engle/Gantry/compare/v0.8.0...v0.9.0) (2026-03-31)
+
+
+### Features
+
+* add APIs tab to Service entity detail view ([#41](https://github.com/Go2Engle/Gantry/issues/41)) ([d25b23b](https://github.com/Go2Engle/Gantry/commit/d25b23b4a2cd04256420542aa84b11628a0926bc))
+
 ## [0.8.0](https://github.com/Go2Engle/Gantry/compare/v0.7.0...v0.8.0) (2026-03-30)
 
 
