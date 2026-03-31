@@ -887,7 +887,7 @@ export default function EntityDetail() {
                         return (
                           <tr key={n} className="hover:bg-[var(--gantry-bg-secondary)]">
                             <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">
-                              <Link to={`/entities/API/${n}`} className="text-[var(--gantry-accent)] hover:underline">
+                              <Link to={`/catalog/API/${n}`} className="text-[var(--gantry-accent)] hover:underline">
                                 {e?.metadata.title || n}
                               </Link>
                             </td>
