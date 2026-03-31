@@ -128,6 +128,9 @@ export default function EntityDetail() {
 
   useEffect(() => {
     if (!kind || !name) return;
+    setTab('overview');
+    setGraphData(null);
+    setApiEntities([]);
     setLoading(true);
     Promise.all([
       api.getEntity(kind, name, namespace),
