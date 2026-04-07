@@ -691,8 +691,14 @@
         "defaultProject": {
           "type": "string",
           "title": "Default Project",
-          "description": "Default Harbor project for the sidebar browser and dashboard widget.",
+          "description": "Default Harbor project for the Harbor page and dashboard widget.",
           "default": "library"
+        },
+        "showInSidebar": {
+          "type": "boolean",
+          "title": "Show Harbor in Sidebar",
+          "description": "Add the Harbor page to the main sidebar navigation when the plugin is enabled.",
+          "default": true
         }
       },
       "required": ["url", "username", "password"]

@@ -84,13 +84,20 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
 
   // Check if the status-monitor plugin is enabled (once on mount).
   useEffect(() => {
-    api.listPlugins().then((plugins) => {
+    api.listPlugins().then(async (plugins) => {
       const sm = plugins.find((p) => p.name === 'status-monitor');
       if (sm?.enabled) setStatusMonitorEnabled(true);
       const gops = plugins.find((p) => p.name === 'gitops');
       if (gops?.enabled) setGitopsEnabled(true);
       const hbr = plugins.find((p) => p.name === 'harbor');
-      if (hbr?.enabled) setHarborEnabled(true);
+      if (!hbr?.enabled) return;
+
+      try {
+        const harborConfig = await api.getPluginConfig('harbor');
+        setHarborEnabled(harborConfig.values?.showInSidebar !== false);
+      } catch {
+        setHarborEnabled(true);
+      }
     }).catch(() => {});
   }, []);
 
