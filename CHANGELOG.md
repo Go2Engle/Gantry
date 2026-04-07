@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/Go2Engle/Gantry/compare/v0.9.0...v0.9.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* **auth:** redirect to login screen on session expiry ([#44](https://github.com/Go2Engle/Gantry/issues/44)) ([bb92628](https://github.com/Go2Engle/Gantry/commit/bb92628196b180f1b04264ebdf4ef2ef1df4c9a5))
+
 ## [0.9.0](https://github.com/Go2Engle/Gantry/compare/v0.8.0...v0.9.0) (2026-03-31)
 
 
