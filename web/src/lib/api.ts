@@ -1,6 +1,7 @@
 import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset } from './types';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
+export const PLUGINS_UPDATED_EVENT = 'gantry:plugins-updated';
 
 let authToken: string | null = localStorage.getItem('gantry_token');
 
@@ -126,11 +127,15 @@ export const api = {
   // Plugin marketplace
   listPlugins: () => request<PluginRegistryEntry[]>('GET', '/plugins'),
   getPlugin: (name: string) => request<PluginDetail>('GET', `/plugins/${name}`),
-  enablePlugin: (name: string, enabled: boolean) =>
-    request<void>('PUT', `/plugins/${name}/enable`, { enabled }),
+  enablePlugin: async (name: string, enabled: boolean) => {
+    await request<void>('PUT', `/plugins/${name}/enable`, { enabled });
+    window.dispatchEvent(new CustomEvent(PLUGINS_UPDATED_EVENT, { detail: { name, enabled } }));
+  },
   getPluginConfig: (name: string) => request<PluginConfig>('GET', `/plugins/${name}/config`),
-  updatePluginConfig: (name: string, values: Record<string, any>) =>
-    request<void>('PUT', `/plugins/${name}/config`, values),
+  updatePluginConfig: async (name: string, values: Record<string, any>) => {
+    await request<void>('PUT', `/plugins/${name}/config`, values);
+    window.dispatchEvent(new CustomEvent(PLUGINS_UPDATED_EVENT, { detail: { name } }));
+  },
 
   syncPlugin: (name: string) => request<PluginSyncResult>('POST', `/plugins/${name}/sync`, {}),
 

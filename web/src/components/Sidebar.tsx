@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { api } from '../lib/api';
+import { api, PLUGINS_UPDATED_EVENT } from '../lib/api';
 import ThemeToggle from './ThemeToggle';
 import { ENTITY_KINDS } from '../lib/types';
 
@@ -82,23 +82,53 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
     onCloseMobile?.();
   }, [location.pathname, onCloseMobile]);
 
-  // Check if the status-monitor plugin is enabled (once on mount).
   useEffect(() => {
-    api.listPlugins().then(async (plugins) => {
-      const sm = plugins.find((p) => p.name === 'status-monitor');
-      if (sm?.enabled) setStatusMonitorEnabled(true);
-      const gops = plugins.find((p) => p.name === 'gitops');
-      if (gops?.enabled) setGitopsEnabled(true);
-      const hbr = plugins.find((p) => p.name === 'harbor');
-      if (!hbr?.enabled) return;
+    let active = true;
 
+    const refreshPluginState = async () => {
       try {
-        const harborConfig = await api.getPluginConfig('harbor');
-        setHarborEnabled(harborConfig.values?.showInSidebar !== false);
+        const plugins = await api.listPlugins();
+        if (!active) return;
+
+        const statusMonitorPlugin = plugins.find((p) => p.name === 'status-monitor');
+        setStatusMonitorEnabled(Boolean(statusMonitorPlugin?.enabled));
+
+        const gitopsPlugin = plugins.find((p) => p.name === 'gitops');
+        setGitopsEnabled(Boolean(gitopsPlugin?.enabled));
+
+        const harborPlugin = plugins.find((p) => p.name === 'harbor');
+        if (!harborPlugin?.enabled) {
+          setHarborEnabled(false);
+          return;
+        }
+
+        try {
+          const harborConfig = await api.getPluginConfig('harbor');
+          if (!active) return;
+          setHarborEnabled(harborConfig.values?.showInSidebar !== false);
+        } catch {
+          if (!active) return;
+          setHarborEnabled(true);
+        }
       } catch {
-        setHarborEnabled(true);
+        if (!active) return;
+        setStatusMonitorEnabled(false);
+        setGitopsEnabled(false);
+        setHarborEnabled(false);
       }
-    }).catch(() => {});
+    };
+
+    const handlePluginsUpdated = () => {
+      void refreshPluginState();
+    };
+
+    void refreshPluginState();
+    window.addEventListener(PLUGINS_UPDATED_EVENT, handlePluginsUpdated);
+
+    return () => {
+      active = false;
+      window.removeEventListener(PLUGINS_UPDATED_EVENT, handlePluginsUpdated);
+    };
   }, []);
 
   const isActive = (path: string) => {
