@@ -14,12 +14,12 @@ type Filters = {
 };
 
 const FORMAT_BADGE: Record<string, string> = {
-  maven2: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  npm: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  docker: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  pypi: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  nuget: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  raw: 'bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
+  maven2: 'border border-[var(--gantry-accent)] bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]',
+  npm: 'border border-[var(--gantry-danger)] bg-[var(--gantry-danger)]/10 text-[var(--gantry-danger)]',
+  docker: 'border border-[var(--gantry-accent)] bg-[var(--gantry-bg-secondary)] text-[var(--gantry-text-primary)]',
+  pypi: 'border border-[var(--gantry-border)] bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-primary)]',
+  nuget: 'border border-[var(--gantry-accent)] bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)]',
+  raw: 'border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] text-[var(--gantry-text-secondary)]',
 };
 
 const EMPTY_FILTERS: Filters = {
@@ -39,7 +39,7 @@ function formatBytes(bytes: number): string {
 
 function formatDate(ts: string): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleDateString('en-US', {
+  return new Date(ts).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
