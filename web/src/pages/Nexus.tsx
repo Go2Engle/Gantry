@@ -47,7 +47,9 @@ function handleInteractiveRowKeyDown(event: KeyboardEvent<HTMLElement>, onActiva
 
 function formatDate(ts: string): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleDateString(undefined, {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, {
     month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
