@@ -228,12 +228,12 @@ func (h *Handlers) ensureNexusConfig(w http.ResponseWriter, r *http.Request) (ne
 }
 
 // NexusRepository represents a Nexus repository from the repositories API.
+// Note: the v1/repositories list endpoint does not include online status.
 type NexusRepository struct {
 	Name   string `json:"name"`
 	Format string `json:"format"`
 	Type   string `json:"type"`
 	URL    string `json:"url"`
-	Online bool   `json:"online"`
 }
 
 // GetNexusRepositories lists all repositories from Nexus Repository Manager.

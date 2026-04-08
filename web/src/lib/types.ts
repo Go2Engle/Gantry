@@ -485,7 +485,6 @@ export interface NexusRepository {
   format: string;
   type: string;
   url: string;
-  online: boolean;
 }
 
 export interface NexusComponent {

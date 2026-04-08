@@ -328,7 +328,6 @@ export default function Nexus() {
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Name</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Format</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--gantry-border)]">
@@ -352,12 +351,6 @@ export default function Nexus() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${formatCls}`}>{repo.format}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`flex items-center gap-1.5 text-xs ${repo.online ? 'text-[var(--gantry-accent)]' : 'text-[var(--gantry-text-secondary)]'}`}>
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${repo.online ? 'bg-[var(--gantry-accent)]' : 'bg-[var(--gantry-text-secondary)]'}`} />
-                              {repo.online ? 'Online' : 'Offline'}
-                            </span>
                           </td>
                         </tr>
                       );
