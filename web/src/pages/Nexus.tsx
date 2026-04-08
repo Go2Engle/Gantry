@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, Fragment } from 'react';
+import { useCallback, useEffect, useMemo, useState, Fragment, type KeyboardEvent } from 'react';
 import { Archive, ChevronDown, ChevronRight, ChevronUp, Package, RefreshCw, Search, AlertCircle, FileDown, ArrowLeft, Database } from 'lucide-react';
 import { api } from '../lib/api';
 import type { NexusAsset, NexusComponent, NexusRepository } from '../lib/types';
@@ -24,9 +24,25 @@ const REPO_TYPE_BADGE: Record<string, string> = {
 function formatBytes(bytes: number): string {
   if (!bytes || bytes === 0) return '—';
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+function isSafeExternalUrl(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function handleInteractiveRowKeyDown(event: KeyboardEvent<HTMLElement>, onActivate: () => void) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  onActivate();
 }
 
 function formatDate(ts: string): string {
@@ -53,14 +69,16 @@ function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: Sort
 
 function AssetRow({ asset }: { asset: NexusAsset }) {
   const fileName = asset.path?.split('/').pop() || asset.path || '—';
+  const safeDownloadUrl = isSafeExternalUrl(asset.downloadUrl) ? asset.downloadUrl : '';
+
   return (
     <tr className="text-xs">
       <td className="py-1.5 pr-4 text-[var(--gantry-text-primary)]">
         <div className="flex items-center gap-1.5">
           <FileDown className="h-3 w-3 text-[var(--gantry-text-secondary)]" />
-          {asset.downloadUrl ? (
+          {safeDownloadUrl ? (
             <a
-              href={asset.downloadUrl}
+              href={safeDownloadUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-[var(--gantry-accent)] hover:text-[var(--gantry-accent-hover)]"
@@ -85,11 +103,17 @@ function ComponentRow({ component }: { component: NexusComponent }) {
   const formatCls = FORMAT_BADGE[component.format] || FORMAT_BADGE.raw;
   const modified = latestModified(component);
 
+  const toggleExpanded = () => setExpanded((value) => !value);
+
   return (
     <Fragment>
       <tr
-        className="cursor-pointer hover:bg-[var(--gantry-bg-secondary)]"
-        onClick={() => setExpanded((v) => !v)}
+        className="cursor-pointer hover:bg-[var(--gantry-bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--gantry-accent)]"
+        onClick={toggleExpanded}
+        onKeyDown={(event) => handleInteractiveRowKeyDown(event, toggleExpanded)}
+        tabIndex={0}
+        role="button"
+        aria-expanded={expanded}
       >
         <td className="px-4 py-3">
           {expanded
@@ -191,6 +215,10 @@ export default function Nexus() {
     setSelectedRepo(repo.name);
     setCompSearch('');
     void fetchComponents(repo.name);
+  }
+
+  function handleRepoKeyDown(event: KeyboardEvent<HTMLTableRowElement>, repo: NexusRepository) {
+    handleInteractiveRowKeyDown(event, () => handleRepoClick(repo));
   }
 
   function handleBackToRepos() {
@@ -337,8 +365,12 @@ export default function Nexus() {
                       return (
                         <tr
                           key={repo.name}
-                          className="cursor-pointer hover:bg-[var(--gantry-bg-secondary)]"
+                          className="cursor-pointer hover:bg-[var(--gantry-bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--gantry-accent)]"
                           onClick={() => handleRepoClick(repo)}
+                          onKeyDown={(event) => handleRepoKeyDown(event, repo)}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Open repository ${repo.name}`}
                         >
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
