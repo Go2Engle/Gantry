@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, Fragment, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment, type KeyboardEvent } from 'react';
 import { Archive, ChevronDown, ChevronRight, ChevronUp, Package, RefreshCw, Search, AlertCircle, FileDown, ArrowLeft, Database } from 'lucide-react';
 import { api } from '../lib/api';
 import type { NexusAsset, NexusComponent, NexusRepository } from '../lib/types';
@@ -65,8 +65,42 @@ function latestModified(component: NexusComponent): string {
 function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (column !== sortKey) return null;
   return sortDir === 'asc'
-    ? <ChevronUp className="ml-0.5 inline h-3 w-3" />
-    : <ChevronDown className="ml-0.5 inline h-3 w-3" />;
+    ? <ChevronUp className="ml-0.5 inline h-3 w-3" aria-hidden="true" />
+    : <ChevronDown className="ml-0.5 inline h-3 w-3" aria-hidden="true" />;
+}
+
+function sortAriaValue(column: SortKey, sortKey: SortKey, sortDir: SortDir): 'none' | 'ascending' | 'descending' {
+  if (column !== sortKey) return 'none';
+  return sortDir === 'asc' ? 'ascending' : 'descending';
+}
+
+function SortableHeader({
+  column,
+  label,
+  sortKey,
+  sortDir,
+  onToggle,
+  className,
+}: {
+  column: SortKey;
+  label: string;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onToggle: (column: SortKey) => void;
+  className: string;
+}) {
+  return (
+    <th className={className} aria-sort={sortAriaValue(column, sortKey, sortDir)}>
+      <button
+        type="button"
+        onClick={() => onToggle(column)}
+        className="flex w-full items-center gap-1 text-left focus:outline-none focus-visible:text-[var(--gantry-text-primary)]"
+      >
+        <span>{label}</span>
+        <SortIcon column={column} sortKey={sortKey} sortDir={sortDir} />
+      </button>
+    </th>
+  );
 }
 
 function AssetRow({ asset }: { asset: NexusAsset }) {
@@ -187,6 +221,7 @@ export default function Nexus() {
   const [compSearch, setCompSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const latestFetchIdRef = useRef(0);
 
   const inComponentView = selectedRepo !== null;
 
@@ -198,16 +233,23 @@ export default function Nexus() {
   }, []);
 
   const fetchComponents = useCallback(async (repository: string, showRefresh = false) => {
+    const requestId = latestFetchIdRef.current + 1;
+    latestFetchIdRef.current = requestId;
+
     if (showRefresh) setCompRefreshing(true);
     else setCompLoading(true);
     setCompError('');
+
     try {
       const data = await api.getNexusComponents('', repository);
+      if (requestId !== latestFetchIdRef.current) return;
       setComponents(data);
     } catch (err: any) {
+      if (requestId !== latestFetchIdRef.current) return;
       setCompError(err.message || 'Failed to fetch components');
       setComponents([]);
     } finally {
+      if (requestId !== latestFetchIdRef.current) return;
       setCompLoading(false);
       setCompRefreshing(false);
     }
@@ -224,9 +266,12 @@ export default function Nexus() {
   }
 
   function handleBackToRepos() {
+    latestFetchIdRef.current += 1;
     setSelectedRepo(null);
     setComponents([]);
     setCompError('');
+    setCompLoading(false);
+    setCompRefreshing(false);
     setCompSearch('');
   }
 
@@ -276,7 +321,7 @@ export default function Nexus() {
     });
   }, [components, compSearch, sortKey, sortDir]);
 
-  const thClass = 'cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)] transition-colors hover:text-[var(--gantry-text-primary)]';
+  const thClass = 'px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]';
   const totalAssets = filteredComponents.reduce((sum, c) => sum + c.assets.length, 0);
 
   return (
@@ -447,24 +492,12 @@ export default function Nexus() {
                     <thead>
                       <tr className="bg-[var(--gantry-bg-secondary)]">
                         <th className="w-8 px-4 py-3" />
-                        <th className={thClass} onClick={() => toggleSort('name')}>
-                          Component <SortIcon column="name" sortKey={sortKey} sortDir={sortDir} />
-                        </th>
-                        <th className={thClass} onClick={() => toggleSort('version')}>
-                          Version <SortIcon column="version" sortKey={sortKey} sortDir={sortDir} />
-                        </th>
-                        <th className={thClass} onClick={() => toggleSort('format')}>
-                          Format <SortIcon column="format" sortKey={sortKey} sortDir={sortDir} />
-                        </th>
-                        <th className={thClass} onClick={() => toggleSort('repository')}>
-                          Repository <SortIcon column="repository" sortKey={sortKey} sortDir={sortDir} />
-                        </th>
-                        <th className={thClass} onClick={() => toggleSort('assets')}>
-                          Assets <SortIcon column="assets" sortKey={sortKey} sortDir={sortDir} />
-                        </th>
-                        <th className={thClass} onClick={() => toggleSort('modified')}>
-                          Modified <SortIcon column="modified" sortKey={sortKey} sortDir={sortDir} />
-                        </th>
+                        <SortableHeader column="name" label="Component" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className={thClass} />
+                        <SortableHeader column="version" label="Version" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className={thClass} />
+                        <SortableHeader column="format" label="Format" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className={thClass} />
+                        <SortableHeader column="repository" label="Repository" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className={thClass} />
+                        <SortableHeader column="assets" label="Assets" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className={thClass} />
+                        <SortableHeader column="modified" label="Modified" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className={thClass} />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--gantry-border)]">
