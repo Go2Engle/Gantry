@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, Fragment } from 'react';
-import { Archive, ChevronDown, ChevronRight, ChevronUp, Package, RefreshCw, Search, AlertCircle, FileDown } from 'lucide-react';
+import { Archive, ChevronDown, ChevronRight, ChevronUp, Package, RefreshCw, Search, AlertCircle, FileDown, ArrowLeft, Database } from 'lucide-react';
 import { api } from '../lib/api';
-import type { NexusAsset, NexusComponent } from '../lib/types';
+import type { NexusAsset, NexusComponent, NexusRepository } from '../lib/types';
 
 type SortKey = 'name' | 'version' | 'format' | 'repository' | 'assets' | 'modified';
 type SortDir = 'asc' | 'desc';
-
-type Filters = {
-  name: string;
-  repository: string;
-  group: string;
-  format: string;
-};
 
 const FORMAT_BADGE: Record<string, string> = {
   maven2: 'border border-[var(--gantry-accent)] bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]',
@@ -22,11 +15,10 @@ const FORMAT_BADGE: Record<string, string> = {
   raw: 'border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] text-[var(--gantry-text-secondary)]',
 };
 
-const EMPTY_FILTERS: Filters = {
-  name: '',
-  repository: '',
-  group: '',
-  format: '',
+const REPO_TYPE_BADGE: Record<string, string> = {
+  hosted: 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)] border border-[var(--gantry-accent)]',
+  proxy: 'bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)] border border-[var(--gantry-border)]',
+  group: 'bg-[var(--gantry-danger)]/10 text-[var(--gantry-danger)] border border-[var(--gantry-danger)]',
 };
 
 function formatBytes(bytes: number): string {
@@ -40,11 +32,7 @@ function formatBytes(bytes: number): string {
 function formatDate(ts: string): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
 
@@ -65,7 +53,6 @@ function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: Sort
 
 function AssetRow({ asset }: { asset: NexusAsset }) {
   const fileName = asset.path?.split('/').pop() || asset.path || '—';
-
   return (
     <tr className="text-xs">
       <td className="py-1.5 pr-4 text-[var(--gantry-text-primary)]">
@@ -102,14 +89,12 @@ function ComponentRow({ component }: { component: NexusComponent }) {
     <Fragment>
       <tr
         className="cursor-pointer hover:bg-[var(--gantry-bg-secondary)]"
-        onClick={() => setExpanded((value) => !value)}
+        onClick={() => setExpanded((v) => !v)}
       >
         <td className="px-4 py-3">
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-[var(--gantry-text-secondary)]" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-[var(--gantry-text-secondary)]" />
-          )}
+          {expanded
+            ? <ChevronDown className="h-3.5 w-3.5 text-[var(--gantry-text-secondary)]" />
+            : <ChevronRight className="h-3.5 w-3.5 text-[var(--gantry-text-secondary)]" />}
         </td>
         <td className="px-4 py-3 text-xs font-medium text-[var(--gantry-text-primary)]">
           {component.group ? `${component.group}/${component.name}` : component.name}
@@ -161,328 +146,321 @@ function ComponentRow({ component }: { component: NexusComponent }) {
 }
 
 export default function Nexus() {
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
+  // Repository browse state
+  const [repositories, setRepositories] = useState<NexusRepository[]>([]);
+  const [repoLoading, setRepoLoading] = useState(true);
+  const [repoError, setRepoError] = useState('');
+  const [repoSearch, setRepoSearch] = useState('');
+
+  // Component browse state
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [components, setComponents] = useState<NexusComponent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [compLoading, setCompLoading] = useState(false);
+  const [compRefreshing, setCompRefreshing] = useState(false);
+  const [compError, setCompError] = useState('');
+  const [compSearch, setCompSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [initialized, setInitialized] = useState(false);
 
-  const fetchComponents = useCallback(async (nextFilters: Filters, showRefresh = false) => {
-    if (showRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setError('');
+  const inComponentView = selectedRepo !== null;
 
+  useEffect(() => {
+    api.getNexusRepositories()
+      .then((data) => setRepositories(data))
+      .catch((err) => setRepoError(err.message || 'Failed to fetch repositories'))
+      .finally(() => setRepoLoading(false));
+  }, []);
+
+  const fetchComponents = useCallback(async (repository: string, showRefresh = false) => {
+    if (showRefresh) setCompRefreshing(true);
+    else setCompLoading(true);
+    setCompError('');
     try {
-      const data = await api.getNexusComponents(
-        nextFilters.name,
-        nextFilters.repository || undefined,
-        nextFilters.group || undefined,
-        nextFilters.format || undefined,
-      );
+      const data = await api.getNexusComponents('', repository);
       setComponents(data);
-      setAppliedFilters(nextFilters);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch Nexus components');
+      setCompError(err.message || 'Failed to fetch components');
       setComponents([]);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setCompLoading(false);
+      setCompRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    let active = true;
+  function handleRepoClick(repo: NexusRepository) {
+    setSelectedRepo(repo.name);
+    setCompSearch('');
+    void fetchComponents(repo.name);
+  }
 
-    api.getPluginConfig('nexus-repository-manager')
-      .then((cfg) => {
-        if (!active) return;
-        const defaultRepository = (cfg.values?.defaultRepository as string) || '';
-        const nextFilters = { ...EMPTY_FILTERS, repository: defaultRepository };
-        setFilters(nextFilters);
-        return fetchComponents(nextFilters);
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoading(false);
-      })
-      .finally(() => {
-        if (!active) return;
-        setInitialized(true);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [fetchComponents]);
-
-  const filteredComponents = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const base = query
-      ? components.filter((component) => {
-        const haystack = [
-          component.name,
-          component.group,
-          component.version,
-          component.repository,
-          component.format,
-          ...component.assets.map((asset) => asset.path),
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(query);
-      })
-      : components;
-
-    const sorted = [...base];
-    sorted.sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case 'name':
-          cmp = (a.name || '').localeCompare(b.name || '');
-          break;
-        case 'version':
-          cmp = (a.version || '').localeCompare(b.version || '');
-          break;
-        case 'format':
-          cmp = (a.format || '').localeCompare(b.format || '');
-          break;
-        case 'repository':
-          cmp = (a.repository || '').localeCompare(b.repository || '');
-          break;
-        case 'assets':
-          cmp = a.assets.length - b.assets.length;
-          break;
-        case 'modified':
-          cmp = (latestModified(a) || '').localeCompare(latestModified(b) || '');
-          break;
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-
-    return sorted;
-  }, [components, search, sortDir, sortKey]);
-
-  const thClass = 'cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)] transition-colors hover:text-[var(--gantry-text-primary)]';
-
-  function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
-    setFilters((current) => ({ ...current, [key]: value }));
+  function handleBackToRepos() {
+    setSelectedRepo(null);
+    setComponents([]);
+    setCompError('');
+    setCompSearch('');
   }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
-      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
       return;
     }
     setSortKey(key);
     setSortDir(key === 'modified' ? 'desc' : 'asc');
   }
 
-  function handleLoad() {
-    void fetchComponents(filters);
-  }
+  const filteredRepos = useMemo(() => {
+    const q = repoSearch.trim().toLowerCase();
+    return q
+      ? repositories.filter((r) =>
+          r.name.toLowerCase().includes(q) ||
+          r.format.toLowerCase().includes(q) ||
+          r.type.toLowerCase().includes(q)
+        )
+      : repositories;
+  }, [repositories, repoSearch]);
 
-  function handleReset() {
-    setFilters(EMPTY_FILTERS);
-    setAppliedFilters(EMPTY_FILTERS);
-    setComponents([]);
-    setError('');
-    setSearch('');
-    setLoading(false);
-    setRefreshing(false);
-  }
+  const filteredComponents = useMemo(() => {
+    const q = compSearch.trim().toLowerCase();
+    const base = q
+      ? components.filter((c) => {
+          const haystack = [
+            c.name, c.group, c.version, c.repository, c.format,
+            ...c.assets.map((a) => a.path),
+          ].filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(q);
+        })
+      : components;
 
-  const totalAssets = filteredComponents.reduce((sum, component) => sum + component.assets.length, 0);
-  const hasAppliedFilters = Object.values(appliedFilters).some(Boolean);
+    return [...base].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'name':       cmp = (a.name || '').localeCompare(b.name || ''); break;
+        case 'version':    cmp = (a.version || '').localeCompare(b.version || ''); break;
+        case 'format':     cmp = (a.format || '').localeCompare(b.format || ''); break;
+        case 'repository': cmp = (a.repository || '').localeCompare(b.repository || ''); break;
+        case 'assets':     cmp = a.assets.length - b.assets.length; break;
+        case 'modified':   cmp = (latestModified(a) || '').localeCompare(latestModified(b) || ''); break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [components, compSearch, sortKey, sortDir]);
+
+  const thClass = 'cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)] transition-colors hover:text-[var(--gantry-text-primary)]';
+  const totalAssets = filteredComponents.reduce((sum, c) => sum + c.assets.length, 0);
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">
-            <Archive className="mr-2 inline h-7 w-7" />
-            Nexus Repository Manager
-          </h1>
-          <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
-            Explore components, package versions, and downloadable assets across your Nexus repositories.
-          </p>
+        <div className="flex items-center gap-3">
+          {inComponentView && (
+            <button
+              onClick={handleBackToRepos}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--gantry-border)] px-3 py-1.5 text-sm text-[var(--gantry-text-secondary)] hover:border-[var(--gantry-accent)] hover:text-[var(--gantry-accent)]"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Repositories
+            </button>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">
+              <Archive className="mr-2 inline h-7 w-7" />
+              Nexus Repository Manager
+              {inComponentView && (
+                <span className="ml-3 text-lg font-normal text-[var(--gantry-text-secondary)]">
+                  / {selectedRepo}
+                </span>
+              )}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
+              {inComponentView
+                ? 'Browse components and downloadable assets in this repository.'
+                : 'Browse repositories and components across your Nexus instance.'}
+            </p>
+          </div>
         </div>
-        {(components.length > 0 || hasAppliedFilters) && (
+        {inComponentView && (
           <button
-            onClick={() => void fetchComponents(appliedFilters, true)}
-            disabled={refreshing}
+            onClick={() => void fetchComponents(selectedRepo!, true)}
+            disabled={compRefreshing}
             className="flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] transition-colors hover:border-[var(--gantry-accent)] hover:text-[var(--gantry-accent)] disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${compRefreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
         )}
       </div>
 
-      <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-4 sm:p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-[var(--gantry-text-primary)]">Component name</span>
-            <input
-              type="text"
-              value={filters.name}
-              onChange={(e) => updateFilter('name', e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleLoad(); }}
-              placeholder="payments-api"
-              className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-[var(--gantry-text-primary)]">Repository</span>
-            <input
-              type="text"
-              value={filters.repository}
-              onChange={(e) => updateFilter('repository', e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleLoad(); }}
-              placeholder="maven-releases"
-              className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-[var(--gantry-text-primary)]">Group / namespace</span>
-            <input
-              type="text"
-              value={filters.group}
-              onChange={(e) => updateFilter('group', e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleLoad(); }}
-              placeholder="com.example"
-              className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-[var(--gantry-text-primary)]">Format</span>
-            <input
-              type="text"
-              value={filters.format}
-              onChange={(e) => updateFilter('format', e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleLoad(); }}
-              placeholder="docker"
-              className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-            />
-          </label>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleLoad}
-            className="rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
-          >
-            Load components
-          </button>
-          <button
-            onClick={handleReset}
-            className="rounded-lg border border-[var(--gantry-border)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:border-[var(--gantry-accent)] hover:text-[var(--gantry-accent)]"
-          >
-            Reset
-          </button>
-          {hasAppliedFilters && (
-            <div className="text-xs text-[var(--gantry-text-secondary)]">
-              Loaded with
-              {appliedFilters.name && <span className="ml-1 font-medium text-[var(--gantry-text-primary)]">name={appliedFilters.name}</span>}
-              {appliedFilters.repository && <span className="ml-1 font-medium text-[var(--gantry-text-primary)]">repo={appliedFilters.repository}</span>}
-              {appliedFilters.group && <span className="ml-1 font-medium text-[var(--gantry-text-primary)]">group={appliedFilters.group}</span>}
-              {appliedFilters.format && <span className="ml-1 font-medium text-[var(--gantry-text-primary)]">format={appliedFilters.format}</span>}
+      {/* ── Repository browser ── */}
+      {!inComponentView && (
+        <>
+          {repoError && (
+            <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-8 text-center">
+              <AlertCircle className="mx-auto mb-3 h-10 w-10 text-[var(--gantry-danger)]" />
+              <h2 className="text-lg font-semibold text-[var(--gantry-text-primary)]">Error</h2>
+              <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">{repoError}</p>
             </div>
           )}
-        </div>
-      </div>
 
-      {error && (
-        <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-8 text-center">
-          <AlertCircle className="mx-auto mb-3 h-10 w-10 text-[var(--gantry-danger)]" />
-          <h2 className="text-lg font-semibold text-[var(--gantry-text-primary)]">Error</h2>
-          <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">{error}</p>
-        </div>
+          {repoLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--gantry-accent)] border-t-transparent" />
+            </div>
+          ) : !repoError && (
+            <>
+              {repositories.length > 6 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--gantry-text-secondary)]" />
+                  <input
+                    type="text"
+                    value={repoSearch}
+                    onChange={(e) => setRepoSearch(e.target.value)}
+                    placeholder="Filter repositories..."
+                    className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] py-2 pl-9 pr-3 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none md:max-w-sm"
+                  />
+                </div>
+              )}
+              <div className="overflow-hidden rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+                <table className="min-w-full divide-y divide-[var(--gantry-border)]">
+                  <thead>
+                    <tr className="bg-[var(--gantry-bg-secondary)]">
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Format</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--gantry-border)]">
+                    {filteredRepos.map((repo) => {
+                      const typeCls = REPO_TYPE_BADGE[repo.type] || REPO_TYPE_BADGE.proxy;
+                      const formatCls = FORMAT_BADGE[repo.format] || FORMAT_BADGE.raw;
+                      return (
+                        <tr
+                          key={repo.name}
+                          className="cursor-pointer hover:bg-[var(--gantry-bg-secondary)]"
+                          onClick={() => handleRepoClick(repo)}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <Database className="h-4 w-4 shrink-0 text-[var(--gantry-text-secondary)]" />
+                              <span className="text-sm font-medium text-[var(--gantry-accent)]">{repo.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${typeCls}`}>{repo.type}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${formatCls}`}>{repo.format}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`flex items-center gap-1.5 text-xs ${repo.online ? 'text-[var(--gantry-accent)]' : 'text-[var(--gantry-text-secondary)]'}`}>
+                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${repo.online ? 'bg-[var(--gantry-accent)]' : 'bg-[var(--gantry-text-secondary)]'}`} />
+                              {repo.online ? 'Online' : 'Offline'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {filteredRepos.length === 0 && (
+                  <p className="py-10 text-center text-sm text-[var(--gantry-text-secondary)]">No repositories found.</p>
+                )}
+              </div>
+            </>
+          )}
+        </>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--gantry-accent)] border-t-transparent" />
-        </div>
-      ) : components.length > 0 ? (
+      {/* ── Component browser ── */}
+      {inComponentView && (
         <>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-5 py-4">
-              <Package className="h-5 w-5 shrink-0 text-[var(--gantry-accent)]" />
-              <div>
-                <p className="text-sm font-semibold text-[var(--gantry-text-primary)]">
-                  {filteredComponents.length} {filteredComponents.length === 1 ? 'component' : 'components'}
-                </p>
-                <p className="text-xs text-[var(--gantry-text-secondary)]">
-                  {totalAssets} total {totalAssets === 1 ? 'asset' : 'assets'}
-                </p>
-              </div>
+          {compError && (
+            <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-8 text-center">
+              <AlertCircle className="mx-auto mb-3 h-10 w-10 text-[var(--gantry-danger)]" />
+              <h2 className="text-lg font-semibold text-[var(--gantry-text-primary)]">Error</h2>
+              <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">{compError}</p>
             </div>
+          )}
 
-            {components.length > 5 && (
-              <div className="relative w-full md:max-w-sm">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--gantry-text-secondary)]" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter loaded components..."
-                  className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] py-2 pl-9 pr-3 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                />
+          {compLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--gantry-accent)] border-t-transparent" />
+            </div>
+          ) : !compError && (
+            <>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3 rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-5 py-4">
+                  <Package className="h-5 w-5 shrink-0 text-[var(--gantry-accent)]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--gantry-text-primary)]">
+                      {filteredComponents.length}{components.length !== filteredComponents.length && ` of ${components.length}`} {filteredComponents.length === 1 ? 'component' : 'components'}
+                    </p>
+                    <p className="text-xs text-[var(--gantry-text-secondary)]">
+                      {totalAssets} total {totalAssets === 1 ? 'asset' : 'assets'}
+                    </p>
+                  </div>
+                </div>
+                <div className="relative w-full sm:max-w-sm">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--gantry-text-secondary)]" />
+                  <input
+                    type="text"
+                    value={compSearch}
+                    onChange={(e) => setCompSearch(e.target.value)}
+                    placeholder="Search by name, group, version, format..."
+                    className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] py-2 pl-9 pr-3 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                  />
+                </div>
               </div>
-            )}
-          </div>
 
-          <div className="overflow-hidden rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
-            <table className="min-w-full divide-y divide-[var(--gantry-border)]">
-              <thead>
-                <tr className="bg-[var(--gantry-bg-secondary)]">
-                  <th className="w-8 px-4 py-3" />
-                  <th className={thClass} onClick={() => toggleSort('name')}>
-                    Component <SortIcon column="name" sortKey={sortKey} sortDir={sortDir} />
-                  </th>
-                  <th className={thClass} onClick={() => toggleSort('version')}>
-                    Version <SortIcon column="version" sortKey={sortKey} sortDir={sortDir} />
-                  </th>
-                  <th className={thClass} onClick={() => toggleSort('format')}>
-                    Format <SortIcon column="format" sortKey={sortKey} sortDir={sortDir} />
-                  </th>
-                  <th className={thClass} onClick={() => toggleSort('repository')}>
-                    Repository <SortIcon column="repository" sortKey={sortKey} sortDir={sortDir} />
-                  </th>
-                  <th className={thClass} onClick={() => toggleSort('assets')}>
-                    Assets <SortIcon column="assets" sortKey={sortKey} sortDir={sortDir} />
-                  </th>
-                  <th className={thClass} onClick={() => toggleSort('modified')}>
-                    Modified <SortIcon column="modified" sortKey={sortKey} sortDir={sortDir} />
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--gantry-border)]">
-                {filteredComponents.map((component) => (
-                  <ComponentRow key={component.id || `${component.name}-${component.version}`} component={component} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+              {components.length > 0 ? (
+                <div className="overflow-hidden rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+                  <table className="min-w-full divide-y divide-[var(--gantry-border)]">
+                    <thead>
+                      <tr className="bg-[var(--gantry-bg-secondary)]">
+                        <th className="w-8 px-4 py-3" />
+                        <th className={thClass} onClick={() => toggleSort('name')}>
+                          Component <SortIcon column="name" sortKey={sortKey} sortDir={sortDir} />
+                        </th>
+                        <th className={thClass} onClick={() => toggleSort('version')}>
+                          Version <SortIcon column="version" sortKey={sortKey} sortDir={sortDir} />
+                        </th>
+                        <th className={thClass} onClick={() => toggleSort('format')}>
+                          Format <SortIcon column="format" sortKey={sortKey} sortDir={sortDir} />
+                        </th>
+                        <th className={thClass} onClick={() => toggleSort('repository')}>
+                          Repository <SortIcon column="repository" sortKey={sortKey} sortDir={sortDir} />
+                        </th>
+                        <th className={thClass} onClick={() => toggleSort('assets')}>
+                          Assets <SortIcon column="assets" sortKey={sortKey} sortDir={sortDir} />
+                        </th>
+                        <th className={thClass} onClick={() => toggleSort('modified')}>
+                          Modified <SortIcon column="modified" sortKey={sortKey} sortDir={sortDir} />
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--gantry-border)]">
+                      {filteredComponents.map((component) => (
+                        <ComponentRow key={component.id || `${component.name}-${component.version}`} component={component} />
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredComponents.length === 0 && (
+                    <p className="py-10 text-center text-sm text-[var(--gantry-text-secondary)]">No components match your search.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-10 text-center">
+                  <Archive className="mx-auto mb-3 h-10 w-10 text-[var(--gantry-text-secondary)]" />
+                  <h2 className="text-lg font-semibold text-[var(--gantry-text-primary)]">No components found</h2>
+                  <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">This repository appears to be empty.</p>
+                </div>
+              )}
+            </>
+          )}
         </>
-      ) : initialized ? (
-        <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-10 text-center">
-          <Archive className="mx-auto mb-3 h-10 w-10 text-[var(--gantry-text-secondary)]" />
-          <h2 className="text-lg font-semibold text-[var(--gantry-text-primary)]">No components loaded</h2>
-          <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
-            Use the filters above to browse packages in Nexus Repository Manager, or load everything in your default repository.
-          </p>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset } from './types';
+import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, NexusRepository } from './types';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 export const PLUGINS_UPDATED_EVENT = 'gantry:plugins-updated';
@@ -171,6 +171,8 @@ export const api = {
     request<HarborSummaryResponse>('GET', '/plugins/harbor/summary'),
 
   // Nexus Repository Manager
+  getNexusRepositories: () =>
+    request<NexusRepository[]>('GET', '/plugins/nexus-repository-manager/repositories'),
   getNexusComponents: (name: string, repository?: string, group?: string, format?: string) => {
     const params = new URLSearchParams();
     if (name) params.set('name', name);

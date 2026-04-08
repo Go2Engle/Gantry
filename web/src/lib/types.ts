@@ -480,6 +480,14 @@ export interface NexusAsset {
   fileSize: number;
 }
 
+export interface NexusRepository {
+  name: string;
+  format: string;
+  type: string;
+  url: string;
+  online: boolean;
+}
+
 export interface NexusComponent {
   id: string;
   repository: string;

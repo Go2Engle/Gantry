@@ -215,6 +215,7 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			protected.Get("/plugins/harbor/vulnerabilities", h.GetHarborVulnerabilities)
 			protected.Get("/plugins/harbor/summary", h.GetHarborSummary)
 			// Nexus Repository Manager plugin endpoints.
+			protected.Get("/plugins/nexus-repository-manager/repositories", h.GetNexusRepositories)
 			protected.Get("/plugins/nexus-repository-manager/components", h.GetNexusComponents)
 			protected.Get("/plugins/nexus-repository-manager/assets", h.GetNexusAssets)
 			// ArgoCD-specific plugin endpoints.
