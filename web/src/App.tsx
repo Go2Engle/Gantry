@@ -17,6 +17,7 @@ import Plugins from './pages/Plugins';
 import StatusMonitor from './pages/StatusMonitor';
 import GitOps from './pages/GitOps';
 import Harbor from './pages/Harbor';
+import Nexus from './pages/Nexus';
 import RBAC from './pages/RBAC';
 
 function AuthenticatedLayout() {
@@ -50,6 +51,7 @@ function AuthenticatedLayout() {
               <Route path="/status" element={<StatusMonitor />} />
               <Route path="/gitops" element={<GitOps />} />
               <Route path="/harbor" element={<Harbor />} />
+              <Route path="/nexus" element={<Nexus />} />
               <Route path="/rbac" element={<RBAC />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

@@ -23,6 +23,7 @@ import {
   GitBranch,
   Shield,
   Package,
+  Archive,
   X,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -73,6 +74,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
   const [statusMonitorEnabled, setStatusMonitorEnabled] = useState(false);
   const [gitopsEnabled, setGitopsEnabled] = useState(false);
   const [harborEnabled, setHarborEnabled] = useState(false);
+  const [nexusEnabled, setNexusEnabled] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
@@ -99,22 +101,36 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         const harborPlugin = plugins.find((p) => p.name === 'harbor');
         if (!harborPlugin?.enabled) {
           setHarborEnabled(false);
-          return;
+        } else {
+          try {
+            const harborConfig = await api.getPluginConfig('harbor');
+            if (!active) return;
+            setHarborEnabled(harborConfig.values?.showInSidebar !== false);
+          } catch {
+            if (!active) return;
+            setHarborEnabled(true);
+          }
         }
 
-        try {
-          const harborConfig = await api.getPluginConfig('harbor');
-          if (!active) return;
-          setHarborEnabled(harborConfig.values?.showInSidebar !== false);
-        } catch {
-          if (!active) return;
-          setHarborEnabled(true);
+        const nexusPlugin = plugins.find((p) => p.name === 'nexus-repository-manager');
+        if (!nexusPlugin?.enabled) {
+          setNexusEnabled(false);
+        } else {
+          try {
+            const nexusConfig = await api.getPluginConfig('nexus-repository-manager');
+            if (!active) return;
+            setNexusEnabled(nexusConfig.values?.showInSidebar !== false);
+          } catch {
+            if (!active) return;
+            setNexusEnabled(true);
+          }
         }
       } catch {
         if (!active) return;
         setStatusMonitorEnabled(false);
         setGitopsEnabled(false);
         setHarborEnabled(false);
+        setNexusEnabled(false);
       }
     };
 
@@ -278,6 +294,22 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
                 >
                   <Package className="h-5 w-5 shrink-0" />
                   {!collapsed && <span className="truncate">Harbor</span>}
+                </Link>
+              </li>
+            )}
+            {nexusEnabled && (
+              <li>
+                <Link
+                  to="/nexus"
+                  className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/nexus')
+                      ? 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]'
+                      : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]'
+                  }`}
+                  title={collapsed ? 'Nexus' : undefined}
+                >
+                  <Archive className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="truncate">Nexus</span>}
                 </Link>
               </li>
             )}
