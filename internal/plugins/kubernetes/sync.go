@@ -19,12 +19,12 @@ type EntityStore interface {
 
 // SyncResult summarises what happened during a sync run.
 type SyncResult struct {
-	Namespaces   int `json:"namespaces"`
-	Deployments  int `json:"deployments"`
-	Services     int `json:"services"`
-	Created      int `json:"created"`
-	Updated      int `json:"updated"`
-	Errors       []string `json:"errors,omitempty"`
+	Namespaces  int      `json:"namespaces"`
+	Deployments int      `json:"deployments"`
+	Services    int      `json:"services"`
+	Created     int      `json:"created"`
+	Updated     int      `json:"updated"`
+	Errors      []string `json:"errors,omitempty"`
 }
 
 // Sync discovers resources from a Kubernetes cluster and upserts them as
