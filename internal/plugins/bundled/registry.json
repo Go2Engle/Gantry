@@ -788,6 +788,12 @@
             "type": "string"
           },
           "default": []
+        },
+        "hideUnassigned": {
+          "type": "boolean",
+          "title": "Hide Unassigned Lane",
+          "description": "Hide the 'Unassigned' column that shows entities not deployed to any environment.",
+          "default": false
         }
       }
     },

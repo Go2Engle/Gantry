@@ -106,6 +106,7 @@ export default function TopologyExplorer() {
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
+  const [hideUnassigned, setHideUnassigned] = useState(false);
 
   const fetchData = useCallback(
     async (showRefresh = false) => {
@@ -134,6 +135,7 @@ export default function TopologyExplorer() {
     api.getPluginConfig('topology-explorer').then((cfg) => {
       const order = cfg?.values?.laneOrder;
       if (Array.isArray(order)) setLaneOrder(order);
+      if (cfg?.values?.hideUnassigned) setHideUnassigned(true);
     }).catch(() => {});
     const interval = setInterval(() => fetchData(), 30_000);
     return () => clearInterval(interval);
@@ -348,7 +350,7 @@ export default function TopologyExplorer() {
               entityEnvMap={entityEnvMap}
             />
           ))}
-          {unassignedNodes.length > 0 && (
+          {unassignedNodes.length > 0 && !hideUnassigned && (
             <div className="flex w-72 shrink-0 flex-col rounded-xl border border-dashed border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
               <div className="border-b border-[var(--gantry-border)] px-4 py-3">
                 <div className="flex items-center gap-2">
