@@ -609,6 +609,7 @@ export interface TopologyNode {
   description?: string;
   owner?: string;
   spec?: Record<string, unknown>;
+  children?: TopologyNode[];
 }
 
 export interface TopologyEdge {

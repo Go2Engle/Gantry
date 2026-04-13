@@ -16,6 +16,7 @@ type TopologyNode struct {
 	Description string         `json:"description,omitempty"`
 	Owner       string         `json:"owner,omitempty"`
 	Spec        map[string]any `json:"spec,omitempty"`
+	Children    []TopologyNode `json:"children,omitempty"` // related entities nested under this node
 }
 
 // TopologyEdge represents a relationship in the topology view.
@@ -123,6 +124,15 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// childNodes collects non-top-level entities (Infrastructure, API with
+	// a dependsOn → Service) keyed by the parent Service name.
+	type childEntry struct {
+		node         TopologyNode
+		deployedEnvs []string // from spec.deployedIn
+		parent       string   // Service name this depends on
+	}
+	var childEntities []childEntry
+
 	// Second pass: collect all non-Environment entities and build edges.
 	for _, e := range all {
 		nodeID := e.Kind + "/" + e.Metadata.Name
@@ -144,21 +154,39 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 					Owner:       e.Metadata.Owner,
 				})
 			}
-			// Extract dependsOn for environments.
 			extractDependsOn(spec, nodeID, &edges)
 			continue
 		}
 
-		// Reclassify Kubernetes Ingress resources as API entities in the
-		// topology view — an Ingress exposes an API endpoint, not generic
-		// infrastructure.
-		displayKind := e.Kind
-		if e.Kind == "Infrastructure" && e.Metadata.Annotations["kubernetes.io/kind"] == "Ingress" {
-			displayKind = "API"
-		}
-
 		// Determine which environments this entity is deployed in.
 		deployedEnvs := extractDeployedIn(spec)
+
+		// Entities that dependOn a Service are nested as children of that
+		// Service rather than appearing as top-level items.
+		parentService := findParentService(spec)
+		if parentService != "" && (e.Kind == "Infrastructure" || e.Kind == "API") {
+			childEntities = append(childEntities, childEntry{
+				node: TopologyNode{
+					ID:    nodeID,
+					Kind:  e.Kind,
+					Name:  e.Metadata.Name,
+					Title: e.Metadata.Title,
+					Owner: e.Metadata.Owner,
+				},
+				deployedEnvs: deployedEnvs,
+				parent:       parentService,
+			})
+			// Emit edges for this entity.
+			for _, envName := range deployedEnvs {
+				edges = append(edges, TopologyEdge{
+					From:     nodeID,
+					To:       "Environment/" + envName,
+					Relation: "deployedIn",
+				})
+			}
+			extractDependsOn(spec, nodeID, &edges)
+			continue
+		}
 
 		// If filtering by environment, skip entities not deployed there.
 		if envFilter != "" {
@@ -176,7 +204,7 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 
 		nodes = append(nodes, TopologyNode{
 			ID:          nodeID,
-			Kind:        displayKind,
+			Kind:        e.Kind,
 			Name:        e.Metadata.Name,
 			Namespace:   e.Metadata.Namespace,
 			Title:       e.Metadata.Title,
@@ -226,6 +254,23 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 		// Build edges: ownedBy.
 		if e.Metadata.Owner != "" {
 			edges = append(edges, TopologyEdge{From: nodeID, To: "Team/" + e.Metadata.Owner, Relation: "ownedBy"})
+		}
+	}
+
+	// Attach child entities to their parent Service nodes.
+	serviceIdx := make(map[string][]int) // serviceName → indices in nodes[]
+	for i, n := range nodes {
+		if n.Kind == "Service" {
+			serviceIdx[n.Name] = append(serviceIdx[n.Name], i)
+		}
+	}
+	for _, c := range childEntities {
+		idxList, ok := serviceIdx[c.parent]
+		if !ok {
+			continue
+		}
+		for _, idx := range idxList {
+			nodes[idx].Children = append(nodes[idx].Children, c.node)
 		}
 	}
 
@@ -345,4 +390,27 @@ func extractDependsOn(spec map[string]any, fromID string, edges *[]TopologyEdge)
 			}
 		}
 	}
+}
+
+// findParentService returns the name of the first Service entity in spec.dependsOn.
+func findParentService(spec map[string]any) string {
+	raw, ok := spec["dependsOn"]
+	if !ok {
+		return ""
+	}
+	deps, ok := raw.([]any)
+	if !ok {
+		return ""
+	}
+	for _, d := range deps {
+		m, ok := d.(map[string]any)
+		if !ok {
+			continue
+		}
+		if kind, _ := m["kind"].(string); kind == "Service" {
+			name, _ := m["name"].(string)
+			return name
+		}
+	}
+	return ""
 }

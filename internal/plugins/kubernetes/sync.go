@@ -217,7 +217,9 @@ func kserviceToInfrastructure(svc KService, clusterName string) *entity.Entity {
 	if appName == "" {
 		appName = svc.Metadata.Labels["app"]
 	}
-	spec := map[string]any{}
+	spec := map[string]any{
+		"deployedIn": []any{map[string]any{"kind": "Environment", "name": svc.Metadata.Namespace}},
+	}
 	if appName != "" {
 		spec["dependsOn"] = []any{map[string]any{"kind": "Service", "name": appName}}
 	}

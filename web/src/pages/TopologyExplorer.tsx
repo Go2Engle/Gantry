@@ -17,6 +17,8 @@ import {
   ExternalLink,
   X,
   ArrowRight,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type {
@@ -313,6 +315,7 @@ export default function TopologyExplorer() {
               statuses={statuses}
               selectedNode={selectedNode}
               onSelectNode={setSelectedNode}
+              entityEnvMap={entityEnvMap}
             />
           ))}
           {unassignedNodes.length > 0 && (
@@ -327,16 +330,17 @@ export default function TopologyExplorer() {
                   deployed to any environment
                 </p>
               </div>
-              <div className="flex-1 space-y-1.5 overflow-y-auto p-2" style={{ maxHeight: 520 }}>
+              <div className="flex-1 space-y-0.5 overflow-y-auto p-2" style={{ maxHeight: 520 }}>
                 {unassignedNodes.map((node) => (
                   <EntityCard
                     key={node.id}
                     node={node}
-                    status={statuses[node.name]}
-                    selected={selectedNode === node.id}
-                    onSelect={() =>
-                      setSelectedNode((prev) => (prev === node.id ? null : node.id))
-                    }
+                    envName=""
+                    statuses={statuses}
+                    selectedNode={selectedNode}
+                    onSelectNode={setSelectedNode}
+                    entityEnvMap={entityEnvMap}
+                    depth={0}
                   />
                 ))}
               </div>
@@ -392,12 +396,14 @@ function EnvironmentColumn({
   statuses,
   selectedNode,
   onSelectNode,
+  entityEnvMap,
 }: {
   env: TopologyEnvironment;
   nodes: TopologyNode[];
   statuses: TopologyStatusMap;
   selectedNode: string | null;
   onSelectNode: (id: string | null) => void;
+  entityEnvMap: Map<string, string[]>;
 }) {
   // Group nodes by kind within the column
   const grouped = useMemo(() => {
@@ -422,7 +428,7 @@ function EnvironmentColumn({
   const envTypeBadge = ENV_TYPE_BADGE[env.type || ''] || 'bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)] border-[var(--gantry-border)]';
 
   return (
-    <div className="flex w-72 shrink-0 flex-col rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+    <div className="flex w-80 shrink-0 flex-col rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
       {/* Column header */}
       <div className="border-b border-[var(--gantry-border)] px-4 py-3">
         <div className="flex items-center justify-between">
@@ -456,7 +462,7 @@ function EnvironmentColumn({
       </div>
 
       {/* Entity list grouped by kind */}
-      <div className="flex-1 overflow-y-auto p-2" style={{ maxHeight: 520 }}>
+      <div className="flex-1 overflow-y-auto p-2" style={{ maxHeight: 600 }}>
         {nodes.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-xs text-[var(--gantry-text-secondary)]">
             No matching entities
@@ -471,16 +477,17 @@ function EnvironmentColumn({
                     {kind} ({kindNodes.length})
                   </span>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {kindNodes.map((node) => (
                     <EntityCard
                       key={node.id}
                       node={node}
-                      status={statuses[node.name]}
-                      selected={selectedNode === node.id}
-                      onSelect={() =>
-                        onSelectNode(selectedNode === node.id ? null : node.id)
-                      }
+                      envName={env.name}
+                      statuses={statuses}
+                      selectedNode={selectedNode}
+                      onSelectNode={onSelectNode}
+                      entityEnvMap={entityEnvMap}
+                      depth={0}
                     />
                   ))}
                 </div>
@@ -493,48 +500,107 @@ function EnvironmentColumn({
   );
 }
 
-// ─── Entity Card ─────────────────────────────────────────────────────────────
+// ─── Entity Card (collapsible with children) ────────────────────────────────
 
 function EntityCard({
   node,
-  status,
-  selected,
-  onSelect,
+  envName,
+  statuses,
+  selectedNode,
+  onSelectNode,
+  entityEnvMap,
+  depth,
 }: {
   node: TopologyNode;
-  status?: { status: string; description: string };
-  selected: boolean;
-  onSelect: () => void;
+  envName: string;
+  statuses: TopologyStatusMap;
+  selectedNode: string | null;
+  onSelectNode: (id: string | null) => void;
+  entityEnvMap: Map<string, string[]>;
+  depth: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   const Icon = KIND_ICON[node.kind] || Box;
   const iconStyle = KIND_COLOR_LIGHT[node.kind] || 'bg-gray-500/10 text-gray-600 dark:text-gray-400';
+  const status = statuses[node.name];
   const statusDot = status ? STATUS_DOT[status.status] || STATUS_DOT.unknown : null;
   const statusTip = status ? STATUS_LABEL[status.status] || status.status : '';
+  const selected = selectedNode === node.id;
+
+  // Filter children to only those deployed in this environment
+  const envChildren = useMemo(() => {
+    if (!node.children || node.children.length === 0) return [];
+    return node.children.filter((child) => {
+      const childEnvs = entityEnvMap.get(child.id);
+      return childEnvs?.includes(envName);
+    });
+  }, [node.children, envName, entityEnvMap]);
+
+  const hasChildren = envChildren.length > 0;
 
   return (
-    <button
-      onClick={onSelect}
-      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-        selected
-          ? 'bg-[var(--gantry-accent)]/10 ring-1 ring-[var(--gantry-accent)]'
-          : 'hover:bg-[var(--gantry-bg-secondary)]'
-      }`}
-    >
-      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${iconStyle}`}>
-        <Icon className="h-3.5 w-3.5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-[var(--gantry-text-primary)]">
-          {node.title || node.name}
-        </p>
-        {node.owner && (
-          <p className="truncate text-[10px] text-[var(--gantry-text-secondary)]">{node.owner}</p>
+    <div>
+      <div
+        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
+          selected
+            ? 'bg-[var(--gantry-accent)]/10 ring-1 ring-[var(--gantry-accent)]'
+            : 'hover:bg-[var(--gantry-bg-secondary)]'
+        }`}
+        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+      >
+        {/* Expand/collapse chevron */}
+        {hasChildren ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+        ) : (
+          <span className="w-4 shrink-0" />
         )}
+
+        {/* Clickable entity content */}
+        <button
+          onClick={() => onSelectNode(selected ? null : node.id)}
+          className="flex min-w-0 flex-1 items-center gap-2"
+        >
+          <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconStyle}`}>
+            <Icon className="h-3 w-3" />
+          </div>
+          <p className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--gantry-text-primary)]">
+            {node.title || node.name}
+          </p>
+          {hasChildren && (
+            <span className="shrink-0 rounded-full bg-[var(--gantry-bg-tertiary)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--gantry-text-secondary)]">
+              {envChildren.length}
+            </span>
+          )}
+          {statusDot && (
+            <div className={`h-2 w-2 shrink-0 rounded-full ${statusDot}`} title={statusTip} />
+          )}
+        </button>
       </div>
-      {statusDot && (
-        <div className={`h-2 w-2 shrink-0 rounded-full ${statusDot}`} title={statusTip} />
+
+      {/* Expanded children */}
+      {expanded && hasChildren && (
+        <div className="mt-0.5">
+          {envChildren.map((child) => (
+            <EntityCard
+              key={child.id}
+              node={child}
+              envName={envName}
+              statuses={statuses}
+              selectedNode={selectedNode}
+              onSelectNode={onSelectNode}
+              entityEnvMap={entityEnvMap}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 

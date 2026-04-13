@@ -71,6 +71,18 @@
       "type": "array",
       "items": { "type": "string", "x-entity-ref": "API" },
       "description": "APIs consumed by this entity"
+    },
+    "deployedIn": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["kind", "name"]
+      },
+      "description": "Environments this resource is deployed in"
     }
   },
   "additionalProperties": false
