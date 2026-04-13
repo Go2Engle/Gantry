@@ -23,6 +23,7 @@ import {
   GitBranch,
   Shield,
   Package,
+  Network,
   X,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -73,6 +74,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
   const [statusMonitorEnabled, setStatusMonitorEnabled] = useState(false);
   const [gitopsEnabled, setGitopsEnabled] = useState(false);
   const [harborEnabled, setHarborEnabled] = useState(false);
+  const [topologyEnabled, setTopologyEnabled] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
@@ -96,6 +98,9 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         const gitopsPlugin = plugins.find((p) => p.name === 'gitops');
         setGitopsEnabled(Boolean(gitopsPlugin?.enabled));
 
+        const topologyPlugin = plugins.find((p) => p.name === 'topology-explorer');
+        setTopologyEnabled(Boolean(topologyPlugin?.enabled));
+
         const harborPlugin = plugins.find((p) => p.name === 'harbor');
         if (!harborPlugin?.enabled) {
           setHarborEnabled(false);
@@ -115,6 +120,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         setStatusMonitorEnabled(false);
         setGitopsEnabled(false);
         setHarborEnabled(false);
+        setTopologyEnabled(false);
       }
     };
 
@@ -278,6 +284,22 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
                 >
                   <Package className="h-5 w-5 shrink-0" />
                   {!collapsed && <span className="truncate">Harbor</span>}
+                </Link>
+              </li>
+            )}
+            {topologyEnabled && (
+              <li>
+                <Link
+                  to="/topology"
+                  className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/topology')
+                      ? 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]'
+                      : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]'
+                  }`}
+                  title={collapsed ? 'Topology' : undefined}
+                >
+                  <Network className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="truncate">Topology</span>}
                 </Link>
               </li>
             )}

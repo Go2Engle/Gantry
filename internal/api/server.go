@@ -214,6 +214,9 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			protected.Get("/plugins/harbor/artifacts", h.GetHarborArtifacts)
 			protected.Get("/plugins/harbor/vulnerabilities", h.GetHarborVulnerabilities)
 			protected.Get("/plugins/harbor/summary", h.GetHarborSummary)
+			// Topology Explorer plugin endpoints.
+			protected.Get("/plugins/topology-explorer/data", h.GetTopologyData)
+			protected.Get("/plugins/topology-explorer/status", h.GetTopologyStatus)
 			// Nexus Repository Manager plugin endpoints.
 			protected.Get("/plugins/nexus-repository-manager/components", h.GetNexusComponents)
 			protected.Get("/plugins/nexus-repository-manager/assets", h.GetNexusAssets)

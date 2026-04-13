@@ -597,3 +597,40 @@ export interface RBACConfig {
     effect: string;
   }[];
 }
+
+// ─── Topology Explorer ───────────────────────────────────────────────────
+
+export interface TopologyNode {
+  id: string;
+  kind: string;
+  name: string;
+  namespace?: string;
+  title?: string;
+  description?: string;
+  owner?: string;
+  spec?: Record<string, unknown>;
+}
+
+export interface TopologyEdge {
+  from: string;
+  to: string;
+  relation: string;
+}
+
+export interface TopologyEnvironment {
+  name: string;
+  title?: string;
+  description?: string;
+  provider?: string;
+  region?: string;
+  type?: string;
+  entityCount: number;
+}
+
+export interface TopologyData {
+  environments: TopologyEnvironment[];
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
+}
+
+export type TopologyStatusMap = Record<string, { status: string; description: string }>;

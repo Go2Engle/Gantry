@@ -18,6 +18,7 @@ import StatusMonitor from './pages/StatusMonitor';
 import GitOps from './pages/GitOps';
 import Harbor from './pages/Harbor';
 import RBAC from './pages/RBAC';
+import TopologyExplorer from './pages/TopologyExplorer';
 
 function AuthenticatedLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -51,6 +52,7 @@ function AuthenticatedLayout() {
               <Route path="/gitops" element={<GitOps />} />
               <Route path="/harbor" element={<Harbor />} />
               <Route path="/rbac" element={<RBAC />} />
+              <Route path="/topology" element={<TopologyExplorer />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </ErrorBoundary>

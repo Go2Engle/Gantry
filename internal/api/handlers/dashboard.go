@@ -21,6 +21,7 @@ var knownWidgetIDs = map[string]bool{
 	"status_monitor":    true,
 	"gitops_status":     true,
 	"harbor_vulns":      true,
+	"topology_overview": true,
 }
 
 // GetDashboardConfig handles GET /api/v1/dashboard/config.

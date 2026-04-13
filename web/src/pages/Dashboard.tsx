@@ -40,6 +40,7 @@ import {
   Save,
   X,
   GripVertical,
+  Network,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -58,6 +59,7 @@ import type {
   StatusMonitorResult,
   GitOpsStatus,
   HarborSummaryResponse,
+  TopologyData,
 } from '../lib/types';
 import { ENTITY_KINDS } from '../lib/types';
 
@@ -112,6 +114,7 @@ const WIDGET_LABELS: Record<string, string> = {
   recently_browsed: 'Recently Browsed',
   gitops_status: 'GitOps Status',
   harbor_vulns: 'Harbor Vulnerabilities',
+  topology_overview: 'Topology Overview',
 };
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
@@ -126,6 +129,7 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'recently_browsed', visible: true, order: 8, width: 'half' },
   { id: 'gitops_status', visible: true, order: 9, width: 'half' },
   { id: 'harbor_vulns', visible: true, order: 10, width: 'half' },
+  { id: 'topology_overview', visible: true, order: 11, width: 'half' },
 ];
 
 interface KindCount {
@@ -319,6 +323,7 @@ export default function Dashboard() {
   const [statusMonitorLoading, setStatusMonitorLoading] = useState(true);
   const [gitopsStatus, setGitopsStatus] = useState<GitOpsStatus | null>(null);
   const [harborSummary, setHarborSummary] = useState<HarborSummaryResponse | null>(null);
+  const [topologyData, setTopologyData] = useState<TopologyData | null>(null);
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -384,6 +389,10 @@ export default function Dashboard() {
     api.getHarborSummary()
       .then((s) => { if (!cancelled) setHarborSummary(s); })
       .catch(() => { if (!cancelled) setHarborSummary(null); });
+
+    api.getTopologyData()
+      .then((d) => { if (!cancelled) setTopologyData(d); })
+      .catch(() => { if (!cancelled) setTopologyData(null); });
 
     return () => {
       cancelled = true;
@@ -1040,6 +1049,85 @@ export default function Dashboard() {
                 <div>Last push: {gitopsStatus.lastPushAt ? new Date(gitopsStatus.lastPushAt).toLocaleString() : 'Never'}</div>
                 <div>Last pull: {gitopsStatus.lastPullAt ? new Date(gitopsStatus.lastPullAt).toLocaleString() : 'Never'}</div>
               </div>
+            </div>
+          </div>
+        );
+      }
+
+      case 'topology_overview': {
+        if (!topologyData) return null;
+        const nodeCount = topologyData.nodes.length;
+        const edgeCount = topologyData.edges.length;
+        const envCount = topologyData.environments.length;
+        if (nodeCount === 0) return null;
+
+        // Count by kind
+        const kindCounts = new Map<string, number>();
+        for (const n of topologyData.nodes) {
+          kindCounts.set(n.kind, (kindCounts.get(n.kind) || 0) + 1);
+        }
+
+        // Count by relation
+        const relCounts = new Map<string, number>();
+        for (const e of topologyData.edges) {
+          relCounts.set(e.relation, (relCounts.get(e.relation) || 0) + 1);
+        }
+
+        const RELATION_LABEL: Record<string, string> = {
+          dependsOn: 'Dependencies',
+          deployedIn: 'Deployments',
+          providesApi: 'API Providers',
+          consumesApi: 'API Consumers',
+          ownedBy: 'Ownership',
+        };
+
+        return (
+          <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+            <div className="flex items-center justify-between border-b border-[var(--gantry-border)] px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Network className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
+                <h2 className="text-base font-semibold text-[var(--gantry-text-primary)]">Topology</h2>
+              </div>
+              <Link to="/topology" className="flex items-center gap-1 text-sm text-[var(--gantry-accent)] hover:opacity-75">
+                Explore <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="font-medium text-[var(--gantry-text-primary)]">{nodeCount} entities</span>
+                <span className="text-[var(--gantry-text-secondary)]">{edgeCount} relationships</span>
+                {envCount > 0 && (
+                  <span className="text-[var(--gantry-text-secondary)]">{envCount} environments</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {Array.from(kindCounts.entries())
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 6)
+                  .map(([kind, count]) => (
+                    <span
+                      key={kind}
+                      className="rounded-full border border-[var(--gantry-border)] px-2 py-0.5 text-xs text-[var(--gantry-text-secondary)]"
+                    >
+                      {count} {kind}{count !== 1 ? 's' : ''}
+                    </span>
+                  ))}
+              </div>
+              {relCounts.size > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(relCounts.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 4)
+                    .map(([rel, count]) => (
+                      <span
+                        key={rel}
+                        className="text-xs text-[var(--gantry-text-secondary)]"
+                      >
+                        {count} {RELATION_LABEL[rel] || rel}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
         );

@@ -1,4 +1,4 @@
-import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset } from './types';
+import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, TopologyData, TopologyStatusMap } from './types';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 export const PLUGINS_UPDATED_EVENT = 'gantry:plugins-updated';
@@ -189,6 +189,12 @@ export const api = {
   // Status Monitor
   getStatusMonitorStatuses: () =>
     request<StatusMonitorResult[]>('GET', '/plugins/status-monitor/statuses'),
+
+  // Topology Explorer
+  getTopologyData: (env?: string) =>
+    request<TopologyData>('GET', `/plugins/topology-explorer/data${env ? `?environment=${encodeURIComponent(env)}` : ''}`),
+  getTopologyStatus: () =>
+    request<TopologyStatusMap>('GET', '/plugins/topology-explorer/status'),
 
   // Health check proxy
   checkHealth: (url: string) =>
