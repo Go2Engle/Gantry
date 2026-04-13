@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Package, CheckCircle, Circle, Settings, ExternalLink, Search, Puzzle,
   RefreshCw, Plus, Trash2, ChevronDown, ChevronUp, X,
-  BookOpen, Zap, Layers, CheckSquare,
+  BookOpen, Zap, Layers, CheckSquare, GripVertical,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { PluginRegistryEntry, PluginConfig, PluginSyncResult } from '../lib/types';
@@ -158,6 +158,135 @@ const FIELD_VISIBILITY: Record<string, Record<string, VisibilityFn>> = {
   },
 };
 
+// ── StringArraySortField ─────────────────────────────────────────────────────
+// Renders an array of strings as a sortable list with drag-and-drop reordering.
+function StringArraySortField({
+  value,
+  onChange,
+  title,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  title: string;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [newItem, setNewItem] = useState('');
+
+  function moveItem(from: number, to: number) {
+    if (from === to) return;
+    const next = [...value];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  }
+
+  function removeItem(idx: number) {
+    onChange(value.filter((_, i) => i !== idx));
+  }
+
+  function addItem() {
+    const trimmed = newItem.trim();
+    if (!trimmed || value.includes(trimmed)) return;
+    onChange([...value, trimmed]);
+    setNewItem('');
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addItem();
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {value.length > 0 ? (
+        <div className="rounded-lg border border-[var(--gantry-border)] overflow-hidden divide-y divide-[var(--gantry-border)]">
+          {value.map((item, idx) => (
+            <div
+              key={`${item}-${idx}`}
+              draggable
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+              onDrop={() => {
+                if (dragIdx !== null && dragIdx !== idx) moveItem(dragIdx, idx);
+                setDragIdx(null);
+                setDragOverIdx(null);
+              }}
+              onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+              className={`flex items-center gap-2 px-3 py-2 bg-[var(--gantry-bg-primary)] transition-colors ${
+                dragIdx === idx ? 'opacity-40' : ''
+              } ${
+                dragOverIdx === idx && dragIdx !== idx
+                  ? 'border-t-2 border-t-[var(--gantry-accent)]'
+                  : ''
+              }`}
+            >
+              <GripVertical className="h-3.5 w-3.5 shrink-0 cursor-grab text-[var(--gantry-text-secondary)] opacity-40 hover:opacity-100 active:cursor-grabbing" />
+              <span className="flex-1 text-sm text-[var(--gantry-text-primary)] select-none">{item}</span>
+              <span className="text-[10px] text-[var(--gantry-text-secondary)] tabular-nums">{idx + 1}</span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  disabled={idx === 0}
+                  onClick={() => moveItem(idx, idx - 1)}
+                  className="rounded p-0.5 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)] disabled:opacity-20 disabled:cursor-default transition-colors"
+                  title="Move up"
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <button
+                  type="button"
+                  disabled={idx === value.length - 1}
+                  onClick={() => moveItem(idx, idx + 1)}
+                  className="rounded p-0.5 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)] disabled:opacity-20 disabled:cursor-default transition-colors"
+                  title="Move down"
+                >
+                  <ChevronDown size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeItem(idx)}
+                  className="rounded p-0.5 text-[var(--gantry-text-secondary)] hover:text-red-500 transition-colors ml-1"
+                  title="Remove"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-[var(--gantry-border)] px-4 py-3 text-center">
+          <p className="text-xs text-[var(--gantry-text-secondary)]">
+            No items configured. Add {title.toLowerCase()} below.
+          </p>
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newItem}
+          onChange={(e) => setNewItem(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={`Add ${title.toLowerCase().replace(/s$/, '')}…`}
+          className="flex-1 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1.5 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--gantry-accent)]"
+        />
+        <button
+          type="button"
+          onClick={addItem}
+          disabled={!newItem.trim() || value.includes(newItem.trim())}
+          className="flex items-center gap-1 rounded-lg border border-[var(--gantry-border)] px-3 py-1.5 text-xs font-medium text-[var(--gantry-accent)] hover:bg-[var(--gantry-accent)]/10 disabled:opacity-40 disabled:cursor-default transition-colors"
+        >
+          <Plus size={13} />
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── ConfigField ──────────────────────────────────────────────────────────────
 function ConfigField({
   fieldKey,
@@ -175,7 +304,27 @@ function ConfigField({
   const isBool = fieldSchema.type === 'boolean';
   const isEnum = Array.isArray(fieldSchema.enum);
   const isArr  = fieldSchema.type === 'array' && fieldSchema.items?.type === 'object';
+  const isStringArr = fieldSchema.type === 'array' && fieldSchema.items?.type === 'string';
   const isLong = isLongText(fieldKey);
+
+  if (isStringArr) {
+    return (
+      <div>
+        <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">
+          {fieldSchema.title ?? fieldKey}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+        {fieldSchema.description && (
+          <p className="text-xs text-[var(--gantry-text-secondary)] mb-2">{fieldSchema.description}</p>
+        )}
+        <StringArraySortField
+          value={Array.isArray(value) ? value : []}
+          onChange={onChange}
+          title={fieldSchema.title ?? fieldKey}
+        />
+      </div>
+    );
+  }
 
   if (isArr) {
     return (

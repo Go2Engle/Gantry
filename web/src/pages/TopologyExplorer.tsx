@@ -105,6 +105,7 @@ export default function TopologyExplorer() {
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [laneOrder, setLaneOrder] = useState<string[]>([]);
 
   const fetchData = useCallback(
     async (showRefresh = false) => {
@@ -129,6 +130,11 @@ export default function TopologyExplorer() {
 
   useEffect(() => {
     fetchData();
+    // Load saved lane order from plugin config
+    api.getPluginConfig('topology-explorer').then((cfg) => {
+      const order = cfg?.values?.laneOrder;
+      if (Array.isArray(order)) setLaneOrder(order);
+    }).catch(() => {});
     const interval = setInterval(() => fetchData(), 30_000);
     return () => clearInterval(interval);
   }, [fetchData]);
@@ -170,13 +176,22 @@ export default function TopologyExplorer() {
   const envColumns = useMemo(() => {
     if (!data) return [];
 
-    const envOrder = ['production', 'staging', 'development'];
     const sorted = [...data.environments].sort((a, b) => {
-      const aIdx = envOrder.indexOf(a.type || '');
-      const bIdx = envOrder.indexOf(b.type || '');
-      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-      if (aIdx !== -1) return -1;
-      if (bIdx !== -1) return 1;
+      // Use custom lane order if set, otherwise fall back to type-based ordering
+      if (laneOrder.length > 0) {
+        const aIdx = laneOrder.indexOf(a.name);
+        const bIdx = laneOrder.indexOf(b.name);
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+        if (aIdx !== -1) return -1;
+        if (bIdx !== -1) return 1;
+      } else {
+        const envOrder = ['production', 'staging', 'development'];
+        const aIdx = envOrder.indexOf(a.type || '');
+        const bIdx = envOrder.indexOf(b.type || '');
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+        if (aIdx !== -1) return -1;
+        if (bIdx !== -1) return 1;
+      }
       return a.name.localeCompare(b.name);
     });
 
@@ -187,7 +202,7 @@ export default function TopologyExplorer() {
         return envs?.includes(env.name);
       }),
     }));
-  }, [data, filteredNodes, entityEnvMap]);
+  }, [data, filteredNodes, entityEnvMap, laneOrder]);
 
   // Entities not deployed in any environment
   const unassignedNodes = useMemo(() => {
