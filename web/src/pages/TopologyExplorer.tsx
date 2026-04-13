@@ -205,6 +205,21 @@ export default function TopologyExplorer() {
     );
   }, [selectedNode, data]);
 
+  // Flat list of all nodes including children (for detail panel lookup)
+  const allNodes = useMemo(() => {
+    if (!data) return [];
+    const flat: TopologyNode[] = [];
+    for (const n of data.nodes) {
+      flat.push(n);
+      if (n.children) {
+        for (const c of n.children) {
+          flat.push(c);
+        }
+      }
+    }
+    return flat;
+  }, [data]);
+
   // Available kinds to filter (excluding Environment)
   const availableKinds = useMemo(() => {
     if (!data) return [];
@@ -363,7 +378,7 @@ export default function TopologyExplorer() {
       {selectedNode && data && (
         <DetailPanel
           nodeId={selectedNode}
-          nodes={data.nodes}
+          nodes={allNodes}
           edges={selectedEdges}
           statuses={statuses}
           entityEnvMap={entityEnvMap}
