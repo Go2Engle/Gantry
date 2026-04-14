@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.0](https://github.com/Go2Engle/Gantry/compare/v0.9.1...v0.10.0) (2026-04-14)
+
+
+### Features
+
+* add Harbor sidebar toggle ([#47](https://github.com/Go2Engle/Gantry/issues/47)) ([3f4a52c](https://github.com/Go2Engle/Gantry/commit/3f4a52c7337637b4f01b8efa80adda48dad57063))
+* add Nexus Repository Manager explorer ([#52](https://github.com/Go2Engle/Gantry/issues/52)) ([d0f70d6](https://github.com/Go2Engle/Gantry/commit/d0f70d6e9d1533fb6a64269d0dbcba549acd40b3))
+* **docs:** add local search to docs site ([#50](https://github.com/Go2Engle/Gantry/issues/50)) ([3544e60](https://github.com/Go2Engle/Gantry/commit/3544e607b63c0efb18abf48f2373dbf9919dba8a))
+
 ## [0.9.1](https://github.com/Go2Engle/Gantry/compare/v0.9.0...v0.9.1) (2026-04-07)
 
 
