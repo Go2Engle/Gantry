@@ -130,15 +130,36 @@ export default function TopologyExplorer() {
   );
 
   useEffect(() => {
-    fetchData();
-    // Load saved lane order from plugin config
-    api.getPluginConfig('topology-explorer').then((cfg) => {
-      const order = cfg?.values?.laneOrder;
-      if (Array.isArray(order)) setLaneOrder(order);
-      if (cfg?.values?.hideUnassigned) setHideUnassigned(true);
-    }).catch(() => {});
-    const interval = setInterval(() => fetchData(), 30_000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const load = async () => {
+      await fetchData();
+
+      try {
+        const cfg = await api.getPluginConfig('topology-explorer');
+        const order = cfg?.values?.laneOrder;
+        if (Array.isArray(order)) setLaneOrder(order);
+        setHideUnassigned(Boolean(cfg?.values?.hideUnassigned));
+
+        const configuredRefreshInterval = cfg?.values?.refreshInterval;
+        const refreshInterval =
+          typeof configuredRefreshInterval === 'number' && configuredRefreshInterval >= 0
+            ? configuredRefreshInterval * 1000
+            : 30_000;
+
+        if (refreshInterval > 0) {
+          interval = setInterval(() => fetchData(), refreshInterval);
+        }
+      } catch {
+        interval = setInterval(() => fetchData(), 30_000);
+      }
+    };
+
+    void load();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [fetchData]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
@@ -753,7 +774,7 @@ function DetailPanel({
                     </span>
                     <ArrowRight className="h-3 w-3 shrink-0 text-[var(--gantry-text-secondary)]" />
                     <Link
-                      to={`/catalog/${e.to.replace('/', '/')}`}
+                      to={`/catalog/${e.to}`}
                       className="truncate text-[var(--gantry-accent)] hover:underline"
                     >
                       {e.to}
@@ -772,7 +793,7 @@ function DetailPanel({
                 {inbound.map((e, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs">
                     <Link
-                      to={`/catalog/${e.from.replace('/', '/')}`}
+                      to={`/catalog/${e.from}`}
                       className="truncate text-[var(--gantry-accent)] hover:underline"
                     >
                       {e.from}

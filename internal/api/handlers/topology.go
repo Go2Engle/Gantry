@@ -213,7 +213,12 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 		})
 
 		// Build edges: deployedIn.
+		// When filtering by environment, only emit edges (and count entities)
+		// for the filtered environment to keep the response self-contained.
 		for _, envName := range deployedEnvs {
+			if envFilter != "" && envName != envFilter {
+				continue
+			}
 			if env, ok := envMap[envName]; ok {
 				env.EntityCount++
 			}
@@ -334,9 +339,16 @@ func (h *Handlers) GetTopologyStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return cached status-monitor results keyed by provider name.
+	// If the cache has not been populated yet, fail explicitly instead of
+	// silently returning an empty result set that looks authoritative.
 	smCacheMu.RLock()
-	results := smCacheResults
+	results := append([]StatusMonitorResult(nil), smCacheResults...)
 	smCacheMu.RUnlock()
+
+	if len(results) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "status-monitor data is not available yet")
+		return
+	}
 
 	statusMap := make(map[string]map[string]string, len(results))
 	for _, r := range results {
@@ -362,10 +374,17 @@ func extractDeployedIn(spec map[string]any) []string {
 	var names []string
 	for _, env := range envs {
 		if m, ok := env.(map[string]any); ok {
+			envKind, _ := m["kind"].(string)
 			envName, _ := m["name"].(string)
-			if envName != "" {
-				names = append(names, envName)
+			if envName == "" {
+				continue
 			}
+			// Only treat references as environment deployments if kind is
+			// omitted or explicitly "Environment".
+			if envKind != "" && envKind != "Environment" {
+				continue
+			}
+			names = append(names, envName)
 		}
 	}
 	return names
