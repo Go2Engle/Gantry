@@ -17,8 +17,10 @@ import Plugins from './pages/Plugins';
 import StatusMonitor from './pages/StatusMonitor';
 import GitOps from './pages/GitOps';
 import Harbor from './pages/Harbor';
+import Nexus from './pages/Nexus';
 import RBAC from './pages/RBAC';
 import TopologyExplorer from './pages/TopologyExplorer';
+
 
 function AuthenticatedLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -54,6 +56,7 @@ function AuthenticatedLayout() {
                   <Route path="/status" element={<StatusMonitor />} />
                   <Route path="/gitops" element={<GitOps />} />
                   <Route path="/harbor" element={<Harbor />} />
+                  <Route path="/nexus" element={<Nexus />} />
                   <Route path="/rbac" element={<RBAC />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>

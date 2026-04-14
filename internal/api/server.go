@@ -218,6 +218,7 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			protected.Get("/plugins/topology-explorer/data", h.GetTopologyData)
 			protected.Get("/plugins/topology-explorer/status", h.GetTopologyStatus)
 			// Nexus Repository Manager plugin endpoints.
+			protected.Get("/plugins/nexus-repository-manager/repositories", h.GetNexusRepositories)
 			protected.Get("/plugins/nexus-repository-manager/components", h.GetNexusComponents)
 			protected.Get("/plugins/nexus-repository-manager/assets", h.GetNexusAssets)
 			// ArgoCD-specific plugin endpoints.

@@ -117,6 +117,7 @@ func nexusRequest(ctx context.Context, baseURL, username, password, path string)
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Gantry/1.0 NexusRepositoryManager")
+	req.Header.Set("Accept", "application/json")
 	if username != "" && password != "" {
 		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
 	}
@@ -226,6 +227,40 @@ func (h *Handlers) ensureNexusConfig(w http.ResponseWriter, r *http.Request) (ne
 	return cfg, nil
 }
 
+// NexusRepository represents a Nexus repository from the repositories API.
+// Note: the v1/repositories list endpoint does not include online status.
+type NexusRepository struct {
+	Name   string `json:"name"`
+	Format string `json:"format"`
+	Type   string `json:"type"`
+	URL    string `json:"url"`
+}
+
+// GetNexusRepositories lists all repositories from Nexus Repository Manager.
+func (h *Handlers) GetNexusRepositories(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.ensureNexusConfig(w, r)
+	if err != nil {
+		return
+	}
+
+	body, err := nexusRequest(r.Context(), cfg.URL, cfg.Username, cfg.Password, "/service/rest/v1/repositories")
+	if err != nil {
+		log.Printf("[nexus] failed to fetch repositories: %v", err)
+		writeError(w, http.StatusBadGateway, "failed to fetch repositories from Nexus")
+		return
+	}
+
+	var repos []NexusRepository
+	if err := json.Unmarshal(body, &repos); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse repositories response")
+		return
+	}
+	if repos == nil {
+		repos = []NexusRepository{}
+	}
+	writeJSON(w, http.StatusOK, repos)
+}
+
 // GetNexusComponents searches for components in Nexus Repository Manager.
 func (h *Handlers) GetNexusComponents(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.ensureNexusConfig(w, r)
@@ -242,32 +277,37 @@ func (h *Handlers) GetNexusComponents(w http.ResponseWriter, r *http.Request) {
 		repository = cfg.DefaultRepository
 	}
 
-	params := url.Values{}
-	if name != "" {
-		// Wrap in wildcards for partial matching — the Nexus name field may
-		// include a group prefix (e.g. "goodville/report-claims-module" or
-		// "gbiz/claims-elements-0.0.0.zip") so *name* matches regardless of
-		// prefix/suffix. This is much more precise than the "q" keyword param
-		// which splits on word boundaries and returns unrelated components.
-		if name[0] != '*' {
-			name = "*" + name
+	// If only a repository filter is set (no search criteria), use the
+	// /components browse endpoint which works without credentials and doesn't
+	// require any additional filters. Fall back to /search when name/group/format
+	// are provided so wildcard matching still works.
+	var basePath string
+	if name == "" && group == "" && format == "" && repository != "" {
+		basePath = "/service/rest/v1/components?repository=" + url.QueryEscape(repository)
+	} else {
+		params := url.Values{}
+		if name != "" {
+			// Wrap in wildcards for partial matching.
+			if name[0] != '*' {
+				name = "*" + name
+			}
+			if name[len(name)-1] != '*' {
+				name = name + "*"
+			}
+			params.Set("name", name)
 		}
-		if name[len(name)-1] != '*' {
-			name = name + "*"
+		if repository != "" {
+			params.Set("repository", repository)
 		}
-		params.Set("name", name)
-	}
-	if repository != "" {
-		params.Set("repository", repository)
-	}
-	if group != "" {
-		params.Set("group", group)
-	}
-	if format != "" {
-		params.Set("format", format)
+		if group != "" {
+			params.Set("group", group)
+		}
+		if format != "" {
+			params.Set("format", format)
+		}
+		basePath = "/service/rest/v1/search?" + params.Encode()
 	}
 
-	basePath := "/service/rest/v1/search?" + params.Encode()
 	allItems, err := nexusPaginatedSearch(r.Context(), cfg, basePath)
 	if err != nil {
 		log.Printf("[nexus] failed to fetch components (path=%s): %v", basePath, err)

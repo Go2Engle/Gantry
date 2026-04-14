@@ -746,6 +746,12 @@
           "type": "string",
           "title": "Default Repository",
           "description": "Default repository to search when no repository annotation is set on the entity."
+        },
+        "showInSidebar": {
+          "type": "boolean",
+          "title": "Show Nexus in Sidebar",
+          "description": "Add the Nexus explorer page to the main sidebar navigation when the plugin is enabled.",
+          "default": true
         }
       },
       "required": ["url"]
