@@ -105,8 +105,18 @@ export default function TopologyExplorer() {
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const [hideUnassigned, setHideUnassigned] = useState(false);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const fetchData = useCallback(
     async (showRefresh = false) => {
@@ -369,6 +379,8 @@ export default function TopologyExplorer() {
               selectedNode={selectedNode}
               onSelectNode={setSelectedNode}
               entityEnvMap={entityEnvMap}
+              expandedNodes={expandedNodes}
+              onToggleExpand={toggleExpand}
             />
           ))}
           {unassignedNodes.length > 0 && !hideUnassigned && (
@@ -393,6 +405,8 @@ export default function TopologyExplorer() {
                     selectedNode={selectedNode}
                     onSelectNode={setSelectedNode}
                     entityEnvMap={entityEnvMap}
+                    expandedNodes={expandedNodes}
+                    onToggleExpand={toggleExpand}
                     depth={0}
                   />
                 ))}
@@ -450,6 +464,8 @@ function EnvironmentColumn({
   selectedNode,
   onSelectNode,
   entityEnvMap,
+  expandedNodes,
+  onToggleExpand,
 }: {
   env: TopologyEnvironment;
   nodes: TopologyNode[];
@@ -457,6 +473,8 @@ function EnvironmentColumn({
   selectedNode: string | null;
   onSelectNode: (id: string | null) => void;
   entityEnvMap: Map<string, string[]>;
+  expandedNodes: Set<string>;
+  onToggleExpand: (id: string) => void;
 }) {
   // Group nodes by kind within the column
   const grouped = useMemo(() => {
@@ -540,6 +558,8 @@ function EnvironmentColumn({
                       selectedNode={selectedNode}
                       onSelectNode={onSelectNode}
                       entityEnvMap={entityEnvMap}
+                      expandedNodes={expandedNodes}
+                      onToggleExpand={onToggleExpand}
                       depth={0}
                     />
                   ))}
@@ -562,6 +582,8 @@ function EntityCard({
   selectedNode,
   onSelectNode,
   entityEnvMap,
+  expandedNodes,
+  onToggleExpand,
   depth,
 }: {
   node: TopologyNode;
@@ -570,9 +592,11 @@ function EntityCard({
   selectedNode: string | null;
   onSelectNode: (id: string | null) => void;
   entityEnvMap: Map<string, string[]>;
+  expandedNodes: Set<string>;
+  onToggleExpand: (id: string) => void;
   depth: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const expanded = expandedNodes.has(node.id);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const Icon = KIND_ICON[node.kind] || Box;
@@ -630,7 +654,7 @@ function EntityCard({
         {/* Expand/collapse chevron */}
         {hasChildren ? (
           <button
-            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+            onClick={(e) => { e.stopPropagation(); onToggleExpand(node.id); }}
             className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
           >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -673,6 +697,8 @@ function EntityCard({
               selectedNode={selectedNode}
               onSelectNode={onSelectNode}
               entityEnvMap={entityEnvMap}
+              expandedNodes={expandedNodes}
+              onToggleExpand={onToggleExpand}
               depth={depth + 1}
             />
           ))}
