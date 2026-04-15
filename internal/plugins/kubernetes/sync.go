@@ -111,6 +111,8 @@ func Sync(ctx context.Context, config map[string]any, store EntityStore) (*SyncR
 			e := kserviceToInfrastructure(svc, clusterName)
 			if err := upsert(ctx, store, e, res); err != nil {
 				res.Errors = append(res.Errors, fmt.Sprintf("service %s/%s: %v", ns, svc.Metadata.Name, err))
+			} else if linkErr := linkInfrastructureToService(ctx, store, e); linkErr != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("link infra %s/%s to service: %v", ns, svc.Metadata.Name, linkErr))
 			}
 			res.Services++
 		}
@@ -422,4 +424,55 @@ func containsStr(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// linkInfrastructureToService updates Service entities that are referenced in
+// the Infrastructure's spec.dependsOn by:
+//  1. Adding the Infrastructure to the Service's spec.dependsOn.
+//  2. Merging the Infrastructure's spec.deployedIn into the Service's spec.deployedIn.
+//
+// This keeps Service entities automatically up to date when infrastructure
+// components are discovered or updated by the Kubernetes sync.
+func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *entity.Entity) error {
+	dependsOn, _ := infra.Spec["dependsOn"].([]any)
+	deployedIn, _ := infra.Spec["deployedIn"].([]any)
+
+	infraRef := []any{map[string]any{"kind": "Infrastructure", "name": infra.Metadata.Name}}
+
+	for _, dep := range dependsOn {
+		m, ok := dep.(map[string]any)
+		if !ok {
+			continue
+		}
+		if m["kind"] != "Service" {
+			continue
+		}
+		svcName, _ := m["name"].(string)
+		if svcName == "" {
+			continue
+		}
+
+		svc, err := store.GetEntity(ctx, "Service", infra.Metadata.Namespace, svcName)
+		if err != nil {
+			// Service doesn't exist yet – skip silently.
+			continue
+		}
+
+		if svc.Spec == nil {
+			svc.Spec = make(map[string]any)
+		}
+
+		// 1. Add this Infrastructure to the Service's dependsOn.
+		svc.Spec["dependsOn"] = mergeDeployedIn(svc.Spec["dependsOn"], infraRef)
+
+		// 2. Propagate the Infrastructure's deployedIn environments to the Service.
+		if len(deployedIn) > 0 {
+			svc.Spec["deployedIn"] = mergeDeployedIn(svc.Spec["deployedIn"], deployedIn)
+		}
+
+		if err := store.UpdateEntity(ctx, svc); err != nil {
+			return fmt.Errorf("update service %s: %w", svcName, err)
+		}
+	}
+	return nil
 }
