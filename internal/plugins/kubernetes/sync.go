@@ -280,9 +280,17 @@ func upsert(ctx context.Context, store EntityStore, e *entity.Entity, res *SyncR
 	existing.Metadata.Tags = mergeTags(existing.Metadata.Tags, e.Metadata.Tags)
 	existing.Spec = mergeSpec(existing.Spec, e.Spec)
 	if err := store.UpdateEntity(ctx, existing); err != nil {
-		// If UpdateEntity returns ErrEntityNotFound we should CreateEntity.
+		// If UpdateEntity returns ErrEntityNotFound, fall back to create with
+		// proper CreatedAt/CreatedBy and correct counter bookkeeping.
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			return store.CreateEntity(ctx, e)
+			e.Metadata.CreatedBy = "kubernetes-plugin"
+			e.Metadata.CreatedAt = time.Now().UTC()
+			if cerr := store.CreateEntity(ctx, e); cerr != nil {
+				return fmt.Errorf("create entity (fallback): %w", cerr)
+			}
+			res.Created++
+			res.TouchedEntities = append(res.TouchedEntities, EntityRef{Kind: e.Kind, Namespace: e.Metadata.Namespace, Name: e.Metadata.Name})
+			return nil
 		}
 		return fmt.Errorf("update entity: %w", err)
 	}
@@ -488,7 +496,7 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 		if err := store.UpdateEntity(ctx, svc); err != nil {
 			errs = append(errs, fmt.Errorf("update service %s: %w", svcName, err))
 		} else {
-			res.TouchedEntities = append(res.TouchedEntities, EntityRef{Kind: "Service", Namespace: svc.Metadata.Namespace, Name: svcName})
+			res.TouchedEntities = append(res.TouchedEntities, EntityRef{Kind: svc.Kind, Namespace: svc.Metadata.Namespace, Name: svc.Metadata.Name})
 		}
 	}
 	return errors.Join(errs...)

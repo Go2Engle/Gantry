@@ -84,6 +84,15 @@ type batchItem struct {
 	Action    string // "write" or "delete"
 }
 
+// ChangeRef identifies an entity change to be queued for GitOps processing.
+// Used with QueueChanges for batch enqueue operations.
+type ChangeRef struct {
+	Kind      string
+	Namespace string
+	Name      string
+	Action    string // "write" or "delete"
+}
+
 const (
 	maxHistory          = 100
 	batchDelay          = 2 * time.Second
@@ -573,6 +582,35 @@ func (s *Service) QueueChange(kind, namespace, name, action string) {
 		Namespace: namespace,
 		Name:      name,
 		Action:    action,
+	}
+	s.status.PendingFiles = len(s.batchItems)
+
+	if s.batchTimer != nil {
+		s.batchTimer.Stop()
+	}
+	s.batchTimer = time.AfterFunc(batchDelay, s.flushBatch)
+}
+
+// QueueChanges adds multiple entity changes to the batch in a single lock
+// acquisition, resetting the debounce timer only once. Prefer this over
+// calling QueueChange in a loop when many entities are touched at once
+// (e.g., after a Kubernetes sync).
+func (s *Service) QueueChanges(refs []ChangeRef) {
+	if s.syncing || len(refs) == 0 {
+		return
+	}
+
+	s.batchMu.Lock()
+	defer s.batchMu.Unlock()
+
+	for _, ref := range refs {
+		key := ref.Kind + "/" + ref.Namespace + "/" + ref.Name
+		s.batchItems[key] = batchItem{
+			Kind:      ref.Kind,
+			Namespace: ref.Namespace,
+			Name:      ref.Name,
+			Action:    ref.Action,
+		}
 	}
 	s.status.PendingFiles = len(s.batchItems)
 

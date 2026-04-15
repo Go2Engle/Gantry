@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go2engle/gantry/internal/gitops"
 	"github.com/go2engle/gantry/internal/plugins"
 	argocd "github.com/go2engle/gantry/internal/plugins/argocd"
 	ghplugin "github.com/go2engle/gantry/internal/plugins/github"
@@ -313,11 +314,14 @@ func (h *Handlers) SyncPlugin(w http.ResponseWriter, r *http.Request) {
 		}
 		// Queue GitOps writes for every entity the sync created or updated so
 		// that the K8s-enriched state (dependsOn, deployedIn, etc.) is committed
-		// to Git before the next pull can overwrite it.
-		if h.GitOps != nil {
-			for _, ref := range combined.TouchedEntities {
-				h.GitOps.QueueChange(ref.Kind, ref.Namespace, ref.Name, "write")
+		// to Git before the next pull can overwrite it. Use QueueChanges to
+		// acquire the lock and reset the debounce timer only once.
+		if h.GitOps != nil && len(combined.TouchedEntities) > 0 {
+			refs := make([]gitops.ChangeRef, len(combined.TouchedEntities))
+			for i, ref := range combined.TouchedEntities {
+				refs[i] = gitops.ChangeRef{Kind: ref.Kind, Namespace: ref.Namespace, Name: ref.Name, Action: "write"}
 			}
+			h.GitOps.QueueChanges(refs)
 		}
 		writeJSON(w, http.StatusOK, combined)
 	case "github":
