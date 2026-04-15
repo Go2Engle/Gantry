@@ -439,6 +439,7 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 
 	infraRef := []any{map[string]any{"kind": "Infrastructure", "name": infra.Metadata.Name}}
 
+	var errs []error
 	for _, dep := range dependsOn {
 		m, ok := dep.(map[string]any)
 		if !ok {
@@ -454,7 +455,11 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 
 		svc, err := store.GetEntity(ctx, "Service", infra.Metadata.Namespace, svcName)
 		if err != nil {
-			// Service doesn't exist yet – skip silently.
+			if errors.Is(err, entity.ErrEntityNotFound) {
+				// Service doesn't exist yet – skip silently.
+				continue
+			}
+			errs = append(errs, fmt.Errorf("get service %s: %w", svcName, err))
 			continue
 		}
 
@@ -471,8 +476,8 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 		}
 
 		if err := store.UpdateEntity(ctx, svc); err != nil {
-			return fmt.Errorf("update service %s: %w", svcName, err)
+			errs = append(errs, fmt.Errorf("update service %s: %w", svcName, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
