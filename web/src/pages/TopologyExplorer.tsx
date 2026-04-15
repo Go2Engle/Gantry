@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   RefreshCw,
@@ -573,6 +573,7 @@ function EntityCard({
   depth: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const Icon = KIND_ICON[node.kind] || Box;
   const iconStyle = KIND_COLOR_LIGHT[node.kind] || 'bg-gray-500/10 text-gray-600 dark:text-gray-400';
@@ -580,6 +581,12 @@ function EntityCard({
   const statusDot = status ? STATUS_DOT[status.status] || STATUS_DOT.unknown : null;
   const statusTip = status ? STATUS_LABEL[status.status] || status.status : '';
   const selected = selectedNode === node.id;
+
+  useEffect(() => {
+    if (selected && cardRef.current) {
+      cardRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [selected]);
 
   // Filter children to only those deployed in this environment
   const envChildren = useMemo(() => {
@@ -593,7 +600,7 @@ function EntityCard({
   const hasChildren = envChildren.length > 0;
 
   return (
-    <div>
+    <div ref={cardRef}>
       <div
         className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
           selected
