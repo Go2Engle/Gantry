@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.4](https://github.com/Go2Engle/Gantry/compare/v0.10.3...v0.10.4) (2026-04-15)
+
+
+### Bug Fixes
+
+* Unhide refactor section in release config ([#62](https://github.com/Go2Engle/Gantry/issues/62)) ([76740eb](https://github.com/Go2Engle/Gantry/commit/76740eb6fa61d0a44b5a446a0f06dc946a0ddcb5))
+
+
+### Code Refactoring
+
+* **topology:** improve dependency handling for nested entities ([#61](https://github.com/Go2Engle/Gantry/issues/61)) ([d08bb29](https://github.com/Go2Engle/Gantry/commit/d08bb298e1b5cbae4ab651460d71aa12ecfbd7ed))
+
 ## [0.10.3](https://github.com/Go2Engle/Gantry/compare/v0.10.2...v0.10.3) (2026-04-15)
 
 
