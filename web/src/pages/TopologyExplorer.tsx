@@ -584,7 +584,25 @@ function EntityCard({
 
   useEffect(() => {
     if (selected && cardRef.current) {
-      cardRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const card = cardRef.current;
+      // Find nearest scrollable ancestor (the lane's overflow-y-auto container)
+      let scrollParent: HTMLElement | null = card.parentElement;
+      while (scrollParent) {
+        const style = window.getComputedStyle(scrollParent);
+        if (/(auto|scroll)/.test(style.overflow + style.overflowY) && scrollParent.scrollHeight > scrollParent.clientHeight) {
+          break;
+        }
+        scrollParent = scrollParent.parentElement;
+      }
+      if (scrollParent) {
+        const cardRect = card.getBoundingClientRect();
+        const containerRect = scrollParent.getBoundingClientRect();
+        const relativeTop = cardRect.top - containerRect.top + scrollParent.scrollTop;
+        scrollParent.scrollTo({
+          top: relativeTop - scrollParent.clientHeight / 2 + card.offsetHeight / 2,
+          behavior: 'smooth',
+        });
+      }
     }
   }, [selected]);
 
