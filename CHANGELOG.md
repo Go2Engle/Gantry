@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/Go2Engle/Gantry/compare/v0.10.1...v0.10.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* **kubernetes:** track touched entities during sync for GitOps integration ([#56](https://github.com/Go2Engle/Gantry/issues/56)) ([241d1b2](https://github.com/Go2Engle/Gantry/commit/241d1b20961f7ae68a797d67fe9fa58de23e44bb))
+
 ## [0.10.1](https://github.com/Go2Engle/Gantry/compare/v0.10.0...v0.10.1) (2026-04-15)
 
 
