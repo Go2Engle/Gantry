@@ -124,12 +124,12 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// childNodes collects non-top-level entities (Infrastructure, API with
-	// a dependsOn → Service) keyed by the parent Service name.
+	// childNodes collects entities whose first dependsOn target is another
+	// entity — they will be nested under that parent node.
 	type childEntry struct {
 		node         TopologyNode
 		deployedEnvs []string // from spec.deployedIn
-		parent       string   // Service name this depends on
+		parent       string   // full node ID (Kind/name) this depends on
 	}
 	var childEntities []childEntry
 
@@ -161,10 +161,10 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 		// Determine which environments this entity is deployed in.
 		deployedEnvs := extractDeployedIn(spec)
 
-		// Entities that dependOn a Service are nested as children of that
-		// Service rather than appearing as top-level items.
-		parentService := findParentService(spec)
-		if parentService != "" && (e.Kind == "Infrastructure" || e.Kind == "API") {
+		// Entities that dependOn another entity are nested as children of that
+		// parent rather than appearing as top-level items.
+		parentID := findFirstDependency(spec)
+		if parentID != "" {
 			childEntities = append(childEntities, childEntry{
 				node: TopologyNode{
 					ID:    nodeID,
@@ -174,7 +174,7 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 					Owner: e.Metadata.Owner,
 				},
 				deployedEnvs: deployedEnvs,
-				parent:       parentService,
+				parent:       parentID,
 			})
 			// Emit edges for this entity.
 			for _, envName := range deployedEnvs {
@@ -262,15 +262,13 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Attach child entities to their parent Service nodes.
-	serviceIdx := make(map[string][]int) // serviceName → indices in nodes[]
+	// Attach child entities to their parent nodes.
+	nodeIdx := make(map[string][]int) // nodeID → indices in nodes[]
 	for i, n := range nodes {
-		if n.Kind == "Service" {
-			serviceIdx[n.Name] = append(serviceIdx[n.Name], i)
-		}
+		nodeIdx[n.ID] = append(nodeIdx[n.ID], i)
 	}
 	for _, c := range childEntities {
-		idxList, ok := serviceIdx[c.parent]
+		idxList, ok := nodeIdx[c.parent]
 		if !ok {
 			continue
 		}
@@ -411,8 +409,10 @@ func extractDependsOn(spec map[string]any, fromID string, edges *[]TopologyEdge)
 	}
 }
 
-// findParentService returns the name of the first Service entity in spec.dependsOn.
-func findParentService(spec map[string]any) string {
+// findFirstDependency returns the full node ID (Kind/name) of the first non-Environment
+// entity listed in spec.dependsOn, so that dependent entities are nested under their
+// parent in the topology view.
+func findFirstDependency(spec map[string]any) string {
 	raw, ok := spec["dependsOn"]
 	if !ok {
 		return ""
@@ -426,9 +426,11 @@ func findParentService(spec map[string]any) string {
 		if !ok {
 			continue
 		}
-		if kind, _ := m["kind"].(string); kind == "Service" {
-			name, _ := m["name"].(string)
-			return name
+		kind, _ := m["kind"].(string)
+		name, _ := m["name"].(string)
+		// Skip Environment entries — those are handled via deployedIn.
+		if kind != "" && name != "" && kind != "Environment" {
+			return kind + "/" + name
 		}
 	}
 	return ""
