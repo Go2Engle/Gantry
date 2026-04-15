@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Go2Engle/Gantry/compare/v0.10.0...v0.10.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* **kubernetes:** link Infrastructure to Service entities in sync process ([#54](https://github.com/Go2Engle/Gantry/issues/54)) ([2552321](https://github.com/Go2Engle/Gantry/commit/255232133723c8e1630ca8a445ed31ddf66853dc))
+
 ## [0.10.0](https://github.com/Go2Engle/Gantry/compare/v0.9.1...v0.10.0) (2026-04-14)
 
 
