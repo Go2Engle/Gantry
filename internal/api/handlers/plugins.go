@@ -306,9 +306,18 @@ func (h *Handlers) SyncPlugin(w http.ResponseWriter, r *http.Request) {
 			combined.Created += result.Created
 			combined.Updated += result.Updated
 			combined.Errors = append(combined.Errors, result.Errors...)
+			combined.TouchedEntities = append(combined.TouchedEntities, result.TouchedEntities...)
 		}
 		for _, e := range combined.Errors {
 			log.Printf("[kubernetes-sync] error: %s", e)
+		}
+		// Queue GitOps writes for every entity the sync created or updated so
+		// that the K8s-enriched state (dependsOn, deployedIn, etc.) is committed
+		// to Git before the next pull can overwrite it.
+		if h.GitOps != nil {
+			for _, ref := range combined.TouchedEntities {
+				h.GitOps.QueueChange(ref.Kind, ref.Namespace, ref.Name, "write")
+			}
 		}
 		writeJSON(w, http.StatusOK, combined)
 	case "github":

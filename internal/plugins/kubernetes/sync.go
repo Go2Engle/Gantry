@@ -17,14 +17,22 @@ type EntityStore interface {
 	UpdateEntity(ctx context.Context, e *entity.Entity) error
 }
 
+// EntityRef identifies a single Gantry entity by its primary key.
+type EntityRef struct {
+	Kind      string
+	Namespace string
+	Name      string
+}
+
 // SyncResult summarises what happened during a sync run.
 type SyncResult struct {
-	Namespaces  int      `json:"namespaces"`
-	Deployments int      `json:"deployments"`
-	Services    int      `json:"services"`
-	Created     int      `json:"created"`
-	Updated     int      `json:"updated"`
-	Errors      []string `json:"errors,omitempty"`
+	Namespaces      int         `json:"namespaces"`
+	Deployments     int         `json:"deployments"`
+	Services        int         `json:"services"`
+	Created         int         `json:"created"`
+	Updated         int         `json:"updated"`
+	Errors          []string    `json:"errors,omitempty"`
+	TouchedEntities []EntityRef `json:"-"` // not exposed in API; used to queue GitOps writes
 }
 
 // Sync discovers resources from a Kubernetes cluster and upserts them as
@@ -111,7 +119,7 @@ func Sync(ctx context.Context, config map[string]any, store EntityStore) (*SyncR
 			e := kserviceToInfrastructure(svc, clusterName)
 			if err := upsert(ctx, store, e, res); err != nil {
 				res.Errors = append(res.Errors, fmt.Sprintf("service %s/%s: %v", ns, svc.Metadata.Name, err))
-			} else if linkErr := linkInfrastructureToService(ctx, store, e); linkErr != nil {
+			} else if linkErr := linkInfrastructureToService(ctx, store, e, res); linkErr != nil {
 				res.Errors = append(res.Errors, fmt.Sprintf("link infra %s/%s to service: %v", ns, svc.Metadata.Name, linkErr))
 			}
 			res.Services++
@@ -263,6 +271,7 @@ func upsert(ctx context.Context, store EntityStore, e *entity.Entity, res *SyncR
 			return fmt.Errorf("create entity: %w", err)
 		}
 		res.Created++
+		res.TouchedEntities = append(res.TouchedEntities, EntityRef{Kind: e.Kind, Namespace: e.Metadata.Namespace, Name: e.Metadata.Name})
 		return nil
 	}
 
@@ -278,6 +287,7 @@ func upsert(ctx context.Context, store EntityStore, e *entity.Entity, res *SyncR
 		return fmt.Errorf("update entity: %w", err)
 	}
 	res.Updated++
+	res.TouchedEntities = append(res.TouchedEntities, EntityRef{Kind: existing.Kind, Namespace: existing.Metadata.Namespace, Name: existing.Metadata.Name})
 	return nil
 }
 
@@ -433,7 +443,7 @@ func containsStr(slice []string, s string) bool {
 //
 // This keeps Service entities automatically up to date when infrastructure
 // components are discovered or updated by the Kubernetes sync.
-func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *entity.Entity) error {
+func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *entity.Entity, res *SyncResult) error {
 	dependsOn, _ := infra.Spec["dependsOn"].([]any)
 	deployedIn, _ := infra.Spec["deployedIn"].([]any)
 
@@ -477,6 +487,8 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 
 		if err := store.UpdateEntity(ctx, svc); err != nil {
 			errs = append(errs, fmt.Errorf("update service %s: %w", svcName, err))
+		} else {
+			res.TouchedEntities = append(res.TouchedEntities, EntityRef{Kind: "Service", Namespace: svc.Metadata.Namespace, Name: svcName})
 		}
 	}
 	return errors.Join(errs...)
