@@ -43,7 +43,9 @@ func TestAzureSSOConfigured(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := azureSSOConfigured(tt.config, tt.ssoEnabled); got != tt.want {
+			clientID, _ := tt.config["clientId"].(string)
+			clientSecret, _ := tt.config["clientSecret"].(string)
+			if got := azureSSOConfigured(tt.ssoEnabled, clientID, clientSecret); got != tt.want {
 				t.Fatalf("azureSSOConfigured() = %v, want %v", got, tt.want)
 			}
 		})
@@ -64,6 +66,28 @@ func TestAzureUsername(t *testing.T) {
 	t.Run("fails closed when immutable identifiers are missing", func(t *testing.T) {
 		if _, err := azureUsername(&azplugin.IdentityClaims{PreferredUsername: "user@example.com"}); err == nil {
 			t.Fatal("azureUsername() error = nil, want failure when oid/tid are missing")
+		}
+	})
+}
+
+func TestAzureEmail(t *testing.T) {
+	t.Run("prefers validated primary email fields", func(t *testing.T) {
+		email := azureEmail(
+			&azplugin.IdentityClaims{Email: "claims@example.com", PreferredUsername: "preferred@example.com"},
+			&azplugin.MicrosoftUser{Mail: "graph@example.com", UserPrincipalName: "upn@example.com"},
+		)
+		if want := "graph@example.com"; email != want {
+			t.Fatalf("azureEmail() = %q, want %q", email, want)
+		}
+	})
+
+	t.Run("rejects non email fallback values", func(t *testing.T) {
+		email := azureEmail(
+			&azplugin.IdentityClaims{PreferredUsername: "not-an-email"},
+			&azplugin.MicrosoftUser{UserPrincipalName: "also-not-an-email"},
+		)
+		if email != "" {
+			t.Fatalf("azureEmail() = %q, want empty string", email)
 		}
 	})
 }

@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"net/mail"
 	"net/http"
 	"strings"
 
 	"github.com/go2engle/gantry/internal/auth"
 	"github.com/go2engle/gantry/internal/db"
+	"github.com/go2engle/gantry/internal/entity"
 	azplugin "github.com/go2engle/gantry/internal/plugins/azure"
 )
 
@@ -19,8 +22,10 @@ func (h *Handlers) GetAzureSSOConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
+	clientID, _ := p.Config["clientId"].(string)
+	clientSecret, _ := p.Config["clientSecret"].(string)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ssoEnabled": azureSSOConfigured(p.Config, ssoEnabled),
+		"ssoEnabled": azureSSOConfigured(ssoEnabled, clientID, clientSecret),
 	})
 }
 
@@ -34,7 +39,8 @@ func (h *Handlers) AzureOAuthBegin(w http.ResponseWriter, r *http.Request) {
 
 	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
 	clientID, _ := p.Config["clientId"].(string)
-	if !azureSSOConfigured(p.Config, ssoEnabled) {
+	clientSecret, _ := p.Config["clientSecret"].(string)
+	if !azureSSOConfigured(ssoEnabled, clientID, clientSecret) {
 		writeError(w, http.StatusBadRequest, "Microsoft Azure SSO is not configured")
 		return
 	}
@@ -75,20 +81,17 @@ func (h *Handlers) AzureOAuthBegin(w http.ResponseWriter, r *http.Request) {
 
 // AzureOAuthCallback handles the Microsoft OAuth redirect back to Gantry.
 func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	returnTo := ""
+	if c, err := r.Cookie("az_oauth_return_to"); err == nil && c.Value != "" {
+		returnTo = normalizeReturnTo(r, c.Value)
+	}
+	clearAzureOAuthCookies(w, r)
+
 	stateCookie, err := r.Cookie("az_oauth_state")
 	if err != nil || r.URL.Query().Get("state") != stateCookie.Value {
 		writeError(w, http.StatusBadRequest, "invalid or missing oauth state")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "az_oauth_state",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   isHTTPSRequest(r),
-	})
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -111,7 +114,7 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if defaultRole == "" {
 		defaultRole = "viewer"
 	}
-	if !azureSSOConfigured(p.Config, ssoEnabled) {
+	if !azureSSOConfigured(ssoEnabled, clientID, clientSecret) {
 		writeError(w, http.StatusBadRequest, "Microsoft Azure SSO is not configured")
 		return
 	}
@@ -141,34 +144,26 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		writeSSOProviderError(w, "Microsoft Azure", "derive identity", err)
 		return
 	}
-	gantryUser, _ := h.DB.GetUserByUsername(ctx, username)
+	gantryUser, err := h.DB.GetUserByUsername(ctx, username)
+	if err != nil && !errors.Is(err, entity.ErrEntityNotFound) {
+		writeSSOProviderError(w, "Microsoft Azure", "lookup Gantry user by username", err)
+		return
+	}
 
 	email := azureEmail(claims, msUser)
 	if gantryUser == nil && email != "" {
 		usersByEmail, err := h.DB.GetUsersByEmail(ctx, email)
-		if err == nil {
-			switch len(usersByEmail) {
-			case 1:
-				gantryUser = usersByEmail[0]
-			case 0:
-			default:
-				log.Printf("azure auth: email hash %s matched %d Gantry users; refusing ambiguous SSO lookup", hashEmailForLog(email), len(usersByEmail))
-			}
+		if err != nil {
+			writeSSOProviderError(w, "Microsoft Azure", "lookup Gantry users by email", err)
+			return
 		}
-	}
-
-	returnTo := ""
-	if c, err := r.Cookie("az_oauth_return_to"); err == nil && c.Value != "" {
-		returnTo = normalizeReturnTo(r, c.Value)
-		http.SetCookie(w, &http.Cookie{
-			Name:     "az_oauth_return_to",
-			Value:    "",
-			Path:     "/",
-			MaxAge:   -1,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-			Secure:   isHTTPSRequest(r),
-		})
+		switch len(usersByEmail) {
+		case 1:
+			gantryUser = usersByEmail[0]
+		case 0:
+		default:
+			log.Printf("azure auth: email hash %s matched %d Gantry users; refusing ambiguous SSO lookup", hashEmailForLog(email), len(usersByEmail))
+		}
 	}
 
 	if gantryUser == nil {
@@ -194,10 +189,14 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			Role:         defaultRole,
 			SSOOnly:      true,
 		}
-		if err := h.DB.CreateUser(ctx, newUser); err != nil {
-			gantryUser, _ = h.DB.GetUserByUsername(ctx, username)
+		if createErr := h.DB.CreateUser(ctx, newUser); createErr != nil {
+			gantryUser, err = h.DB.GetUserByUsername(ctx, username)
+			if err != nil && !errors.Is(err, entity.ErrEntityNotFound) {
+				writeSSOProviderError(w, "Microsoft Azure", "lookup Gantry user after create conflict", err)
+				return
+			}
 			if gantryUser == nil {
-				writeError(w, http.StatusInternalServerError, "failed to create user: "+err.Error())
+				writeError(w, http.StatusInternalServerError, "failed to create user: "+createErr.Error())
 				return
 			}
 		} else {
@@ -231,17 +230,25 @@ func azureUsername(claims *azplugin.IdentityClaims) (string, error) {
 }
 
 func azureEmail(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftUser) string {
-	if user != nil && strings.TrimSpace(user.Mail) != "" {
-		return strings.TrimSpace(user.Mail)
-	}
-	if claims != nil && strings.TrimSpace(claims.Email) != "" {
-		return strings.TrimSpace(claims.Email)
-	}
-	if user != nil && strings.TrimSpace(user.UserPrincipalName) != "" {
-		return strings.TrimSpace(user.UserPrincipalName)
+	if user != nil {
+		if email := normalizeAzureEmail(user.Mail); email != "" {
+			return email
+		}
 	}
 	if claims != nil {
-		return strings.TrimSpace(claims.PreferredUsername)
+		if email := normalizeAzureEmail(claims.Email); email != "" {
+			return email
+		}
+	}
+	if user != nil {
+		if email := normalizeAzureEmail(user.UserPrincipalName); email != "" {
+			return email
+		}
+	}
+	if claims != nil {
+		if email := normalizeAzureEmail(claims.PreferredUsername); email != "" {
+			return email
+		}
 	}
 	return ""
 }
@@ -262,11 +269,35 @@ func azureDisplayName(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftU
 	return "Microsoft Azure User"
 }
 
-func azureSSOConfigured(config map[string]any, ssoEnabled bool) bool {
+func azureSSOConfigured(ssoEnabled bool, clientID, clientSecret string) bool {
 	if !ssoEnabled {
 		return false
 	}
-	clientID, _ := config["clientId"].(string)
-	clientSecret, _ := config["clientSecret"].(string)
 	return strings.TrimSpace(clientID) != "" && strings.TrimSpace(clientSecret) != ""
+}
+
+func normalizeAzureEmail(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	addr, err := mail.ParseAddress(value)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(addr.Address)
+}
+
+func clearAzureOAuthCookies(w http.ResponseWriter, r *http.Request) {
+	for _, name := range []string{"az_oauth_state", "az_oauth_return_to"} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   isHTTPSRequest(r),
+		})
+	}
 }
