@@ -445,9 +445,12 @@ func containsStr(slice []string, s string) bool {
 }
 
 // linkInfrastructureToService updates Service entities that are referenced in
-// the Infrastructure's spec.dependsOn by:
-//  1. Adding the Infrastructure to the Service's spec.dependsOn.
-//  2. Merging the Infrastructure's spec.deployedIn into the Service's spec.deployedIn.
+// the Infrastructure's spec.dependsOn by merging the Infrastructure's
+// spec.deployedIn into the Service's spec.deployedIn.
+//
+// Note: we intentionally do NOT add the Infrastructure back into the Service's
+// dependsOn — the Infrastructure already dependsOn the Service, and adding the
+// reverse would create a circular dependency that breaks topology nesting.
 //
 // This keeps Service entities automatically up to date when infrastructure
 // components are discovered or updated by the Kubernetes sync.
@@ -455,7 +458,10 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 	dependsOn, _ := infra.Spec["dependsOn"].([]any)
 	deployedIn, _ := infra.Spec["deployedIn"].([]any)
 
-	infraRef := []any{map[string]any{"kind": "Infrastructure", "name": infra.Metadata.Name}}
+	// Nothing to propagate if the infrastructure has no deployedIn.
+	if len(deployedIn) == 0 {
+		return nil
+	}
 
 	var errs []error
 	for _, dep := range dependsOn {
@@ -485,13 +491,8 @@ func linkInfrastructureToService(ctx context.Context, store EntityStore, infra *
 			svc.Spec = make(map[string]any)
 		}
 
-		// 1. Add this Infrastructure to the Service's dependsOn.
-		svc.Spec["dependsOn"] = mergeDeployedIn(svc.Spec["dependsOn"], infraRef)
-
-		// 2. Propagate the Infrastructure's deployedIn environments to the Service.
-		if len(deployedIn) > 0 {
-			svc.Spec["deployedIn"] = mergeDeployedIn(svc.Spec["deployedIn"], deployedIn)
-		}
+		// Propagate the Infrastructure's deployedIn environments to the Service.
+		svc.Spec["deployedIn"] = mergeDeployedIn(svc.Spec["deployedIn"], deployedIn)
 
 		if err := store.UpdateEntity(ctx, svc); err != nil {
 			errs = append(errs, fmt.Errorf("update service %s: %w", svcName, err))
