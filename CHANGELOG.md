@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6](https://github.com/Go2Engle/Gantry/compare/v0.10.5...v0.10.6) (2026-04-16)
+
+
+### Bug Fixes
+
+* **ui:** add users route and implement column resizing in users table ([#67](https://github.com/Go2Engle/Gantry/issues/67)) ([598c802](https://github.com/Go2Engle/Gantry/commit/598c80262eed2617cfa95d595acbcc13dae3ade7))
+
 ## [0.10.5](https://github.com/Go2Engle/Gantry/compare/v0.10.4...v0.10.5) (2026-04-16)
 
 
