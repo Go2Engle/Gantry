@@ -42,6 +42,7 @@ function AuthenticatedLayout() {
         <ErrorBoundary>
           <Routes>
             <Route path="/topology" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><TopologyExplorer /></div>} />
+            <Route path="/users" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><UsersPage /></div>} />
             <Route path="*" element={
               <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
                 <Routes>
@@ -51,7 +52,6 @@ function AuthenticatedLayout() {
                   <Route path="/catalog/:kind/:name" element={<EntityDetail />} />
                   <Route path="/actions" element={<Actions />} />
                   <Route path="/audit" element={<AuditLog />} />
-                  <Route path="/users" element={<UsersPage />} />
                   <Route path="/plugins" element={<Plugins />} />
                   <Route path="/status" element={<StatusMonitor />} />
                   <Route path="/gitops" element={<GitOps />} />

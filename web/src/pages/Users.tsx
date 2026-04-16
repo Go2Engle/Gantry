@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2, Shield, Users, KeyRound, Globe } from 'lucide-react';
@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 import type { User } from '../lib/types';
 
 const MIN_PASSWORD_LENGTH = 8;
+const COLUMNS = ['User', 'Email', 'Groups', 'Effective Role', ''] as const;
+const MIN_COL_WIDTH = 60;
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -35,6 +37,39 @@ export default function UsersPage() {
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
+
+  // Column resize state
+  const [colWidths, setColWidths] = useState<number[] | null>(null);
+  const headerRef = useRef<HTMLTableRowElement>(null);
+  const dragRef = useRef<{ colIndex: number; startX: number; startWidths: number[] } | null>(null);
+
+  const onResizeStart = useCallback((e: React.MouseEvent, colIndex: number) => {
+    e.preventDefault();
+    const row = headerRef.current;
+    if (!row) return;
+    const cells = Array.from(row.children) as HTMLElement[];
+    const widths = cells.map((c) => c.getBoundingClientRect().width);
+    dragRef.current = { colIndex, startX: e.clientX, startWidths: widths };
+    setColWidths(widths);
+
+    const onMove = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const delta = ev.clientX - d.startX;
+      const next = [...d.startWidths];
+      const nextCol = d.colIndex + 1;
+      next[d.colIndex] = Math.max(MIN_COL_WIDTH, d.startWidths[d.colIndex] + delta);
+      next[nextCol] = Math.max(MIN_COL_WIDTH, d.startWidths[nextCol] - delta);
+      setColWidths(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   useEffect(() => {
     api.listUsers()
@@ -137,9 +172,9 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
         {/* Create user panel */}
-        <div className="lg:col-span-1">
+        <div className="w-full lg:w-72 shrink-0">
           <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-5">
             <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Add User</h2>
             <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">Create a new account</p>
@@ -253,7 +288,7 @@ export default function UsersPage() {
         </div>
 
         {/* User list */}
-        <div className="lg:col-span-2 min-w-0">
+        <div className="flex-1 min-w-0">
           <div className="overflow-hidden rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
             {loading ? (
               <div className="flex items-center justify-center py-16">
@@ -265,27 +300,48 @@ export default function UsersPage() {
                 <p className="mt-2 text-sm text-[var(--gantry-text-secondary)]">No users yet</p>
               </div>
             ) : (
-              <table className="w-full table-fixed">
+              <table className="w-full" style={colWidths ? { tableLayout: 'fixed' } : undefined}>
+                {colWidths && (
+                  <colgroup>
+                    {colWidths.map((w, i) => (
+                      <col key={i} style={{ width: w }} />
+                    ))}
+                  </colgroup>
+                )}
                 <thead>
-                  <tr className="border-b border-[var(--gantry-border)]">
-                    <th className="w-[28%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">User</th>
-                    <th className="w-[22%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Email</th>
-                    <th className="w-[25%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Groups</th>
-                    <th className="w-[15%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Effective Role</th>
-                    <th className="w-[10%] px-4 py-3" />
+                  <tr ref={headerRef} className="border-b border-[var(--gantry-border)]">
+                    {COLUMNS.map((label, i) => (
+                      <th
+                        key={i}
+                        className="relative select-none px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]"
+                      >
+                        {label}
+                        {i < COLUMNS.length - 1 && (
+                          <span
+                            onMouseDown={(e) => onResizeStart(e, i)}
+                            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[var(--gantry-accent)]/30"
+                          />
+                        )}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--gantry-border)]">
                   {users.map((u) => (
                     <tr key={u.id} className="group">
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--gantry-bg-tertiary)] text-xs font-semibold text-[var(--gantry-text-primary)]">
                             {(u.displayName || u.username)[0].toUpperCase()}
                           </div>
-                          <div>
-                            <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--gantry-text-primary)]">
-                              {u.displayName || u.username}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p
+                                className="truncate text-sm font-medium text-[var(--gantry-text-primary)]"
+                                title={u.displayName || u.username}
+                              >
+                                {u.displayName || u.username}
+                              </p>
                               {u.id === me?.id && (
                                 <span className="text-xs text-[var(--gantry-text-secondary)]">(you)</span>
                               )}
@@ -295,13 +351,17 @@ export default function UsersPage() {
                                   SSO
                                 </span>
                               )}
-                            </p>
-                            <p className="text-xs text-[var(--gantry-text-secondary)]">@{u.username}</p>
+                            </div>
+                            <p className="truncate text-xs text-[var(--gantry-text-secondary)]" title={`@${u.username}`}>@{u.username}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-[var(--gantry-text-secondary)] truncate" title={u.email || undefined}>
-                        {u.email || <span className="text-[var(--gantry-text-secondary)]/40">—</span>}
+                      <td className="px-4 py-3 text-sm text-[var(--gantry-text-secondary)]">
+                        {u.email ? (
+                          <p className="truncate" title={u.email}>{u.email}</p>
+                        ) : (
+                          <span className="text-[var(--gantry-text-secondary)]/40">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
