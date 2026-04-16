@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.5](https://github.com/Go2Engle/Gantry/compare/v0.10.4...v0.10.5) (2026-04-16)
+
+
+### Bug Fixes
+
+* **kubernetes:** update linkInfrastructureToService to prevent circular dependencies ([#64](https://github.com/Go2Engle/Gantry/issues/64)) ([4482401](https://github.com/Go2Engle/Gantry/commit/44824010dd2802e1a2f37e2037a1582fcbf5c932))
+* **ui:** prevent overflow in users table by adjusting layout and column widths ([#66](https://github.com/Go2Engle/Gantry/issues/66)) ([884a0ee](https://github.com/Go2Engle/Gantry/commit/884a0eee714d21519fecd2ad7f32674dff99da5e))
+
 ## [0.10.4](https://github.com/Go2Engle/Gantry/compare/v0.10.3...v0.10.4) (2026-04-15)
 
 
