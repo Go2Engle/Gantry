@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -148,7 +150,7 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 				gantryUser = usersByEmail[0]
 			case 0:
 			default:
-				log.Printf("azure auth: email %q matched %d Gantry users; refusing ambiguous SSO lookup", email, len(usersByEmail))
+				log.Printf("azure auth: email hash %s matched %d Gantry users; refusing ambiguous SSO lookup", hashEmailForLog(email), len(usersByEmail))
 			}
 		}
 	}
@@ -275,6 +277,11 @@ func azureDisplayName(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftU
 		return email
 	}
 	return "Microsoft Azure User"
+}
+
+func hashEmailForLog(email string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email))))
+	return hex.EncodeToString(sum[:8])
 }
 
 func azureSSOConfigured(config map[string]any, ssoEnabled bool) bool {

@@ -788,6 +788,9 @@ func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	if len(users) == 0 {
 		return nil, fmt.Errorf("user with email %q: %w", email, entity.ErrEntityNotFound)
 	}
+	if len(users) > 1 {
+		return nil, fmt.Errorf("multiple users with email %q: %w", email, entity.ErrEntityAmbiguous)
+	}
 	return users[0], nil
 }
 

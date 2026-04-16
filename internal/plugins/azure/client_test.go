@@ -110,6 +110,12 @@ func TestParseIdentityClaimsValidatesSignatureAndClaims(t *testing.T) {
 	}
 }
 
+func TestParseIdentityClaimsRejectsEmptyToken(t *testing.T) {
+	if _, err := ParseIdentityClaims("   ", "tenant-id", "client-123"); err == nil || !strings.Contains(err.Error(), "id token is empty") {
+		t.Fatalf("ParseIdentityClaims error = %v, want empty token error", err)
+	}
+}
+
 func TestParseIdentityClaimsRejectsInvalidAudience(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -154,6 +160,14 @@ func TestNormalizeScopesPreservesExplicitValue(t *testing.T) {
 	authURL := AuthorizationURL("contoso.onmicrosoft.com", "client-123", "http://localhost/callback", "state-abc", scopes)
 	if !strings.Contains(authURL, url.QueryEscape(scopes)) {
 		t.Fatalf("auth URL %q does not contain encoded scopes %q", authURL, scopes)
+	}
+}
+
+func TestNormalizeScopesAddsOpenIDWhenMissing(t *testing.T) {
+	const scopes = "profile email User.Read"
+	authURL := AuthorizationURL("contoso.onmicrosoft.com", "client-123", "http://localhost/callback", "state-abc", scopes)
+	if !strings.Contains(authURL, url.QueryEscape("openid "+scopes)) {
+		t.Fatalf("auth URL %q does not contain encoded scopes %q", authURL, "openid "+scopes)
 	}
 }
 

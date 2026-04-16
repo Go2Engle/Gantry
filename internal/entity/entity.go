@@ -111,5 +111,8 @@ var ErrEntityNotFound = errors.New("entity not found")
 // ErrEntityAlreadyExists is returned when attempting to create a duplicate entity.
 var ErrEntityAlreadyExists = errors.New("entity already exists")
 
+// ErrEntityAmbiguous is returned when a lookup expected one entity but matched many.
+var ErrEntityAmbiguous = errors.New("entity lookup is ambiguous")
+
 // ErrInvalidEntity is returned when an entity fails validation.
 var ErrInvalidEntity = errors.New("invalid entity")

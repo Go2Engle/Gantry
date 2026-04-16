@@ -86,7 +86,14 @@ func normalizeScopes(scopes string) string {
 	if scopes == "" {
 		return "openid profile email User.Read"
 	}
-	return scopes
+
+	parts := strings.Fields(scopes)
+	for _, part := range parts {
+		if strings.EqualFold(part, "openid") {
+			return strings.Join(parts, " ")
+		}
+	}
+	return strings.Join(append([]string{"openid"}, parts...), " ")
 }
 
 // AuthorizationURL builds the Microsoft OAuth authorization URL for the configured tenant.
@@ -181,7 +188,7 @@ func FetchUserWithToken(accessToken string) (*MicrosoftUser, error) {
 // ParseIdentityClaims verifies the Microsoft ID token signature and required claims before returning identity data.
 func ParseIdentityClaims(idToken, tenantID, clientID string) (*IdentityClaims, error) {
 	if strings.TrimSpace(idToken) == "" {
-		return &IdentityClaims{}, nil
+		return nil, fmt.Errorf("parse id token claims: id token is empty")
 	}
 
 	claims := &IdentityClaims{}
