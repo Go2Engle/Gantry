@@ -1,18 +1,33 @@
 package azure
 
 import (
+	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const graphAPIBase = "https://graph.microsoft.com/v1.0"
+var (
+	graphAPIBase  = "https://graph.microsoft.com/v1.0"
+	loginBaseURL  = "https://login.microsoftonline.com"
+	azureHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
+	jwksCache = struct {
+		sync.RWMutex
+		entries map[string]jwksCacheEntry
+	}{entries: map[string]jwksCacheEntry{}}
+)
+
+const jwksCacheTTL = time.Hour
 
 // MicrosoftUser is the subset of Microsoft Graph user fields Gantry needs for SSO.
 type MicrosoftUser struct {
@@ -29,6 +44,7 @@ type IdentityClaims struct {
 	Email             string `json:"email"`
 	Name              string `json:"name"`
 	PreferredUsername string `json:"preferred_username"`
+	jwt.RegisteredClaims
 }
 
 // OAuthTokenResponse is the token response from the Microsoft identity platform.
@@ -37,6 +53,24 @@ type OAuthTokenResponse struct {
 	IDToken          string `json:"id_token"`
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
+}
+
+type jwksResponse struct {
+	Keys []jsonWebKey `json:"keys"`
+}
+
+type jsonWebKey struct {
+	KID string `json:"kid"`
+	KTY string `json:"kty"`
+	ALG string `json:"alg"`
+	Use string `json:"use"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+}
+
+type jwksCacheEntry struct {
+	keys      map[string]*rsa.PublicKey
+	expiresAt time.Time
 }
 
 func normalizeTenantID(tenantID string) string {
@@ -64,7 +98,7 @@ func AuthorizationURL(tenantID, clientID, redirectURI, state, scopes string) str
 	values.Set("response_mode", "query")
 	values.Set("scope", normalizeScopes(scopes))
 	values.Set("state", state)
-	return fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?%s", url.PathEscape(normalizeTenantID(tenantID)), values.Encode())
+	return fmt.Sprintf("%s/%s/oauth2/v2.0/authorize?%s", strings.TrimRight(loginBaseURL, "/"), url.PathEscape(normalizeTenantID(tenantID)), values.Encode())
 }
 
 // ExchangeOAuthCode exchanges a Microsoft OAuth authorization code for tokens.
@@ -77,7 +111,7 @@ func ExchangeOAuthCode(code, clientID, clientSecret, tenantID, redirectURI, scop
 	values.Set("redirect_uri", redirectURI)
 	values.Set("scope", normalizeScopes(scopes))
 
-	endpoint := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", url.PathEscape(normalizeTenantID(tenantID)))
+	endpoint := fmt.Sprintf("%s/%s/oauth2/v2.0/token", strings.TrimRight(loginBaseURL, "/"), url.PathEscape(normalizeTenantID(tenantID)))
 	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(values.Encode()))
 	if err != nil {
 		return nil, err
@@ -86,7 +120,7 @@ func ExchangeOAuthCode(code, clientID, clientSecret, tenantID, redirectURI, scop
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", "gantry-azure-auth/1.0")
 
-	res, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	res, err := azureHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("exchange oauth code: %w", err)
 	}
@@ -123,7 +157,7 @@ func FetchUserWithToken(accessToken string) (*MicrosoftUser, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "gantry-azure-auth/1.0")
 
-	res, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	res, err := azureHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("microsoft graph request: %w", err)
 	}
@@ -144,16 +178,187 @@ func FetchUserWithToken(accessToken string) (*MicrosoftUser, error) {
 	return &user, nil
 }
 
-// ParseIdentityClaims extracts useful claims from the returned ID token without re-validating it.
-// The token comes directly from the Microsoft token endpoint over TLS after a successful code exchange.
-func ParseIdentityClaims(idToken string) (*IdentityClaims, error) {
+// ParseIdentityClaims verifies the Microsoft ID token signature and required claims before returning identity data.
+func ParseIdentityClaims(idToken, tenantID, clientID string) (*IdentityClaims, error) {
 	if strings.TrimSpace(idToken) == "" {
 		return &IdentityClaims{}, nil
 	}
 
-	var claims IdentityClaims
-	if _, _, err := new(jwt.Parser).ParseUnverified(idToken, &claims); err != nil {
+	claims := &IdentityClaims{}
+	parsedToken, err := jwt.ParseWithClaims(idToken, claims, func(token *jwt.Token) (any, error) {
+		if token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method %q", token.Method.Alg())
+		}
+
+		kid, _ := token.Header["kid"].(string)
+		if strings.TrimSpace(kid) == "" {
+			return nil, fmt.Errorf("missing key id in token header")
+		}
+
+		keys, err := fetchJWKSKeys(tenantID)
+		if err != nil {
+			return nil, err
+		}
+
+		publicKey, ok := keys[kid]
+		if !ok {
+			return nil, fmt.Errorf("signing key %q not found in jwks", kid)
+		}
+		return publicKey, nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("parse id token claims: %w", err)
 	}
-	return &claims, nil
+	if !parsedToken.Valid {
+		return nil, fmt.Errorf("parse id token claims: token is invalid")
+	}
+
+	if err := validateIdentityClaims(claims, tenantID, clientID); err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+func validateIdentityClaims(claims *IdentityClaims, tenantID, clientID string) error {
+	now := time.Now()
+	if claims.ExpiresAt == nil || !claims.ExpiresAt.After(now) {
+		return fmt.Errorf("parse id token claims: token expiration is invalid")
+	}
+	if claims.NotBefore != nil && claims.NotBefore.After(now) {
+		return fmt.Errorf("parse id token claims: token is not valid yet")
+	}
+	if strings.TrimSpace(clientID) == "" {
+		return fmt.Errorf("parse id token claims: missing client id for audience validation")
+	}
+	if !audienceContains(claims.Audience, clientID) {
+		return fmt.Errorf("parse id token claims: audience %q does not include client id", strings.Join(claims.Audience, ","))
+	}
+
+	expectedIssuer := expectedIssuer(tenantID, claims)
+	if claims.Issuer != expectedIssuer {
+		return fmt.Errorf("parse id token claims: issuer %q does not match expected %q", claims.Issuer, expectedIssuer)
+	}
+	return nil
+}
+
+func expectedIssuer(tenantID string, claims *IdentityClaims) string {
+	tenant := normalizeTenantID(tenantID)
+	if isMultiTenantAuthority(tenant) && claims != nil && strings.TrimSpace(claims.TID) != "" {
+		tenant = strings.TrimSpace(claims.TID)
+	}
+	return fmt.Sprintf("%s/%s/v2.0", strings.TrimRight(loginBaseURL, "/"), tenant)
+}
+
+func isMultiTenantAuthority(tenantID string) bool {
+	switch strings.ToLower(strings.TrimSpace(tenantID)) {
+	case "common", "organizations", "consumers":
+		return true
+	default:
+		return false
+	}
+}
+
+func audienceContains(audience jwt.ClaimStrings, clientID string) bool {
+	for _, aud := range audience {
+		if aud == clientID {
+			return true
+		}
+	}
+	return false
+}
+
+func fetchJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
+	tenant := normalizeTenantID(tenantID)
+
+	jwksCache.RLock()
+	entry, ok := jwksCache.entries[tenant]
+	jwksCache.RUnlock()
+	if ok && time.Now().Before(entry.expiresAt) {
+		return entry.keys, nil
+	}
+
+	keys, err := requestJWKSKeys(tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	jwksCache.Lock()
+	jwksCache.entries[tenant] = jwksCacheEntry{keys: keys, expiresAt: time.Now().Add(jwksCacheTTL)}
+	jwksCache.Unlock()
+	return keys, nil
+}
+
+func requestJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
+	endpoint := fmt.Sprintf("%s/%s/discovery/v2.0/keys", strings.TrimRight(loginBaseURL, "/"), url.PathEscape(tenantID))
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build jwks request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "gantry-azure-auth/1.0")
+
+	res, err := azureHTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch jwks: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read jwks response: %w", err)
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("fetch jwks: HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload jwksResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode jwks response: %w", err)
+	}
+
+	keys := make(map[string]*rsa.PublicKey, len(payload.Keys))
+	for _, key := range payload.Keys {
+		if strings.ToUpper(key.KTY) != "RSA" || strings.TrimSpace(key.KID) == "" {
+			continue
+		}
+		publicKey, err := rsaPublicKeyFromJWK(key)
+		if err != nil {
+			return nil, err
+		}
+		keys[key.KID] = publicKey
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("jwks response did not contain usable rsa keys")
+	}
+	return keys, nil
+}
+
+func rsaPublicKeyFromJWK(key jsonWebKey) (*rsa.PublicKey, error) {
+	modulus, err := base64.RawURLEncoding.DecodeString(key.N)
+	if err != nil {
+		return nil, fmt.Errorf("decode jwks modulus for key %q: %w", key.KID, err)
+	}
+	exponent, err := base64.RawURLEncoding.DecodeString(key.E)
+	if err != nil {
+		return nil, fmt.Errorf("decode jwks exponent for key %q: %w", key.KID, err)
+	}
+
+	e := 0
+	for _, b := range exponent {
+		e = (e << 8) | int(b)
+	}
+	if e == 0 {
+		return nil, fmt.Errorf("jwks exponent for key %q is invalid", key.KID)
+	}
+
+	return &rsa.PublicKey{
+		N: new(big.Int).SetBytes(modulus),
+		E: e,
+	}, nil
+}
+
+func clearJWKSCache() {
+	jwksCache.Lock()
+	defer jwksCache.Unlock()
+	jwksCache.entries = map[string]jwksCacheEntry{}
 }

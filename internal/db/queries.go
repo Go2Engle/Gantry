@@ -781,30 +781,50 @@ func (d *DB) InitializeBootstrapAdminPassword(ctx context.Context, authSvc *auth
 
 // GetUserByEmail retrieves a user by their email address.
 func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	row := d.queryRow(ctx,
-		`SELECT id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at
-		 FROM users WHERE email = ? LIMIT 1`, email)
-	u := &User{}
-	var displayName, emailVal sql.NullString
-	var createdAt, updatedAt sql.NullTime
-	var ssoOnly int
-	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &displayName, &emailVal, &u.Role, &ssoOnly, &createdAt, &updatedAt)
-	if err == sql.ErrNoRows {
+	users, err := d.GetUsersByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if len(users) == 0 {
 		return nil, fmt.Errorf("user with email %q: %w", email, entity.ErrEntityNotFound)
 	}
+	return users[0], nil
+}
+
+// GetUsersByEmail retrieves every user that matches an email address.
+func (d *DB) GetUsersByEmail(ctx context.Context, email string) ([]*User, error) {
+	rows, err := d.queryRows(ctx,
+		`SELECT id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at
+		 FROM users WHERE email = ? ORDER BY created_at ASC, id ASC`, email)
 	if err != nil {
-		return nil, fmt.Errorf("querying user by email: %w", err)
+		return nil, fmt.Errorf("querying users by email: %w", err)
 	}
-	u.DisplayName = displayName.String
-	u.Email = emailVal.String
-	u.SSOOnly = ssoOnly != 0
-	if createdAt.Valid {
-		u.CreatedAt = createdAt.Time
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		u := &User{}
+		var displayName, emailVal sql.NullString
+		var createdAt, updatedAt sql.NullTime
+		var ssoOnly int
+		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &displayName, &emailVal, &u.Role, &ssoOnly, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("querying users by email: %w", err)
+		}
+		u.DisplayName = displayName.String
+		u.Email = emailVal.String
+		u.SSOOnly = ssoOnly != 0
+		if createdAt.Valid {
+			u.CreatedAt = createdAt.Time
+		}
+		if updatedAt.Valid {
+			u.UpdatedAt = updatedAt.Time
+		}
+		users = append(users, u)
 	}
-	if updatedAt.Valid {
-		u.UpdatedAt = updatedAt.Time
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("querying users by email: %w", err)
 	}
-	return u, nil
+	return users, nil
 }
 
 // DeleteUser removes a user by ID.

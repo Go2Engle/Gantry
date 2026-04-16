@@ -130,24 +130,24 @@ const PLUGIN_SECTIONS: Record<string, Array<{
       renderBanner: () => {
         const origin = window.location.origin;
         return (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 px-4 py-3 space-y-3">
+          <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-tertiary)] px-4 py-3 space-y-3">
             <div className="flex items-start gap-2">
-              <span className="text-blue-500 text-base leading-none mt-0.5">ℹ</span>
+              <span className="text-[var(--gantry-accent)] text-base leading-none mt-0.5">ℹ</span>
               <div>
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Azure app registration required</p>
-                <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                <p className="text-sm font-medium text-[var(--gantry-text-primary)]">Azure app registration required</p>
+                <p className="text-xs text-[var(--gantry-text-secondary)] mt-0.5">
                   Create an app registration in the Azure portal, add the Microsoft Graph <code>User.Read</code> delegated permission, and configure this redirect URI:
                 </p>
               </div>
             </div>
             <div className="space-y-2 pl-6">
               <div>
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-0.5">Redirect URI</p>
-                <code className="block text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 font-mono px-2.5 py-1.5 rounded">
+                <p className="text-xs font-semibold text-[var(--gantry-text-primary)] mb-0.5">Redirect URI</p>
+                <code className="block text-xs bg-[var(--gantry-bg-secondary)] text-[var(--gantry-text-primary)] font-mono px-2.5 py-1.5 rounded border border-[var(--gantry-border)]">
                   {origin}/api/v1/auth/azure/callback
                 </code>
               </div>
-              <p className="text-xs text-blue-700 dark:text-blue-400">
+              <p className="text-xs text-[var(--gantry-text-secondary)]">
                 Use <code>common</code> as the tenant ID for multi-tenant sign-in, or set a specific tenant ID / domain to restrict access.
               </p>
             </div>

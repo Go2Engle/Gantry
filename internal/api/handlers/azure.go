@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -18,9 +19,8 @@ func (h *Handlers) GetAzureSSOConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
-	clientID, _ := p.Config["clientId"].(string)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ssoEnabled": ssoEnabled && clientID != "",
+		"ssoEnabled": azureSSOConfigured(p.Config, ssoEnabled),
 	})
 }
 
@@ -34,7 +34,7 @@ func (h *Handlers) AzureOAuthBegin(w http.ResponseWriter, r *http.Request) {
 
 	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
 	clientID, _ := p.Config["clientId"].(string)
-	if !ssoEnabled || clientID == "" {
+	if !azureSSOConfigured(p.Config, ssoEnabled) {
 		writeError(w, http.StatusBadRequest, "Microsoft Azure SSO is not configured")
 		return
 	}
@@ -106,9 +106,14 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	clientSecret, _ := p.Config["clientSecret"].(string)
 	tenantID, _ := p.Config["tenantId"].(string)
 	scopes, _ := p.Config["scopes"].(string)
+	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
 	defaultRole, _ := p.Config["defaultRole"].(string)
 	if defaultRole == "" {
 		defaultRole = "viewer"
+	}
+	if !azureSSOConfigured(p.Config, ssoEnabled) {
+		writeError(w, http.StatusBadRequest, "Microsoft Azure SSO is not configured")
+		return
 	}
 
 	redirectURI := requestOrigin(r) + "/api/v1/auth/azure/callback"
@@ -118,7 +123,7 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := azplugin.ParseIdentityClaims(tokenResp.IDToken)
+	claims, err := azplugin.ParseIdentityClaims(tokenResp.IDToken, tenantID, clientID)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to parse id token: "+err.Error())
 		return
@@ -136,7 +141,16 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	email := azureEmail(claims, msUser)
 	if gantryUser == nil && email != "" {
-		gantryUser, _ = h.DB.GetUserByEmail(ctx, email)
+		usersByEmail, err := h.DB.GetUsersByEmail(ctx, email)
+		if err == nil {
+			switch len(usersByEmail) {
+			case 1:
+				gantryUser = usersByEmail[0]
+			case 0:
+			default:
+				log.Printf("azure auth: email %q matched %d Gantry users; refusing ambiguous SSO lookup", email, len(usersByEmail))
+			}
+		}
 	}
 
 	returnTo := ""
@@ -261,4 +275,13 @@ func azureDisplayName(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftU
 		return email
 	}
 	return "Microsoft Azure User"
+}
+
+func azureSSOConfigured(config map[string]any, ssoEnabled bool) bool {
+	if !ssoEnabled {
+		return false
+	}
+	clientID, _ := config["clientId"].(string)
+	clientSecret, _ := config["clientSecret"].(string)
+	return strings.TrimSpace(clientID) != "" && strings.TrimSpace(clientSecret) != ""
 }
