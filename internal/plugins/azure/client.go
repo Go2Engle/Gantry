@@ -276,11 +276,12 @@ func audienceContains(audience jwt.ClaimStrings, clientID string) bool {
 
 func fetchJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
 	tenant := normalizeTenantID(tenantID)
+	now := time.Now()
 
 	jwksCache.RLock()
 	entry, ok := jwksCache.entries[tenant]
 	jwksCache.RUnlock()
-	if ok && time.Now().Before(entry.expiresAt) {
+	if ok && now.Before(entry.expiresAt) {
 		return entry.keys, nil
 	}
 
@@ -290,8 +291,11 @@ func fetchJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
 	}
 
 	jwksCache.Lock()
+	defer jwksCache.Unlock()
+	if entry, ok := jwksCache.entries[tenant]; ok && time.Now().Before(entry.expiresAt) {
+		return entry.keys, nil
+	}
 	jwksCache.entries[tenant] = jwksCacheEntry{keys: keys, expiresAt: time.Now().Add(jwksCacheTTL)}
-	jwksCache.Unlock()
 	return keys, nil
 }
 
