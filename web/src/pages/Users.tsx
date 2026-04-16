@@ -253,8 +253,8 @@ export default function UsersPage() {
         </div>
 
         {/* User list */}
-        <div className="lg:col-span-2">
-          <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
+        <div className="lg:col-span-2 min-w-0">
+          <div className="overflow-hidden rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
             {loading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--gantry-accent)] border-t-transparent" />
@@ -265,14 +265,14 @@ export default function UsersPage() {
                 <p className="mt-2 text-sm text-[var(--gantry-text-secondary)]">No users yet</p>
               </div>
             ) : (
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead>
                   <tr className="border-b border-[var(--gantry-border)]">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Email</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Groups</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Effective Role</th>
-                    <th className="px-4 py-3" />
+                    <th className="w-[28%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">User</th>
+                    <th className="w-[22%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Email</th>
+                    <th className="w-[25%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Groups</th>
+                    <th className="w-[15%] px-4 py-3 text-left text-xs font-medium text-[var(--gantry-text-secondary)]">Effective Role</th>
+                    <th className="w-[10%] px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--gantry-border)]">
@@ -300,7 +300,7 @@ export default function UsersPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-[var(--gantry-text-secondary)]">
+                      <td className="px-4 py-3 text-sm text-[var(--gantry-text-secondary)] truncate" title={u.email || undefined}>
                         {u.email || <span className="text-[var(--gantry-text-secondary)]/40">—</span>}
                       </td>
                       <td className="px-4 py-3">
