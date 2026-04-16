@@ -202,14 +202,9 @@ func ParseIdentityClaims(idToken, tenantID, clientID string) (*IdentityClaims, e
 			return nil, fmt.Errorf("missing key id in token header")
 		}
 
-		keys, err := fetchJWKSKeys(tenantID)
+		publicKey, err := fetchJWKSPublicKey(tenantID, kid)
 		if err != nil {
 			return nil, err
-		}
-
-		publicKey, ok := keys[kid]
-		if !ok {
-			return nil, fmt.Errorf("signing key %q not found in jwks", kid)
 		}
 		return publicKey, nil
 	})
@@ -275,13 +270,36 @@ func audienceContains(audience jwt.ClaimStrings, clientID string) bool {
 }
 
 func fetchJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
+	return fetchJWKSKeysWithOptions(tenantID, false)
+}
+
+func fetchJWKSPublicKey(tenantID, kid string) (*rsa.PublicKey, error) {
+	keys, err := fetchJWKSKeysWithOptions(tenantID, false)
+	if err != nil {
+		return nil, err
+	}
+	if publicKey, ok := keys[kid]; ok {
+		return publicKey, nil
+	}
+
+	keys, err = fetchJWKSKeysWithOptions(tenantID, true)
+	if err != nil {
+		return nil, err
+	}
+	if publicKey, ok := keys[kid]; ok {
+		return publicKey, nil
+	}
+	return nil, fmt.Errorf("signing key %q not found in jwks", kid)
+}
+
+func fetchJWKSKeysWithOptions(tenantID string, forceRefresh bool) (map[string]*rsa.PublicKey, error) {
 	tenant := normalizeTenantID(tenantID)
 	now := time.Now()
 
 	jwksCache.RLock()
 	entry, ok := jwksCache.entries[tenant]
 	jwksCache.RUnlock()
-	if ok && now.Before(entry.expiresAt) {
+	if !forceRefresh && ok && now.Before(entry.expiresAt) {
 		return entry.keys, nil
 	}
 
@@ -292,8 +310,10 @@ func fetchJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
 
 	jwksCache.Lock()
 	defer jwksCache.Unlock()
-	if entry, ok := jwksCache.entries[tenant]; ok && time.Now().Before(entry.expiresAt) {
-		return entry.keys, nil
+	if !forceRefresh {
+		if entry, ok := jwksCache.entries[tenant]; ok && time.Now().Before(entry.expiresAt) {
+			return entry.keys, nil
+		}
 	}
 	jwksCache.entries[tenant] = jwksCacheEntry{keys: keys, expiresAt: time.Now().Add(jwksCacheTTL)}
 	return keys, nil

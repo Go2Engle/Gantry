@@ -121,6 +121,11 @@ func (h *Handlers) EnablePlugin(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
+		if name == "microsoft-azure" && ssoEnabled && !azureSSOConfigured(p.Config, ssoEnabled) {
+			writeError(w, http.StatusBadRequest, "Microsoft Azure SSO requires both client ID and client secret before enabling")
+			return
+		}
 	}
 
 	if err := h.DB.UpdatePluginEnabled(r.Context(), name, body.Enabled); err != nil {

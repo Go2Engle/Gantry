@@ -155,6 +155,76 @@ func TestParseIdentityClaimsRejectsInvalidAudience(t *testing.T) {
 	}
 }
 
+func TestParseIdentityClaimsRefreshesJWKSOnUnknownKeyID(t *testing.T) {
+	const (
+		configuredTenant = "common"
+		tokenTenant      = "tenant-id"
+		clientID         = "client-123"
+		freshKeyID       = "fresh-key"
+	)
+
+	stalePrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Generate stale key: %v", err)
+	}
+	freshPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Generate fresh key: %v", err)
+	}
+
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+
+		keys := []map[string]any{jwkFromPublicKey("stale-key", &stalePrivateKey.PublicKey)}
+		if requestCount > 1 {
+			keys = append(keys, jwkFromPublicKey(freshKeyID, &freshPrivateKey.PublicKey))
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]any{"keys": keys}); err != nil {
+			t.Fatalf("Encode JWKS: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	oldLoginBaseURL := loginBaseURL
+	loginBaseURL = server.URL
+	defer func() { loginBaseURL = oldLoginBaseURL }()
+	clearJWKSCache()
+	defer clearJWKSCache()
+
+	cachedKeys, err := requestJWKSKeys(configuredTenant)
+	if err != nil {
+		t.Fatalf("requestJWKSKeys: %v", err)
+	}
+	jwksCache.Lock()
+	jwksCache.entries[configuredTenant] = jwksCacheEntry{
+		keys:      cachedKeys,
+		expiresAt: time.Now().Add(time.Hour),
+	}
+	jwksCache.Unlock()
+
+	tokenString, err := newSignedToken(freshPrivateKey, freshKeyID, jwt.MapClaims{
+		"oid":                "user-oid",
+		"tid":                tokenTenant,
+		"preferred_username": "person@example.com",
+		"iss":                fmt.Sprintf("%s/%s/v2.0", server.URL, tokenTenant),
+		"aud":                clientID,
+		"exp":                time.Now().Add(time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+
+	if _, err := ParseIdentityClaims(tokenString, configuredTenant, clientID); err != nil {
+		t.Fatalf("ParseIdentityClaims: %v", err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("JWKS request count = %d, want 2", requestCount)
+	}
+}
+
 func TestNormalizeScopesPreservesExplicitValue(t *testing.T) {
 	const scopes = "openid profile email User.Read GroupMember.Read.All"
 	authURL := AuthorizationURL("contoso.onmicrosoft.com", "client-123", "http://localhost/callback", "state-abc", scopes)

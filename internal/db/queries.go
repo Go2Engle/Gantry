@@ -798,7 +798,7 @@ func (d *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 func (d *DB) GetUsersByEmail(ctx context.Context, email string) ([]*User, error) {
 	rows, err := d.queryRows(ctx,
 		`SELECT id, username, password_hash, display_name, email, role, sso_only, created_at, updated_at
-		 FROM users WHERE email = ? ORDER BY created_at ASC, id ASC`, email)
+		 FROM users WHERE lower(trim(email)) = lower(trim(?)) ORDER BY created_at ASC, id ASC`, email)
 	if err != nil {
 		return nil, fmt.Errorf("querying users by email: %w", err)
 	}
