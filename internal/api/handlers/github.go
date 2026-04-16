@@ -122,14 +122,14 @@ func (h *Handlers) GitHubOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// Exchange code → GitHub access token.
 	accessToken, err := ghplugin.ExchangeOAuthCode(code, clientID, clientSecret)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to exchange oauth code: "+err.Error())
+		writeSSOProviderError(w, "GitHub", "exchange oauth code", err)
 		return
 	}
 
 	// Fetch GitHub user profile.
 	ghUser, err := ghplugin.FetchUserWithToken(accessToken)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch GitHub user: "+err.Error())
+		writeSSOProviderError(w, "GitHub", "fetch GitHub user", err)
 		return
 	}
 

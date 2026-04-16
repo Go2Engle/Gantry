@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -121,19 +119,19 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	redirectURI := requestOrigin(r) + "/api/v1/auth/azure/callback"
 	tokenResp, err := azplugin.ExchangeOAuthCode(code, clientID, clientSecret, tenantID, redirectURI, scopes)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to exchange oauth code: "+err.Error())
+		writeSSOProviderError(w, "Microsoft Azure", "exchange oauth code", err)
 		return
 	}
 
 	claims, err := azplugin.ParseIdentityClaims(tokenResp.IDToken, tenantID, clientID)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to parse id token: "+err.Error())
+		writeSSOProviderError(w, "Microsoft Azure", "parse id token", err)
 		return
 	}
 
 	msUser, err := azplugin.FetchUserWithToken(tokenResp.AccessToken)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch Microsoft Graph user: "+err.Error())
+		writeSSOProviderError(w, "Microsoft Azure", "fetch Microsoft Graph user", err)
 		return
 	}
 
@@ -277,11 +275,6 @@ func azureDisplayName(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftU
 		return email
 	}
 	return "Microsoft Azure User"
-}
-
-func hashEmailForLog(email string) string {
-	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email))))
-	return hex.EncodeToString(sum[:8])
 }
 
 func azureSSOConfigured(config map[string]any, ssoEnabled bool) bool {

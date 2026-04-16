@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -59,16 +60,18 @@ func TestParseIdentityClaimsValidatesSignatureAndClaims(t *testing.T) {
 		t.Fatalf("GenerateKey: %v", err)
 	}
 
+	handlerErrCh := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.URL.Path, "/common/discovery/v2.0/keys"; got != want {
-			t.Fatalf("JWKS path = %q, want %q", got, want)
+			recordJWKSHandlerError(w, handlerErrCh, "JWKS path = %q, want %q", got, want)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"keys": []map[string]any{jwkFromPublicKey(keyID, &privateKey.PublicKey)},
 		}); err != nil {
-			t.Fatalf("Encode JWKS: %v", err)
+			recordJWKSHandlerError(w, handlerErrCh, "Encode JWKS: %v", err)
 		}
 	}))
 	defer server.Close()
@@ -96,6 +99,7 @@ func TestParseIdentityClaimsValidatesSignatureAndClaims(t *testing.T) {
 	}
 
 	claims, err := ParseIdentityClaims(tokenString, configuredTenant, clientID)
+	assertNoJWKSHandlerError(t, handlerErrCh)
 	if err != nil {
 		t.Fatalf("ParseIdentityClaims: %v", err)
 	}
@@ -122,12 +126,13 @@ func TestParseIdentityClaimsRejectsInvalidAudience(t *testing.T) {
 		t.Fatalf("GenerateKey: %v", err)
 	}
 
+	handlerErrCh := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"keys": []map[string]any{jwkFromPublicKey("test-key", &privateKey.PublicKey)},
 		}); err != nil {
-			t.Fatalf("Encode JWKS: %v", err)
+			recordJWKSHandlerError(w, handlerErrCh, "Encode JWKS: %v", err)
 		}
 	}))
 	defer server.Close()
@@ -151,8 +156,10 @@ func TestParseIdentityClaimsRejectsInvalidAudience(t *testing.T) {
 	}
 
 	if _, err := ParseIdentityClaims(tokenString, "common", "client-123"); err == nil || !strings.Contains(err.Error(), "audience") {
+		assertNoJWKSHandlerError(t, handlerErrCh)
 		t.Fatalf("ParseIdentityClaims error = %v, want audience validation error", err)
 	}
+	assertNoJWKSHandlerError(t, handlerErrCh)
 }
 
 func TestParseIdentityClaimsRefreshesJWKSOnUnknownKeyID(t *testing.T) {
@@ -172,18 +179,19 @@ func TestParseIdentityClaimsRefreshesJWKSOnUnknownKeyID(t *testing.T) {
 		t.Fatalf("Generate fresh key: %v", err)
 	}
 
-	requestCount := 0
+	var requestCount atomic.Int32
+	handlerErrCh := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
+		current := requestCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 
 		keys := []map[string]any{jwkFromPublicKey("stale-key", &stalePrivateKey.PublicKey)}
-		if requestCount > 1 {
+		if current > 1 {
 			keys = append(keys, jwkFromPublicKey(freshKeyID, &freshPrivateKey.PublicKey))
 		}
 
 		if err := json.NewEncoder(w).Encode(map[string]any{"keys": keys}); err != nil {
-			t.Fatalf("Encode JWKS: %v", err)
+			recordJWKSHandlerError(w, handlerErrCh, "Encode JWKS: %v", err)
 		}
 	}))
 	defer server.Close()
@@ -195,6 +203,7 @@ func TestParseIdentityClaimsRefreshesJWKSOnUnknownKeyID(t *testing.T) {
 	defer clearJWKSCache()
 
 	cachedKeys, err := requestJWKSKeys(configuredTenant)
+	assertNoJWKSHandlerError(t, handlerErrCh)
 	if err != nil {
 		t.Fatalf("requestJWKSKeys: %v", err)
 	}
@@ -218,10 +227,12 @@ func TestParseIdentityClaimsRefreshesJWKSOnUnknownKeyID(t *testing.T) {
 	}
 
 	if _, err := ParseIdentityClaims(tokenString, configuredTenant, clientID); err != nil {
+		assertNoJWKSHandlerError(t, handlerErrCh)
 		t.Fatalf("ParseIdentityClaims: %v", err)
 	}
-	if requestCount != 2 {
-		t.Fatalf("JWKS request count = %d, want 2", requestCount)
+	assertNoJWKSHandlerError(t, handlerErrCh)
+	if got := requestCount.Load(); got != 2 {
+		t.Fatalf("JWKS request count = %d, want 2", got)
 	}
 }
 
@@ -255,5 +266,22 @@ func jwkFromPublicKey(keyID string, publicKey *rsa.PublicKey) map[string]any {
 		"use": "sig",
 		"n":   base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
 		"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(publicKey.E)).Bytes()),
+	}
+}
+
+func recordJWKSHandlerError(w http.ResponseWriter, handlerErrCh chan<- error, format string, args ...any) {
+	select {
+	case handlerErrCh <- fmt.Errorf(format, args...):
+	default:
+	}
+	http.Error(w, "test handler error", http.StatusInternalServerError)
+}
+
+func assertNoJWKSHandlerError(t *testing.T, handlerErrCh <-chan error) {
+	t.Helper()
+	select {
+	case err := <-handlerErrCh:
+		t.Fatalf("jwks test server handler error: %v", err)
+	default:
 	}
 }
