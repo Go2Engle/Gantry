@@ -1,6 +1,10 @@
 package handlers
 
-import "testing"
+import (
+	"testing"
+
+	azplugin "github.com/go2engle/gantry/internal/plugins/azure"
+)
 
 func TestAzureSSOConfigured(t *testing.T) {
 	tests := []struct {
@@ -44,4 +48,22 @@ func TestAzureSSOConfigured(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAzureUsername(t *testing.T) {
+	t.Run("uses immutable tenant and object identifiers", func(t *testing.T) {
+		username, err := azureUsername(&azplugin.IdentityClaims{TID: "Tenant-ID", OID: "Object-ID"})
+		if err != nil {
+			t.Fatalf("azureUsername() error = %v, want nil", err)
+		}
+		if want := "azure:tenant-id:object-id"; username != want {
+			t.Fatalf("azureUsername() = %q, want %q", username, want)
+		}
+	})
+
+	t.Run("fails closed when immutable identifiers are missing", func(t *testing.T) {
+		if _, err := azureUsername(&azplugin.IdentityClaims{PreferredUsername: "user@example.com"}); err == nil {
+			t.Fatal("azureUsername() error = nil, want failure when oid/tid are missing")
+		}
+	})
 }

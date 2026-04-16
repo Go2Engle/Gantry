@@ -17,17 +17,24 @@ import (
 )
 
 var (
-	graphAPIBase  = "https://graph.microsoft.com/v1.0"
-	loginBaseURL  = "https://login.microsoftonline.com"
+	graphAPIBase   = "https://graph.microsoft.com/v1.0"
+	loginBaseURL   = "https://login.microsoftonline.com"
 	azureHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 	jwksCache = struct {
 		sync.RWMutex
-		entries map[string]jwksCacheEntry
-	}{entries: map[string]jwksCacheEntry{}}
+		entries   map[string]jwksCacheEntry
+		refreshes map[string]chan struct{}
+	}{
+		entries:   map[string]jwksCacheEntry{},
+		refreshes: map[string]chan struct{}{},
+	}
 )
 
-const jwksCacheTTL = time.Hour
+const (
+	jwksCacheTTL            = time.Hour
+	jwksForceRefreshCooldown = time.Minute
+)
 
 // MicrosoftUser is the subset of Microsoft Graph user fields Gantry needs for SSO.
 type MicrosoftUser struct {
@@ -69,8 +76,9 @@ type jsonWebKey struct {
 }
 
 type jwksCacheEntry struct {
-	keys      map[string]*rsa.PublicKey
-	expiresAt time.Time
+	keys        map[string]*rsa.PublicKey
+	expiresAt   time.Time
+	refreshedAt time.Time
 }
 
 func normalizeTenantID(tenantID string) string {
@@ -294,29 +302,47 @@ func fetchJWKSPublicKey(tenantID, kid string) (*rsa.PublicKey, error) {
 
 func fetchJWKSKeysWithOptions(tenantID string, forceRefresh bool) (map[string]*rsa.PublicKey, error) {
 	tenant := normalizeTenantID(tenantID)
-	now := time.Now()
 
-	jwksCache.RLock()
-	entry, ok := jwksCache.entries[tenant]
-	jwksCache.RUnlock()
-	if !forceRefresh && ok && now.Before(entry.expiresAt) {
-		return entry.keys, nil
-	}
-
-	keys, err := requestJWKSKeys(tenant)
-	if err != nil {
-		return nil, err
-	}
-
-	jwksCache.Lock()
-	defer jwksCache.Unlock()
-	if !forceRefresh {
-		if entry, ok := jwksCache.entries[tenant]; ok && time.Now().Before(entry.expiresAt) {
+	for {
+		now := time.Now()
+		jwksCache.Lock()
+		entry, ok := jwksCache.entries[tenant]
+		if !forceRefresh && ok && now.Before(entry.expiresAt) {
+			jwksCache.Unlock()
 			return entry.keys, nil
 		}
+		if forceRefresh && ok && !entry.refreshedAt.IsZero() && now.Sub(entry.refreshedAt) < jwksForceRefreshCooldown {
+			jwksCache.Unlock()
+			return entry.keys, nil
+		}
+		if waitCh, refreshing := jwksCache.refreshes[tenant]; refreshing {
+			jwksCache.Unlock()
+			<-waitCh
+			continue
+		}
+
+		waitCh := make(chan struct{})
+		jwksCache.refreshes[tenant] = waitCh
+		jwksCache.Unlock()
+
+		keys, err := requestJWKSKeys(tenant)
+		fetchedAt := time.Now()
+
+		jwksCache.Lock()
+		delete(jwksCache.refreshes, tenant)
+		close(waitCh)
+		if err != nil {
+			jwksCache.Unlock()
+			return nil, err
+		}
+		jwksCache.entries[tenant] = jwksCacheEntry{
+			keys:        keys,
+			expiresAt:   fetchedAt.Add(jwksCacheTTL),
+			refreshedAt: fetchedAt,
+		}
+		jwksCache.Unlock()
+		return keys, nil
 	}
-	jwksCache.entries[tenant] = jwksCacheEntry{keys: keys, expiresAt: time.Now().Add(jwksCacheTTL)}
-	return keys, nil
 }
 
 func requestJWKSKeys(tenantID string) (map[string]*rsa.PublicKey, error) {
@@ -374,11 +400,12 @@ func rsaPublicKeyFromJWK(key jsonWebKey) (*rsa.PublicKey, error) {
 		return nil, fmt.Errorf("decode jwks exponent for key %q: %w", key.KID, err)
 	}
 
-	e := 0
-	for _, b := range exponent {
-		e = (e << 8) | int(b)
+	eBig := new(big.Int).SetBytes(exponent)
+	if eBig.Sign() <= 0 || !eBig.IsInt64() {
+		return nil, fmt.Errorf("jwks exponent for key %q is invalid", key.KID)
 	}
-	if e == 0 {
+	e := int(eBig.Int64())
+	if int64(e) != eBig.Int64() {
 		return nil, fmt.Errorf("jwks exponent for key %q is invalid", key.KID)
 	}
 
@@ -392,4 +419,5 @@ func clearJWKSCache() {
 	jwksCache.Lock()
 	defer jwksCache.Unlock()
 	jwksCache.entries = map[string]jwksCacheEntry{}
+	jwksCache.refreshes = map[string]chan struct{}{}
 }

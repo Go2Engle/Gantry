@@ -136,7 +136,11 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	username := azureUsername(claims, msUser, tenantID)
+	username, err := azureUsername(claims)
+	if err != nil {
+		writeSSOProviderError(w, "Microsoft Azure", "derive identity", err)
+		return
+	}
 	gantryUser, _ := h.DB.GetUserByUsername(ctx, username)
 
 	email := azureEmail(claims, msUser)
@@ -219,30 +223,11 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
-func azureUsername(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftUser, configuredTenant string) string {
+func azureUsername(claims *azplugin.IdentityClaims) (string, error) {
 	if claims != nil && claims.TID != "" && claims.OID != "" {
-		return fmt.Sprintf("azure:%s:%s", strings.ToLower(claims.TID), strings.ToLower(claims.OID))
+		return fmt.Sprintf("azure:%s:%s", strings.ToLower(claims.TID), strings.ToLower(claims.OID)), nil
 	}
-	if user != nil && user.ID != "" {
-		tenant := strings.TrimSpace(configuredTenant)
-		if claims != nil && claims.TID != "" {
-			tenant = claims.TID
-		}
-		if tenant != "" && !strings.EqualFold(tenant, "common") && !strings.EqualFold(tenant, "organizations") && !strings.EqualFold(tenant, "consumers") {
-			return fmt.Sprintf("azure:%s:%s", strings.ToLower(tenant), strings.ToLower(user.ID))
-		}
-		return "azure:" + strings.ToLower(user.ID)
-	}
-	if email := azureEmail(claims, user); email != "" {
-		return "azure:" + strings.ToLower(email)
-	}
-	if claims != nil && claims.PreferredUsername != "" {
-		return "azure:" + strings.ToLower(claims.PreferredUsername)
-	}
-	if user != nil && user.UserPrincipalName != "" {
-		return "azure:" + strings.ToLower(user.UserPrincipalName)
-	}
-	return "azure:unknown"
+	return "", fmt.Errorf("validated Microsoft Azure identity is missing tenant or object identifier")
 }
 
 func azureEmail(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftUser) string {
