@@ -12,12 +12,17 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [gitHubSSOEnabled, setGitHubSSOEnabled] = useState(false);
+  const [azureSSOEnabled, setAzureSSOEnabled] = useState(false);
   const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     api.getGitHubSSOConfig()
-      .then((cfg) => setSsoEnabled(cfg.ssoEnabled))
+      .then((cfg) => setGitHubSSOEnabled(cfg.ssoEnabled))
+      .catch(() => {}); // SSO check is non-critical
+
+    api.getAzureSSOConfig()
+      .then((cfg) => setAzureSSOEnabled(cfg.ssoEnabled))
       .catch(() => {}); // SSO check is non-critical
 
     api.getVersion().then((v) => setAppVersion(v.version)).catch(() => {});
@@ -26,7 +31,7 @@ export default function Login() {
     const params = new URLSearchParams(window.location.search);
     const ssoError = params.get('error');
     if (ssoError === 'sso_not_authorized') {
-      setError('Your GitHub account is not authorized for Gantry. Ask an administrator to create your account first.');
+      setError('Your single sign-on account is not authorized for Gantry. Ask an administrator to create your account first.');
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -66,16 +71,28 @@ export default function Login() {
 
         {/* Login Card */}
         <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-6 shadow-sm">
-          {/* GitHub SSO button */}
-          {ssoEnabled && (
+          {(gitHubSSOEnabled || azureSSOEnabled) && (
             <>
-              <a
-                href={`/api/v1/auth/github?return_to=${encodeURIComponent(window.location.origin)}`}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-text-primary)] transition-colors hover:bg-[var(--gantry-bg-secondary)]"
-              >
-                <Github className="h-4 w-4" />
-                Sign in with GitHub
-              </a>
+              <div className="space-y-3">
+                {gitHubSSOEnabled && (
+                  <a
+                    href={`/api/v1/auth/github?return_to=${encodeURIComponent(window.location.origin)}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-text-primary)] transition-colors hover:bg-[var(--gantry-bg-secondary)]"
+                  >
+                    <Github className="h-4 w-4" />
+                    Sign in with GitHub
+                  </a>
+                )}
+                {azureSSOEnabled && (
+                  <a
+                    href={`/api/v1/auth/azure?return_to=${encodeURIComponent(window.location.origin)}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-text-primary)] transition-colors hover:bg-[var(--gantry-bg-secondary)]"
+                  >
+                    <span className="flex h-4 w-4 items-center justify-center rounded-sm border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] text-[10px] font-semibold text-[var(--gantry-text-primary)]">M</span>
+                    Sign in with Microsoft Azure
+                  </a>
+                )}
+              </div>
               <div className="my-4 flex items-center gap-3">
                 <div className="h-px flex-1 bg-[var(--gantry-border)]" />
                 <span className="text-xs text-[var(--gantry-text-secondary)]">or</span>

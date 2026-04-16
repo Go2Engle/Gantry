@@ -110,6 +110,71 @@
     "actionTypes": ["github-workflow-dispatch"]
   },
   {
+    "name": "microsoft-azure",
+    "title": "Microsoft Azure",
+    "description": "Microsoft Entra ID / Azure AD authentication for Gantry login.",
+    "longDescription": "The Microsoft Azure plugin adds single sign-on to Gantry using Microsoft Entra ID (formerly Azure Active Directory). Configure an app registration, enable the plugin, and your team can sign in with their Microsoft work accounts instead of local passwords.\n\nThe plugin supports single-tenant or multi-tenant sign-in, optional auto-provisioning for first-time users, and role assignment for new SSO accounts.",
+    "features": [
+      "Microsoft Entra ID / Azure AD OAuth 2.0 login",
+      "Single-tenant or multi-tenant sign-in via configurable tenant ID",
+      "Optional auto-provisioning for first-time SSO users",
+      "Default role assignment for auto-provisioned users",
+      "Login page button and guided plugin configuration"
+    ],
+    "version": "1.0.0",
+    "author": "Gantry",
+    "category": "auth-provider",
+    "homepage": "https://github.com/go2engle/gantry",
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "ssoEnabled": {
+          "type": "boolean",
+          "title": "Enable Microsoft Azure SSO",
+          "description": "Allow users to sign in to Gantry with Microsoft Entra ID / Azure AD."
+        },
+        "tenantId": {
+          "type": "string",
+          "title": "Tenant ID or Domain",
+          "description": "Use a specific tenant ID or verified domain to restrict sign-in, or `common` for multi-tenant login.",
+          "default": "common"
+        },
+        "clientId": {
+          "type": "string",
+          "title": "Application (client) ID",
+          "description": "Client ID from your Azure app registration. Required when SSO is enabled."
+        },
+        "clientSecret": {
+          "type": "string",
+          "title": "Client Secret",
+          "description": "Client secret from your Azure app registration. Required when SSO is enabled.",
+          "secret": true
+        },
+        "scopes": {
+          "type": "string",
+          "title": "OAuth Scopes",
+          "description": "Space-delimited scopes to request. Defaults to `openid profile email User.Read`.",
+          "default": "openid profile email User.Read"
+        },
+        "autoProvision": {
+          "type": "boolean",
+          "title": "Auto-Provision Users",
+          "description": "Automatically create Gantry accounts for first-time Azure SSO users.",
+          "default": false
+        },
+        "defaultRole": {
+          "type": "string",
+          "title": "Default SSO User Role",
+          "description": "Role assigned to auto-provisioned users who sign in via Microsoft Azure.",
+          "enum": ["viewer", "developer", "admin"],
+          "default": "viewer"
+        }
+      }
+    },
+    "entityPanels": [],
+    "actionTypes": []
+  },
+  {
     "name": "pagerduty",
     "title": "PagerDuty",
     "description": "On-call schedule panels for Services and Teams, plus incident management widgets.",

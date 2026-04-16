@@ -98,10 +98,13 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 		// Public endpoints.
 		api.Get("/version", h.GetVersion)
 		api.Post("/auth/login", h.Login)
-		// GitHub SSO — public; used by login page and OAuth redirect flow.
+		// GitHub and Microsoft Azure SSO — public; used by login page and OAuth redirect flow.
 		api.Get("/auth/github/config", h.GetGitHubSSOConfig)
 		api.Get("/auth/github", h.GitHubOAuthBegin)
 		api.Get("/auth/github/callback", h.GitHubOAuthCallback)
+		api.Get("/auth/azure/config", h.GetAzureSSOConfig)
+		api.Get("/auth/azure", h.AzureOAuthBegin)
+		api.Get("/auth/azure/callback", h.AzureOAuthCallback)
 
 		// Authenticated routes.
 		api.Group(func(protected chi.Router) {

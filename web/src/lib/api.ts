@@ -145,6 +145,9 @@ export const api = {
   getGitHubSSOConfig: () =>
     request<{ ssoEnabled: boolean }>('GET', '/auth/github/config'),
 
+  getAzureSSOConfig: () =>
+    request<{ ssoEnabled: boolean }>('GET', '/auth/azure/config'),
+
   getGitHubRepo: (url: string) =>
     request<GitHubRepoInfo>('GET', `/plugins/github/repo?url=${encodeURIComponent(url)}`),
 
