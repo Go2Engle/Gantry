@@ -16,7 +16,7 @@ const ROLE_COLORS: Record<string, string> = {
   viewer: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
-export default function UsersPage() {
+export default function UsersPage({ embedded = false }: { embedded?: boolean }) {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,25 +146,27 @@ export default function UsersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Users</h1>
-          <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
-            Manage user accounts. Roles are assigned via{' '}
-            <Link to="/rbac" className="text-[var(--gantry-accent)] hover:underline">
-              Access Control
-            </Link>{' '}
-            groups.
-          </p>
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Users</h1>
+            <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
+              Manage user accounts. Roles are assigned via{' '}
+              <Link to="/admin/access" className="text-[var(--gantry-accent)] hover:underline">
+                Access Control
+              </Link>{' '}
+              groups.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2">
+            <Users className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
+            <span className="text-sm font-medium text-[var(--gantry-text-primary)]">{users.length}</span>
+            <span className="text-sm text-[var(--gantry-text-secondary)]">
+              {users.length === 1 ? 'user' : 'users'}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2">
-          <Users className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
-          <span className="text-sm font-medium text-[var(--gantry-text-primary)]">{users.length}</span>
-          <span className="text-sm text-[var(--gantry-text-secondary)]">
-            {users.length === 1 ? 'user' : 'users'}
-          </span>
-        </div>
-      </div>
+      )}
 
       {error && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
@@ -279,7 +281,7 @@ export default function UsersPage() {
             </h3>
             <p className="mt-2 text-xs text-[var(--gantry-text-secondary)]">
               New users start as <strong>viewer</strong>. To grant higher access, add them to a group in{' '}
-              <Link to="/rbac" className="text-[var(--gantry-accent)] hover:underline">
+              <Link to="/admin/access" className="text-[var(--gantry-accent)] hover:underline">
                 Access Control
               </Link>
               . Default groups: Admins, Platform Engineers, Developers.

@@ -671,7 +671,7 @@ export default function Dashboard() {
                 <ClipboardList className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
                 <h2 className="text-base font-semibold text-[var(--gantry-text-primary)]">Recent Activity</h2>
               </div>
-              <Link to="/audit" className="flex items-center gap-1 text-sm text-[var(--gantry-accent)] hover:opacity-75">
+              <Link to="/admin/audit" className="flex items-center gap-1 text-sm text-[var(--gantry-accent)] hover:opacity-75">
                 View all <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

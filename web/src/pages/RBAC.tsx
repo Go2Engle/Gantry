@@ -9,7 +9,7 @@ const PERMISSION_COLUMNS = ['read', 'write', 'execute', 'delete', 'admin'] as co
 
 type Tab = 'roles' | 'groups' | 'rules' | 'overview' | 'import-export';
 
-export default function RBAC() {
+export default function RBAC({ embedded = false }: { embedded?: boolean }) {
   const [tab, setTab] = useState<Tab>('roles');
   const [groups, setGroups] = useState<Group[]>([]);
   const [rules, setRules] = useState<PermissionRule[]>([]);
@@ -50,15 +50,17 @@ export default function RBAC() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <Shield className="h-7 w-7 text-[var(--gantry-accent)]" />
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Access Control</h1>
-          <p className="text-sm text-[var(--gantry-text-secondary)]">
-            Manage groups, permissions, and role-based access
-          </p>
+      {!embedded && (
+        <div className="mb-6 flex items-center gap-3">
+          <Shield className="h-7 w-7 text-[var(--gantry-accent)]" />
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Access Control</h1>
+            <p className="text-sm text-[var(--gantry-text-secondary)]">
+              Manage groups, permissions, and role-based access
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 rounded-lg bg-[var(--gantry-bg-primary)] p-1 border border-[var(--gantry-border)]">

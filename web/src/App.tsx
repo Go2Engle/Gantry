@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import Sidebar from './components/Sidebar';
@@ -10,15 +10,13 @@ import Dashboard from './pages/Dashboard';
 import Catalog from './pages/Catalog';
 import EntityDetail from './pages/EntityDetail';
 import Actions from './pages/Actions';
-import AuditLog from './pages/AuditLog';
 import Settings from './pages/Settings';
-import UsersPage from './pages/Users';
+import Admin from './pages/Admin';
 import Plugins from './pages/Plugins';
 import StatusMonitor from './pages/StatusMonitor';
 import GitOps from './pages/GitOps';
 import Harbor from './pages/Harbor';
 import Nexus from './pages/Nexus';
-import RBAC from './pages/RBAC';
 import TopologyExplorer from './pages/TopologyExplorer';
 
 
@@ -42,7 +40,6 @@ function AuthenticatedLayout() {
         <ErrorBoundary>
           <Routes>
             <Route path="/topology" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><TopologyExplorer /></div>} />
-            <Route path="/users" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><UsersPage /></div>} />
             <Route path="*" element={
               <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
                 <Routes>
@@ -51,13 +48,18 @@ function AuthenticatedLayout() {
                   <Route path="/catalog/:kind" element={<Catalog />} />
                   <Route path="/catalog/:kind/:name" element={<EntityDetail />} />
                   <Route path="/actions" element={<Actions />} />
-                  <Route path="/audit" element={<AuditLog />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/admin/users" element={<Admin section="users" />} />
+                  <Route path="/admin/access" element={<Admin section="access" />} />
+                  <Route path="/admin/audit" element={<Admin section="audit" />} />
+                  <Route path="/users" element={<Navigate to="/admin/users" replace />} />
+                  <Route path="/rbac" element={<Navigate to="/admin/access" replace />} />
+                  <Route path="/audit" element={<Navigate to="/admin/audit" replace />} />
                   <Route path="/plugins" element={<Plugins />} />
                   <Route path="/status" element={<StatusMonitor />} />
                   <Route path="/gitops" element={<GitOps />} />
                   <Route path="/harbor" element={<Harbor />} />
                   <Route path="/nexus" element={<Nexus />} />
-                  <Route path="/rbac" element={<RBAC />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </div>

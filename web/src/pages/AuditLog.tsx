@@ -22,7 +22,7 @@ function formatTime(ts: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function AuditLog() {
+export default function AuditLog({ embedded = false }: { embedded?: boolean }) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -56,13 +56,15 @@ export default function AuditLog() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <ClipboardList className="h-6 w-6 text-[var(--gantry-accent)]" />
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Audit Log</h1>
-          <p className="text-sm text-[var(--gantry-text-secondary)]">Track all changes and actions in Gantry</p>
+      {!embedded && (
+        <div className="flex items-center gap-3">
+          <ClipboardList className="h-6 w-6 text-[var(--gantry-accent)]" />
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Audit Log</h1>
+            <p className="text-sm text-[var(--gantry-text-secondary)]">Track all changes and actions in Gantry</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
