@@ -51,6 +51,7 @@ function AuthenticatedLayout() {
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/admin/users" element={<Admin section="users" />} />
                   <Route path="/admin/access" element={<Admin section="access" />} />
+                  <Route path="/admin/plugins" element={<Admin section="plugins" />} />
                   <Route path="/admin/audit" element={<Admin section="audit" />} />
                   <Route path="/users" element={<Navigate to="/admin/users" replace />} />
                   <Route path="/rbac" element={<Navigate to="/admin/access" replace />} />

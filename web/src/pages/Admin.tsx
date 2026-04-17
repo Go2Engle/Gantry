@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ClipboardList,
   Lock,
+  Package,
   Shield,
   Sparkles,
   UserCog,
@@ -11,12 +12,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
-import type { AuditEntry, Group, Role, User } from '../lib/types';
+import type { AuditEntry, Group, PluginRegistryEntry, Role, User } from '../lib/types';
+import AdminPluginSettings from '../components/AdminPluginSettings';
 import AuditLog from './AuditLog';
 import RBAC from './RBAC';
 import UsersPage from './Users';
 
-export type AdminSection = 'overview' | 'users' | 'access' | 'audit';
+export type AdminSection = 'overview' | 'users' | 'access' | 'plugins' | 'audit';
 
 interface AdminProps {
   section?: Exclude<AdminSection, 'overview'>;
@@ -53,6 +55,13 @@ const sections: SectionMeta[] = [
     icon: Lock,
   },
   {
+    id: 'plugins',
+    label: 'Plugin Settings',
+    description: 'Adjust settings for enabled plugins from one shared admin surface.',
+    href: '/admin/plugins',
+    icon: Package,
+  },
+  {
     id: 'audit',
     label: 'Audit Activity',
     description: 'Review recent changes and trace operational activity.',
@@ -76,6 +85,8 @@ function renderSection(section: AdminSection) {
       return <UsersPage embedded />;
     case 'access':
       return <RBAC embedded />;
+    case 'plugins':
+      return <AdminPluginSettings />;
     case 'audit':
       return <AuditLog embedded />;
     default:
@@ -89,6 +100,7 @@ export default function Admin({ section }: AdminProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [plugins, setPlugins] = useState<PluginRegistryEntry[]>([]);
   const [activity, setActivity] = useState<AuditEntry[]>([]);
   const [loadingOverview, setLoadingOverview] = useState(currentSection === 'overview');
   const [overviewError, setOverviewError] = useState('');
@@ -106,6 +118,7 @@ export default function Admin({ section }: AdminProps) {
       api.listUsers(),
       api.listGroups(),
       api.listRoles().catch(() => [] as Role[]),
+      api.listPlugins(),
     ];
 
     if (currentSection === 'overview') {
@@ -116,7 +129,7 @@ export default function Admin({ section }: AdminProps) {
       .then((results) => {
         if (!active) return;
 
-        const [usersResult, groupsResult, rolesResult, auditResult] = results;
+        const [usersResult, groupsResult, rolesResult, pluginsResult, auditResult] = results;
 
         if (usersResult.status === 'fulfilled') {
           setUsers((usersResult.value as User[] | undefined) ?? []);
@@ -127,13 +140,23 @@ export default function Admin({ section }: AdminProps) {
         if (rolesResult.status === 'fulfilled') {
           setRoles((rolesResult.value as Role[] | undefined) ?? []);
         }
+        if (pluginsResult.status === 'fulfilled') {
+          setPlugins((pluginsResult.value as PluginRegistryEntry[] | undefined) ?? []);
+        }
         if (auditResult?.status === 'fulfilled') {
           setActivity((auditResult.value as AuditEntry[] | undefined) ?? []);
         } else if (currentSection !== 'overview') {
           setActivity([]);
         }
 
-        if (currentSection === 'overview' && auditResult?.status === 'rejected' && usersResult.status === 'rejected' && groupsResult.status === 'rejected' && rolesResult.status === 'rejected') {
+        if (
+          currentSection === 'overview' &&
+          auditResult?.status === 'rejected' &&
+          usersResult.status === 'rejected' &&
+          groupsResult.status === 'rejected' &&
+          rolesResult.status === 'rejected' &&
+          pluginsResult.status === 'rejected'
+        ) {
           setOverviewError('Failed to load admin overview.');
         }
       })
@@ -167,6 +190,7 @@ export default function Admin({ section }: AdminProps) {
   }
 
   const activeMeta = sections.find((item) => item.id === currentSection) ?? sections[0];
+  const enabledPluginCount = plugins.filter((plugin) => plugin.enabled).length;
 
   return (
     <div className="space-y-6">
@@ -183,7 +207,7 @@ export default function Admin({ section }: AdminProps) {
                 Centralize Gantry administration in one place so future non-plugin settings have a clear home.
               </p>
             </div>
-            <div className="grid w-full gap-3 sm:grid-cols-3 lg:w-auto lg:min-w-[360px]">
+            <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:w-auto lg:min-w-[520px]">
               <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-3">
                 <p className="text-xs uppercase tracking-wide text-[var(--gantry-text-secondary)]">Users</p>
                 <p className="mt-1 text-2xl font-semibold text-[var(--gantry-text-primary)]">{users.length}</p>
@@ -196,12 +220,16 @@ export default function Admin({ section }: AdminProps) {
                 <p className="text-xs uppercase tracking-wide text-[var(--gantry-text-secondary)]">Roles</p>
                 <p className="mt-1 text-2xl font-semibold text-[var(--gantry-text-primary)]">{roles.length}</p>
               </div>
+              <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[var(--gantry-text-secondary)]">Enabled Plugins</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--gantry-text-primary)]">{enabledPluginCount}</p>
+              </div>
             </div>
           </div>
         </div>
 
         <div className="px-6 py-5 sm:px-8">
-          <div className="grid gap-3 lg:grid-cols-4">
+          <div className="grid gap-3 lg:grid-cols-5">
             {sections.map((item) => {
               const Icon = item.icon;
               const active = item.id === currentSection;
@@ -322,6 +350,21 @@ export default function Admin({ section }: AdminProps) {
                     <div>
                       <p className="text-sm font-medium text-[var(--gantry-text-primary)]">Role and policy changes</p>
                       <p className="text-xs text-[var(--gantry-text-secondary)]">Adjust roles, groups, and permission rules.</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
+                </Link>
+                <Link
+                  to="/admin/plugins"
+                  className="flex items-center justify-between rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-4 py-4 hover:bg-[var(--gantry-bg-tertiary)]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--gantry-bg-primary)] text-[var(--gantry-text-secondary)]">
+                      <Package className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-[var(--gantry-text-primary)]">Enabled plugin settings</p>
+                      <p className="text-xs text-[var(--gantry-text-secondary)]">Tune active integrations from one place.</p>
                     </div>
                   </div>
                   <ArrowRight className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
