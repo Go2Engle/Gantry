@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, Github } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Github } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
@@ -25,16 +25,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [gitHubSSOEnabled, setGitHubSSOEnabled] = useState(false);
   const [azureSSOEnabled, setAzureSSOEnabled] = useState(false);
+  const [ssoConfigLoading, setSSOConfigLoading] = useState(true);
+  const [showLocalLogin, setShowLocalLogin] = useState(false);
   const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
-    api.getGitHubSSOConfig()
-      .then((cfg) => setGitHubSSOEnabled(cfg.ssoEnabled))
-      .catch(() => {}); // SSO check is non-critical
-
-    api.getAzureSSOConfig()
-      .then((cfg) => setAzureSSOEnabled(cfg.ssoEnabled))
-      .catch(() => {}); // SSO check is non-critical
+    Promise.allSettled([
+      api.getGitHubSSOConfig().then((cfg) => setGitHubSSOEnabled(cfg.ssoEnabled)),
+      api.getAzureSSOConfig().then((cfg) => setAzureSSOEnabled(cfg.ssoEnabled)),
+    ]).finally(() => setSSOConfigLoading(false));
 
     api.getVersion().then((v) => setAppVersion(v.version)).catch(() => {});
 
@@ -43,9 +42,13 @@ export default function Login() {
     const ssoError = params.get('error');
     if (ssoError === 'sso_not_authorized') {
       setError('Your single sign-on account is not authorized for Gantry. Ask an administrator to create your account first.');
+      setShowLocalLogin(true);
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  const hasSSO = gitHubSSOEnabled || azureSSOEnabled;
+  const localLoginVisible = !ssoConfigLoading && (!hasSSO || showLocalLogin);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +57,7 @@ export default function Login() {
     try {
       await login(username, password);
     } catch (err: any) {
+      setShowLocalLogin(true);
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
@@ -82,7 +86,14 @@ export default function Login() {
 
         {/* Login Card */}
         <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-6 shadow-sm">
-          {(gitHubSSOEnabled || azureSSOEnabled) && (
+          {error && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-[var(--gantry-danger)] dark:bg-red-900/20">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {hasSSO && !ssoConfigLoading && (
             <>
               <div className="space-y-3">
                 {gitHubSSOEnabled && (
@@ -104,70 +115,95 @@ export default function Login() {
                   </a>
                 )}
               </div>
-              <div className="my-4 flex items-center gap-3">
-                <div className="h-px flex-1 bg-[var(--gantry-border)]" />
-                <span className="text-xs text-[var(--gantry-text-secondary)]">or</span>
-                <div className="h-px flex-1 bg-[var(--gantry-border)]" />
-              </div>
+              {!showLocalLogin && (
+                <button
+                  type="button"
+                  onClick={() => setShowLocalLogin(true)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-text-secondary)] transition-colors hover:bg-[var(--gantry-bg-secondary)] hover:text-[var(--gantry-text-primary)]"
+                  aria-expanded={showLocalLogin}
+                >
+                  Use username and password
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              )}
             </>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-[var(--gantry-danger)] dark:bg-red-900/20">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
+          {!ssoConfigLoading && localLoginVisible && (
+            <div className={hasSSO ? 'mt-4 border-t border-[var(--gantry-border)] pt-4' : ''}>
+              {hasSSO && (
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-[var(--gantry-text-primary)]">Local sign in</p>
+                    <p className="text-xs text-[var(--gantry-text-secondary)]">Use local credentials if your administrator provided them.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLocalLogin(false)}
+                    className="flex items-center gap-1 text-xs font-medium text-[var(--gantry-text-secondary)] transition-colors hover:text-[var(--gantry-text-primary)]"
+                    aria-expanded={showLocalLogin}
+                  >
+                    Hide
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
 
-            <div className="space-y-1.5">
-              <label
-                htmlFor="username"
-                className="block text-sm font-medium text-[var(--gantry-text-primary)]"
-              >
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                required
-                autoFocus
-                autoComplete="username"
-                className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
-              />
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="username"
+                    className="block text-sm font-medium text-[var(--gantry-text-primary)]"
+                  >
+                    Username
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter your username"
+                    required
+                    autoFocus={!hasSSO}
+                    autoComplete="username"
+                    className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="password"
+                    className="block text-sm font-medium text-[var(--gantry-text-primary)]"
+                  >
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                    autoComplete="current-password"
+                    className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-bg-primary)] transition-colors hover:bg-[var(--gantry-accent-hover)] disabled:opacity-60"
+                >
+                  {loading && <div className="spinner h-4 w-4" />}
+                  {loading ? 'Signing in...' : 'Sign in'}
+                </button>
+              </form>
             </div>
+          )}
 
-            <div className="space-y-1.5">
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-[var(--gantry-text-primary)]"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                autoComplete="current-password"
-                className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-bg-primary)] transition-colors hover:bg-[var(--gantry-accent-hover)] disabled:opacity-60"
-            >
-              {loading && <div className="spinner h-4 w-4" />}
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
+          {ssoConfigLoading && (
+            <p className="text-sm text-[var(--gantry-text-secondary)]">Checking available sign-in methods...</p>
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs text-[var(--gantry-text-secondary)]">
