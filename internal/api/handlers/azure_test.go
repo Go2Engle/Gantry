@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	azplugin "github.com/go2engle/gantry/internal/plugins/azure"
@@ -90,4 +92,41 @@ func TestAzureEmail(t *testing.T) {
 			t.Fatalf("azureEmail() = %q, want empty string", email)
 		}
 	})
+}
+
+func TestAzureOAuthCallbackRejectsEmptyStateValues(t *testing.T) {
+	h := &Handlers{}
+	tests := []struct {
+		name        string
+		queryState  string
+		cookieState string
+	}{
+		{
+			name:        "rejects empty query state",
+			queryState:  "",
+			cookieState: "generated-state",
+		},
+		{
+			name:        "rejects empty cookie state",
+			queryState:  "generated-state",
+			cookieState: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/azure/callback?state="+tt.queryState, nil)
+			req.AddCookie(&http.Cookie{Name: "az_oauth_state", Value: tt.cookieState})
+
+			rr := httptest.NewRecorder()
+			h.AzureOAuthCallback(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("AzureOAuthCallback() status = %d, want %d", rr.Code, http.StatusBadRequest)
+			}
+			if body := rr.Body.String(); body != "invalid or missing oauth state\n" {
+				t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "invalid or missing oauth state\n")
+			}
+		})
+	}
 }

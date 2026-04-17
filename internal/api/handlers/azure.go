@@ -88,7 +88,8 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	clearAzureOAuthCookies(w, r)
 
 	stateCookie, err := r.Cookie("az_oauth_state")
-	if err != nil || r.URL.Query().Get("state") != stateCookie.Value {
+	queryState := strings.TrimSpace(r.URL.Query().Get("state"))
+	if err != nil || strings.TrimSpace(stateCookie.Value) == "" || queryState == "" || queryState != stateCookie.Value {
 		writeError(w, http.StatusBadRequest, "invalid or missing oauth state")
 		return
 	}
