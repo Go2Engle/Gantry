@@ -98,6 +98,44 @@ func TestAzureEmail(t *testing.T) {
 	})
 }
 
+func TestAzureDisplayName(t *testing.T) {
+	t.Run("prefers microsoft graph display name", func(t *testing.T) {
+		name := azureDisplayName(
+			&azplugin.IdentityClaims{Name: "Claims Name", PreferredUsername: "claims@example.com"},
+			&azplugin.MicrosoftUser{DisplayName: "Graph Name", UserPrincipalName: "graph@example.com"},
+		)
+		if want := "Graph Name"; name != want {
+			t.Fatalf("azureDisplayName() = %q, want %q", name, want)
+		}
+	})
+
+	t.Run("falls back to email style identifiers only when needed", func(t *testing.T) {
+		name := azureDisplayName(
+			&azplugin.IdentityClaims{PreferredUsername: "claims@example.com"},
+			&azplugin.MicrosoftUser{},
+		)
+		if want := "claims@example.com"; name != want {
+			t.Fatalf("azureDisplayName() = %q, want %q", name, want)
+		}
+	})
+}
+
+func TestAzureDefaultAccess(t *testing.T) {
+	t.Run("maps built in roles to default groups", func(t *testing.T) {
+		group, fallback := azureDefaultAccess("developer")
+		if group != "developers" || fallback != "developer" {
+			t.Fatalf("azureDefaultAccess() = (%q, %q), want (%q, %q)", group, fallback, "developers", "developer")
+		}
+	})
+
+	t.Run("falls back to viewer for unknown roles", func(t *testing.T) {
+		group, fallback := azureDefaultAccess("mystery-role")
+		if group != "" || fallback != "viewer" {
+			t.Fatalf("azureDefaultAccess() = (%q, %q), want (%q, %q)", group, fallback, "", "viewer")
+		}
+	})
+}
+
 func TestAzureOAuthCallbackRejectsEmptyStateValues(t *testing.T) {
 	h := &Handlers{}
 	tests := []struct {
@@ -128,8 +166,8 @@ func TestAzureOAuthCallbackRejectsEmptyStateValues(t *testing.T) {
 			if rr.Code != http.StatusBadRequest {
 				t.Fatalf("AzureOAuthCallback() status = %d, want %d", rr.Code, http.StatusBadRequest)
 			}
-			if body := rr.Body.String(); body != "invalid or missing oauth state\n" {
-				t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "invalid or missing oauth state\n")
+			if body := rr.Body.String(); body != "{\"error\":\"invalid or missing oauth state\"}\n" {
+				t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "{\"error\":\"invalid or missing oauth state\"}\n")
 			}
 		})
 	}
@@ -167,7 +205,99 @@ func TestAzureOAuthCallbackRejectsUnavailablePlugin(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("AzureOAuthCallback() status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
-	if body := rr.Body.String(); body != "Microsoft Azure plugin not installed or not enabled\n" {
-		t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "Microsoft Azure plugin not installed or not enabled\n")
+	if body := rr.Body.String(); body != "{\"error\":\"Microsoft Azure plugin not installed or not enabled\"}\n" {
+		t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "{\"error\":\"Microsoft Azure plugin not installed or not enabled\"}\n")
 	}
+}
+
+func TestEnsureAzureDefaultAccessAssignsBuiltInGroup(t *testing.T) {
+	database := newAzureTestDB(t)
+	h := &Handlers{DB: database}
+
+	user := &db.User{
+		Username: "azure:tenant:object",
+		Role:     "viewer",
+		SSOOnly:  true,
+	}
+	if err := database.CreateUser(context.Background(), user); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	if err := h.ensureAzureDefaultAccess(context.Background(), user, "developer"); err != nil {
+		t.Fatalf("ensureAzureDefaultAccess: %v", err)
+	}
+
+	groups, err := database.ListUserGroups(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("ListUserGroups: %v", err)
+	}
+	if len(groups) != 1 || groups[0].Name != "developers" {
+		t.Fatalf("ListUserGroups() = %#v, want developers membership", groups)
+	}
+
+	reloaded, err := database.GetUserByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if reloaded.Role != "viewer" {
+		t.Fatalf("user role = %q, want %q", reloaded.Role, "viewer")
+	}
+}
+
+func TestEnsureAzureDefaultAccessDoesNotOverrideExistingAssignments(t *testing.T) {
+	database := newAzureTestDB(t)
+	h := &Handlers{DB: database}
+
+	user := &db.User{
+		Username: "azure:tenant:object",
+		Role:     "viewer",
+		SSOOnly:  true,
+	}
+	if err := database.CreateUser(context.Background(), user); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := database.AddUserToGroupByName(context.Background(), user.ID, "admins"); err != nil {
+		t.Fatalf("AddUserToGroupByName: %v", err)
+	}
+
+	if err := h.ensureAzureDefaultAccess(context.Background(), user, "developer"); err != nil {
+		t.Fatalf("ensureAzureDefaultAccess: %v", err)
+	}
+
+	groups, err := database.ListUserGroups(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("ListUserGroups: %v", err)
+	}
+	if len(groups) != 1 || groups[0].Name != "admins" {
+		t.Fatalf("ListUserGroups() = %#v, want existing admins membership to remain unchanged", groups)
+	}
+}
+
+func newAzureTestDB(t *testing.T) *db.DB {
+	t.Helper()
+
+	dataDir := t.TempDir()
+	cfg := &config.Config{
+		Port:          8080,
+		DBType:        "sqlite",
+		DBDSN:         filepath.Join(dataDir, "gantry.db"),
+		JWTSecret:     "test-secret",
+		DataDir:       dataDir,
+		EncryptionKey: "test-encryption-key",
+	}
+
+	database, err := db.New(cfg)
+	if err != nil {
+		t.Fatalf("db.New: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	if err := database.Migrate(); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if err := database.SeedDefaultGroups(context.Background()); err != nil {
+		t.Fatalf("SeedDefaultGroups: %v", err)
+	}
+
+	return database
 }

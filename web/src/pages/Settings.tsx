@@ -8,6 +8,7 @@ import type { APIKey } from '../lib/types';
 export default function Settings() {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
+  const effectiveRole = user?.effectiveRole || user?.role || '';
 
   // API Keys
   const [apiKeys, setAPIKeys] = useState<APIKey[]>([]);
@@ -111,7 +112,7 @@ export default function Settings() {
               <dt className="text-sm text-[var(--gantry-text-secondary)]">Role</dt>
               <dd className="flex items-center gap-1.5 text-sm font-medium text-[var(--gantry-text-primary)]">
                 <Shield className="h-3.5 w-3.5 text-[var(--gantry-accent)]" />
-                {user?.role || '-'}
+                {effectiveRole || '-'}
               </dd>
             </div>
           </dl>

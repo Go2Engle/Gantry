@@ -5,6 +5,17 @@ import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import ThemeToggle from '../components/ThemeToggle';
 
+function MicrosoftLogo() {
+  return (
+    <span className="grid h-4 w-4 grid-cols-2 gap-[2px]" aria-hidden="true">
+      <span className="rounded-[1px] bg-[#f25022]" />
+      <span className="rounded-[1px] bg-[#7fba00]" />
+      <span className="rounded-[1px] bg-[#00a4ef]" />
+      <span className="rounded-[1px] bg-[#ffb900]" />
+    </span>
+  );
+}
+
 export default function Login() {
   const { login } = useAuth();
   const { theme } = useTheme();
@@ -88,7 +99,7 @@ export default function Login() {
                     href={`/api/v1/auth/azure?return_to=${encodeURIComponent(window.location.origin)}`}
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2.5 text-sm font-medium text-[var(--gantry-text-primary)] transition-colors hover:bg-[var(--gantry-bg-secondary)]"
                   >
-                    <span className="flex h-4 w-4 items-center justify-center rounded-sm border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] text-[10px] font-semibold text-[var(--gantry-text-primary)]">M</span>
+                    <MicrosoftLogo />
                     Sign in with Microsoft Azure
                   </a>
                 )}

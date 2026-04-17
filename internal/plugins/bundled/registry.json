@@ -113,12 +113,12 @@
     "name": "microsoft-azure",
     "title": "Microsoft Azure",
     "description": "Microsoft Entra ID / Azure AD authentication for Gantry login.",
-    "longDescription": "The Microsoft Azure plugin adds single sign-on to Gantry using Microsoft Entra ID (formerly Azure Active Directory). Configure an app registration, enable the plugin, and your team can sign in with their Microsoft work accounts instead of local passwords.\n\nThe plugin supports single-tenant or multi-tenant sign-in, optional auto-provisioning for first-time users, and role assignment for new SSO accounts.",
+    "longDescription": "The Microsoft Azure plugin adds single sign-on to Gantry using Microsoft Entra ID (formerly Azure Active Directory). Configure an app registration, enable the plugin, and your team can sign in with their Microsoft work accounts instead of local passwords.\n\nThe plugin supports single-tenant or multi-tenant sign-in, optional auto-provisioning for first-time users, and default access assignment for new SSO accounts using Gantry's built-in RBAC groups.",
     "features": [
       "Microsoft Entra ID / Azure AD OAuth 2.0 login",
       "Single-tenant or multi-tenant sign-in via configurable tenant ID",
       "Optional auto-provisioning for first-time SSO users",
-      "Default role assignment for auto-provisioned users",
+      "Default access assignment for auto-provisioned users",
       "Login page button and guided plugin configuration"
     ],
     "version": "1.0.0",
@@ -165,7 +165,7 @@
         "defaultRole": {
           "type": "string",
           "title": "Default SSO User Role",
-          "description": "Role assigned to auto-provisioned users who sign in via Microsoft Azure.",
+          "description": "Default access for auto-provisioned users who sign in via Microsoft Azure. Gantry maps built-in roles to the matching built-in RBAC groups when possible.",
           "enum": ["viewer", "developer", "admin"],
           "default": "viewer"
         }

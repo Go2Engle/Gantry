@@ -1,11 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
-	"net/mail"
 	"net/http"
+	"net/mail"
 	"strings"
 
 	"github.com/go2engle/gantry/internal/auth"
@@ -191,7 +192,7 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			PasswordHash: "",
 			DisplayName:  azureDisplayName(claims, msUser),
 			Email:        email,
-			Role:         defaultRole,
+			Role:         "viewer",
 			SSOOnly:      true,
 		}
 		if createErr := h.DB.CreateUser(ctx, newUser); createErr != nil {
@@ -207,6 +208,15 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		} else {
 			gantryUser = newUser
 		}
+	}
+
+	if err := h.syncAzureUserProfile(ctx, gantryUser, azureDisplayName(claims, msUser), email); err != nil {
+		writeSSOProviderError(w, "Microsoft Azure", "sync Gantry user profile", err)
+		return
+	}
+	if err := h.ensureAzureDefaultAccess(ctx, gantryUser, defaultRole); err != nil {
+		writeSSOProviderError(w, "Microsoft Azure", "apply default access", err)
+		return
 	}
 
 	token, err := h.Auth.GenerateToken(&auth.User{
@@ -272,6 +282,83 @@ func azureDisplayName(claims *azplugin.IdentityClaims, user *azplugin.MicrosoftU
 		return email
 	}
 	return "Microsoft Azure User"
+}
+
+func (h *Handlers) syncAzureUserProfile(ctx context.Context, user *db.User, displayName, email string) error {
+	if user == nil {
+		return nil
+	}
+
+	displayName = strings.TrimSpace(displayName)
+	email = strings.TrimSpace(email)
+	updated := false
+
+	if displayName != "" && user.DisplayName != displayName {
+		user.DisplayName = displayName
+		updated = true
+	}
+	if email != "" && !strings.EqualFold(user.Email, email) {
+		user.Email = email
+		updated = true
+	}
+	if !updated {
+		return nil
+	}
+	return h.DB.UpdateUser(ctx, user)
+}
+
+func (h *Handlers) ensureAzureDefaultAccess(ctx context.Context, user *db.User, defaultRole string) error {
+	if user == nil || !user.SSOOnly || !strings.HasPrefix(strings.ToLower(user.Username), "azure:") {
+		return nil
+	}
+
+	groupRole, fallbackRole := azureDefaultAccess(defaultRole)
+	if groupRole == "" && fallbackRole == "viewer" {
+		return nil
+	}
+
+	groups, err := h.DB.ListUserGroups(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	if len(groups) > 0 || auth.RoleLevel(user.Role) > auth.RoleLevel("viewer") {
+		return nil
+	}
+
+	if groupRole != "" {
+		if err := h.DB.AddUserToGroupByName(ctx, user.ID, groupRole); err == nil {
+			return nil
+		}
+	}
+
+	if fallbackRole == "" || user.Role == fallbackRole {
+		return nil
+	}
+	user.Role = fallbackRole
+	return h.DB.UpdateUser(ctx, user)
+}
+
+func azureDefaultAccess(defaultRole string) (groupName, fallbackRole string) {
+	role := strings.ToLower(strings.TrimSpace(defaultRole))
+	if role == "" {
+		role = "viewer"
+	}
+
+	switch role {
+	case "admin":
+		return "admins", role
+	case "platform-engineer":
+		return "platform-engineers", role
+	case "developer":
+		return "developers", role
+	case "viewer":
+		return "", role
+	default:
+		if auth.IsValidRole(role) {
+			return "", role
+		}
+		return "", "viewer"
+	}
 }
 
 func azureSSOConfigured(ssoEnabled bool, clientID, clientSecret string) bool {
