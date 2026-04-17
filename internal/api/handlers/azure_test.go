@@ -188,7 +188,7 @@ func TestAzureOAuthCallbackRejectsUnavailablePlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("db.New: %v", err)
 	}
-	defer func() { _ = database.Close() }()
+	t.Cleanup(func() { _ = database.Close() })
 
 	if err := database.Migrate(); err != nil {
 		t.Fatalf("Migrate: %v", err)

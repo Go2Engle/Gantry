@@ -202,7 +202,7 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if gantryUser == nil {
-				writeError(w, http.StatusInternalServerError, "failed to create user: "+createErr.Error())
+				writeSSOProviderError(w, "Microsoft Azure", "create Gantry user", createErr)
 				return
 			}
 		} else {
