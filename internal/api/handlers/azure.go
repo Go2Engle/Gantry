@@ -101,8 +101,12 @@ func (h *Handlers) AzureOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := h.DB.GetPlugin(r.Context(), "microsoft-azure")
-	if err != nil || p == nil || !p.Enabled {
-		writeError(w, http.StatusInternalServerError, "Microsoft Azure plugin unavailable")
+	if err != nil {
+		writeSSOProviderError(w, "Microsoft Azure", "load plugin configuration", err)
+		return
+	}
+	if p == nil || !p.Enabled {
+		writeError(w, http.StatusBadRequest, "Microsoft Azure plugin not installed or not enabled")
 		return
 	}
 

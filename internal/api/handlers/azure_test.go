@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
+	"github.com/go2engle/gantry/internal/config"
+	"github.com/go2engle/gantry/internal/db"
 	azplugin "github.com/go2engle/gantry/internal/plugins/azure"
 )
 
@@ -128,5 +132,42 @@ func TestAzureOAuthCallbackRejectsEmptyStateValues(t *testing.T) {
 				t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "invalid or missing oauth state\n")
 			}
 		})
+	}
+}
+
+func TestAzureOAuthCallbackRejectsUnavailablePlugin(t *testing.T) {
+	dataDir := t.TempDir()
+	cfg := &config.Config{
+		Port:          8080,
+		DBType:        "sqlite",
+		DBDSN:         filepath.Join(dataDir, "gantry.db"),
+		JWTSecret:     "test-secret",
+		DataDir:       dataDir,
+		EncryptionKey: "test-encryption-key",
+	}
+
+	database, err := db.New(cfg)
+	if err != nil {
+		t.Fatalf("db.New: %v", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	if err := database.Migrate(); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	h := &Handlers{DB: database}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/azure/callback?state=generated-state&code=test-code", nil)
+	req = req.WithContext(context.Background())
+	req.AddCookie(&http.Cookie{Name: "az_oauth_state", Value: "generated-state"})
+
+	rr := httptest.NewRecorder()
+	h.AzureOAuthCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("AzureOAuthCallback() status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+	if body := rr.Body.String(); body != "Microsoft Azure plugin not installed or not enabled\n" {
+		t.Fatalf("AzureOAuthCallback() body = %q, want %q", body, "Microsoft Azure plugin not installed or not enabled\n")
 	}
 }
