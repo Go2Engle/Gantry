@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/Go2Engle/Gantry/compare/v0.10.6...v0.11.0) (2026-04-17)
+
+
+### Features
+
+* add Microsoft Azure authentication plugin ([#70](https://github.com/Go2Engle/Gantry/issues/70)) ([7e34ffd](https://github.com/Go2Engle/Gantry/commit/7e34ffda479a8c4541ff2821f7988fd841404ee3))
+* Improve login flow when SSO is configured ([#72](https://github.com/Go2Engle/Gantry/issues/72)) ([bbbe544](https://github.com/Go2Engle/Gantry/commit/bbbe54478821c1a97d1a652509cfab90818ea70a))
+
 ## [0.10.6](https://github.com/Go2Engle/Gantry/compare/v0.10.5...v0.10.6) (2026-04-16)
 
 
