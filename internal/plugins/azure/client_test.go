@@ -162,6 +162,63 @@ func TestParseIdentityClaimsRejectsInvalidAudience(t *testing.T) {
 	assertNoJWKSHandlerError(t, handlerErrCh)
 }
 
+func TestParseIdentityClaimsAcceptsDomainConfiguredTenant(t *testing.T) {
+	const (
+		configuredTenant = "contoso.onmicrosoft.com"
+		tokenTenant      = "11111111-2222-3333-4444-555555555555"
+		clientID         = "client-123"
+		keyID            = "test-key"
+	)
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+
+	handlerErrCh := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/contoso.onmicrosoft.com/discovery/v2.0/keys"; got != want {
+			recordJWKSHandlerError(w, handlerErrCh, "JWKS path = %q, want %q", got, want)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]any{jwkFromPublicKey(keyID, &privateKey.PublicKey)},
+		}); err != nil {
+			recordJWKSHandlerError(w, handlerErrCh, "Encode JWKS: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	oldLoginBaseURL := loginBaseURL
+	loginBaseURL = server.URL
+	defer func() { loginBaseURL = oldLoginBaseURL }()
+	clearJWKSCache()
+	defer clearJWKSCache()
+
+	tokenString, err := newSignedToken(privateKey, keyID, jwt.MapClaims{
+		"oid":                "user-oid",
+		"tid":                tokenTenant,
+		"preferred_username": "person@example.com",
+		"iss":                fmt.Sprintf("%s/%s/v2.0", server.URL, tokenTenant),
+		"aud":                clientID,
+		"exp":                time.Now().Add(time.Hour).Unix(),
+		"nbf":                time.Now().Add(-time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+
+	claims, err := ParseIdentityClaims(tokenString, configuredTenant, clientID)
+	assertNoJWKSHandlerError(t, handlerErrCh)
+	if err != nil {
+		t.Fatalf("ParseIdentityClaims: %v", err)
+	}
+	if got, want := claims.TID, tokenTenant; got != want {
+		t.Fatalf("TID = %q, want %q", got, want)
+	}
+}
+
 func TestParseIdentityClaimsRefreshesJWKSOnUnknownKeyID(t *testing.T) {
 	const (
 		configuredTenant = "common"

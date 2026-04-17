@@ -253,10 +253,18 @@ func validateIdentityClaims(claims *IdentityClaims, tenantID, clientID string) e
 
 func expectedIssuer(tenantID string, claims *IdentityClaims) string {
 	tenant := normalizeTenantID(tenantID)
-	if isMultiTenantAuthority(tenant) && claims != nil && strings.TrimSpace(claims.TID) != "" {
+	if shouldUseTokenTenantIssuer(tenant) && claims != nil && strings.TrimSpace(claims.TID) != "" {
 		tenant = strings.TrimSpace(claims.TID)
 	}
 	return fmt.Sprintf("%s/%s/v2.0", strings.TrimRight(loginBaseURL, "/"), tenant)
+}
+
+func shouldUseTokenTenantIssuer(tenantID string) bool {
+	tenantID = strings.TrimSpace(tenantID)
+	if isMultiTenantAuthority(tenantID) {
+		return true
+	}
+	return !looksLikeTenantGUID(tenantID)
 }
 
 func isMultiTenantAuthority(tenantID string) bool {
@@ -266,6 +274,25 @@ func isMultiTenantAuthority(tenantID string) bool {
 	default:
 		return false
 	}
+}
+
+func looksLikeTenantGUID(tenantID string) bool {
+	parts := strings.Split(strings.TrimSpace(tenantID), "-")
+	if len(parts) != 5 {
+		return false
+	}
+	segmentLengths := []int{8, 4, 4, 4, 12}
+	for i, part := range parts {
+		if len(part) != segmentLengths[i] {
+			return false
+		}
+		for _, r := range part {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func audienceContains(audience jwt.ClaimStrings, clientID string) bool {
