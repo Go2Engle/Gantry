@@ -41,6 +41,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
   Cloud,
   FileText,
+  Network,
 };
 
 interface NavItem {

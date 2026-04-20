@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowRightLeft,
@@ -130,6 +130,7 @@ function edgeOffsetTransform(source: FlowNode, target: FlowNode, offset: number)
 
 export default function Flow() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const suppressNodeClickRef = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -153,6 +154,9 @@ export default function Flow() {
   const [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false);
   const [dragging, setDragging] = useState<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
+  const requestedFlow = searchParams.get('flow') || '';
+  const requestedNamespace = searchParams.get('namespace') || 'default';
+  const requestedMode = searchParams.get('mode') === 'edit' ? 'edit' : 'view';
 
   useEffect(() => {
     let active = true;
@@ -173,9 +177,14 @@ export default function Flow() {
         const sortedFlows = [...(flowEntities || [])].sort((a, b) => flowTitle(a).localeCompare(flowTitle(b)));
         setFlows(sortedFlows);
         if (sortedFlows.length > 0) {
-          loadFlow(sortedFlows[0]);
+          const requested = sortedFlows.find(
+            (flow) => flow.metadata.name === requestedFlow && (flow.metadata.namespace || 'default') === requestedNamespace
+          );
+          loadFlow(requested || sortedFlows[0]);
+          setMode(requestedMode);
         } else {
           resetDraft();
+          setMode(requestedMode);
         }
       } catch (err: any) {
         if (!active) return;
@@ -190,7 +199,7 @@ export default function Flow() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [requestedFlow, requestedNamespace, requestedMode]);
 
   useEffect(() => {
     if (!dragging) return;

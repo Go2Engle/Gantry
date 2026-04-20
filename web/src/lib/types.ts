@@ -386,6 +386,7 @@ export const ENTITY_KINDS = [
   { name: 'Team', plural: 'teams', icon: 'Users' },
   { name: 'Environment', plural: 'environments', icon: 'Cloud' },
   { name: 'Documentation', plural: 'documentation', icon: 'FileText' },
+  { name: 'Flow', plural: 'flows', icon: 'Network' },
 ] as const;
 
 export type EntityKindName = (typeof ENTITY_KINDS)[number]['name'];
