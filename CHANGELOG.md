@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/Go2Engle/Gantry/compare/v0.11.0...v0.11.1) (2026-04-20)
+
+
+### Features
+
+* Flow Plugin ([#75](https://github.com/Go2Engle/Gantry/issues/75)) ([42af76d](https://github.com/Go2Engle/Gantry/commit/42af76df2f22f41b39d1636494b7a211662b40a9))
+* Simplify admin shell ([#74](https://github.com/Go2Engle/Gantry/issues/74)) ([185187d](https://github.com/Go2Engle/Gantry/commit/185187d3a0abf58c314bb448ba4406e1082f9c3f))
+
 ## [0.11.0](https://github.com/Go2Engle/Gantry/compare/v0.10.6...v0.11.0) (2026-04-17)
 
 
