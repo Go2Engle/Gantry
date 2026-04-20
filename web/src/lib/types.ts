@@ -110,6 +110,8 @@ export interface JsonSchema {
   maxLength?: number;
   /** Custom extension: entity kind this field references (e.g. "API", "Team"). */
   'x-entity-ref'?: string;
+  /** Custom extension: render a dropdown of Gantry roles. */
+  'x-role-picker'?: boolean;
 }
 
 export interface GraphNode {
@@ -138,20 +140,38 @@ export interface FlowEntityRef {
   namespace?: string;
 }
 
+export type FlowMockShape = 'box' | 'pill' | 'diamond' | 'note';
+
 export interface FlowViewport {
   x: number;
   y: number;
   zoom: number;
 }
 
-export interface FlowNode {
+export interface FlowEntityNode {
   id: string;
+  nodeType?: 'entity';
   entityRef: FlowEntityRef;
   position: {
     x: number;
     y: number;
   };
 }
+
+export interface FlowMockNode {
+  id: string;
+  nodeType: 'mock';
+  label: string;
+  subtitle?: string;
+  shape: FlowMockShape;
+  color?: string;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+export type FlowNode = FlowEntityNode | FlowMockNode;
 
 export interface FlowEdge {
   id: string;
@@ -167,6 +187,12 @@ export interface FlowSpec {
   viewport: FlowViewport;
   nodes: FlowNode[];
   edges: FlowEdge[];
+}
+
+export interface FlowPluginSettings {
+  showInSidebar: boolean;
+  editorRole: string;
+  canEdit: boolean;
 }
 
 export interface PluginRegistryEntry {

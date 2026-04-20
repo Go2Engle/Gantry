@@ -27,43 +27,91 @@
       "type": "array",
       "default": [],
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "entityRef": {
+        "oneOf": [
+          {
             "type": "object",
             "properties": {
-              "kind": {
+              "id": {
                 "type": "string"
               },
-              "name": {
-                "type": "string"
+              "nodeType": {
+                "type": "string",
+                "enum": ["entity"]
               },
-              "namespace": {
-                "type": "string"
+              "entityRef": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
               }
             },
-            "required": ["kind", "name"],
+            "required": ["id", "entityRef", "position"],
             "additionalProperties": false
           },
-          "position": {
+          {
             "type": "object",
             "properties": {
-              "x": {
-                "type": "number"
+              "id": {
+                "type": "string"
               },
-              "y": {
-                "type": "number"
+              "nodeType": {
+                "type": "string",
+                "const": "mock"
+              },
+              "label": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "shape": {
+                "type": "string",
+                "enum": ["box", "pill", "diamond", "note"]
+              },
+              "color": {
+                "type": "string"
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
               }
             },
-            "required": ["x", "y"],
+            "required": ["id", "nodeType", "label", "shape", "position"],
             "additionalProperties": false
           }
-        },
-        "required": ["id", "entityRef", "position"],
-        "additionalProperties": false
+        ]
       }
     },
     "edges": {

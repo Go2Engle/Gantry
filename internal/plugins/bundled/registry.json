@@ -843,6 +843,13 @@
     "configSchema": {
       "type": "object",
       "properties": {
+        "editorRole": {
+          "type": "string",
+          "title": "Minimum Role For Editing",
+          "description": "Users with this role or any higher role can create, edit, and delete Flow diagrams. Lower roles get read-only access.",
+          "default": "developer",
+          "x-role-picker": true
+        },
         "showInSidebar": {
           "type": "boolean",
           "title": "Show Flow in Sidebar",

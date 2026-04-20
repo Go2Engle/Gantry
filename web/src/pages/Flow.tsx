@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -6,6 +6,7 @@ import {
   ExternalLink,
   GitBranch,
   Loader2,
+  Minus,
   Network,
   Plus,
   Save,
@@ -15,13 +16,27 @@ import {
   Workflow,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import type { Entity, FlowEdge, FlowNode, FlowSpec } from '../lib/types';
+import type { Entity, FlowEdge, FlowEntityNode, FlowMockNode, FlowMockShape, FlowNode, FlowPluginSettings, FlowSpec } from '../lib/types';
 
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 900;
-const NODE_WIDTH = 208;
-const NODE_HEIGHT = 92;
+const ENTITY_NODE_WIDTH = 208;
+const ENTITY_NODE_HEIGHT = 92;
+const MAX_NODE_WIDTH = 440;
+const MIN_NODE_HEIGHT = 92;
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 1.8;
+const ZOOM_STEP = 0.15;
+const FIT_PADDING = 48;
+const CONTENT_PADDING = 64;
 const RELATION_OPTIONS = ['calls', 'dependsOn', 'readsFrom', 'writesTo', 'publishesTo', 'subscribesTo', 'consumes', 'provides'];
+const MOCK_SHAPE_OPTIONS: FlowMockShape[] = ['box', 'pill', 'diamond', 'note'];
+const MOCK_NODE_LIBRARY: Array<{ label: string; subtitle: string; shape: FlowMockShape; color: string }> = [
+  { label: 'Box', subtitle: 'Generic process step', shape: 'box', color: '#64748B' },
+  { label: 'Diamond', subtitle: 'Decision or branch point', shape: 'diamond', color: '#F59E0B' },
+  { label: 'Pill', subtitle: 'External actor or entry point', shape: 'pill', color: '#8B5CF6' },
+  { label: 'Note', subtitle: 'Idea, future state, or comment', shape: 'note', color: '#0EA5E9' },
+];
 
 const kindColors: Record<string, string> = {
   Service: '#3B82F6',
@@ -55,19 +70,38 @@ function ensureFlowSpec(spec: Record<string, any> | undefined): FlowSpec {
     },
     nodes: nodes
       .filter((node: any) => node && typeof node === 'object')
-      .map((node: any) => ({
-        id: typeof node.id === 'string' ? node.id : crypto.randomUUID(),
-        entityRef: {
-          kind: String(node.entityRef?.kind || ''),
-          name: String(node.entityRef?.name || ''),
-          namespace: typeof node.entityRef?.namespace === 'string' ? node.entityRef.namespace : undefined,
-        },
-        position: {
+      .map((node: any): FlowNode | null => {
+        const position = {
           x: typeof node.position?.x === 'number' ? node.position.x : 0,
           y: typeof node.position?.y === 'number' ? node.position.y : 0,
-        },
-      }))
-      .filter((node: FlowNode) => node.entityRef.kind && node.entityRef.name),
+        };
+
+        if (node.nodeType === 'mock') {
+          return {
+            id: typeof node.id === 'string' ? node.id : crypto.randomUUID(),
+            nodeType: 'mock',
+            label: typeof node.label === 'string' && node.label.trim() ? node.label : 'Mock Node',
+            subtitle: typeof node.subtitle === 'string' ? node.subtitle : '',
+            shape: MOCK_SHAPE_OPTIONS.includes(node.shape) ? node.shape : 'box',
+            color: typeof node.color === 'string' && node.color.trim() ? node.color : '#64748B',
+            position,
+          };
+        }
+
+        const entityNode: FlowEntityNode = {
+          id: typeof node.id === 'string' ? node.id : crypto.randomUUID(),
+          nodeType: 'entity',
+          entityRef: {
+            kind: String(node.entityRef?.kind || ''),
+            name: String(node.entityRef?.name || ''),
+            namespace: typeof node.entityRef?.namespace === 'string' ? node.entityRef.namespace : undefined,
+          },
+          position,
+        };
+
+        return entityNode.entityRef.kind && entityNode.entityRef.name ? entityNode : null;
+      })
+      .filter((node): node is FlowNode => Boolean(node)),
     edges: edges
       .filter((edge: any) => edge && typeof edge === 'object')
       .map((edge: any): FlowEdge => ({
@@ -83,8 +117,20 @@ function ensureFlowSpec(spec: Record<string, any> | undefined): FlowSpec {
   };
 }
 
+function isMockNode(node: FlowNode): node is FlowMockNode {
+  return node.nodeType === 'mock';
+}
+
+function isEntityNode(node: FlowNode): node is FlowEntityNode {
+  return !isMockNode(node);
+}
+
 function flowTitle(flow: Entity): string {
   return flow.metadata.title || flow.metadata.name;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function entityKey(entity: Pick<Entity, 'kind' | 'metadata'>): string {
@@ -92,7 +138,184 @@ function entityKey(entity: Pick<Entity, 'kind' | 'metadata'>): string {
 }
 
 function nodeEntityKey(node: FlowNode): string {
+  if (!isEntityNode(node)) return '';
   return `${node.entityRef.kind}:${node.entityRef.namespace || 'default'}:${node.entityRef.name}`;
+}
+
+function nodeColor(node: FlowNode): string {
+  if (isMockNode(node)) return node.color || '#64748B';
+  return kindColors[node.entityRef.kind] || '#64748B';
+}
+
+function nodeTitle(node: FlowNode, entityMap: Map<string, Entity>): string {
+  if (isMockNode(node)) return node.label;
+  return entityMap.get(nodeEntityKey(node))?.metadata.title || node.entityRef.name;
+}
+
+function nodeSubtitle(node: FlowNode): string {
+  if (isMockNode(node)) return node.subtitle || 'Mockup';
+  return node.entityRef.name;
+}
+
+function nodeMeta(node: FlowNode): string {
+  if (isMockNode(node)) return `Mock · ${node.shape}`;
+  return `${node.entityRef.kind} · ${node.entityRef.name}`;
+}
+
+function mockShapeLabel(shape: FlowMockShape): string {
+  switch (shape) {
+    case 'pill':
+      return 'Pill';
+    case 'diamond':
+      return 'Diamond';
+    case 'note':
+      return 'Note';
+    default:
+      return 'Box';
+  }
+}
+
+function withAlpha(color: string, alpha: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) {
+    return `${color}${alpha}`;
+  }
+  return color;
+}
+
+function mockFoldFill(color: string): string {
+  return withAlpha(color, '22');
+}
+
+function estimateWrappedLines(text: string, charsPerLine: number): number {
+  if (!text.trim()) return 0;
+  return text
+    .split(/\r?\n/)
+    .reduce((total, line) => total + Math.max(1, Math.ceil(line.trim().length / Math.max(1, charsPerLine))), 0);
+}
+
+function getNodeDimensions(node: FlowNode): { width: number; height: number } {
+  if (isEntityNode(node)) {
+    return { width: ENTITY_NODE_WIDTH, height: ENTITY_NODE_HEIGHT };
+  }
+
+  const title = node.label.trim();
+  const subtitle = (node.subtitle || '').trim();
+  const longestText = Math.max(title.length, subtitle.length, 12);
+
+  switch (node.shape) {
+    case 'pill': {
+      const width = clamp(188 + Math.max(0, longestText - 12) * 7, 188, 340);
+      const charsPerLine = Math.max(12, Math.floor((width - 44) / 8));
+      const titleLines = estimateWrappedLines(title, charsPerLine);
+      const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+      const height = Math.max(84, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      return { width, height };
+    }
+    case 'diamond': {
+      const width = clamp(272 + Math.max(0, longestText - 10) * 10, 272, MAX_NODE_WIDTH);
+      const charsPerLine = Math.max(9, Math.floor((width * 0.42) / 8));
+      const titleLines = estimateWrappedLines(title, charsPerLine);
+      const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+      const height = clamp(120 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 20, 120, 220);
+      return { width, height };
+    }
+    case 'note': {
+      const width = clamp(196 + Math.max(0, longestText - 14) * 7, 196, 360);
+      const charsPerLine = Math.max(13, Math.floor((width - 52) / 8));
+      const titleLines = estimateWrappedLines(title, charsPerLine);
+      const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+      const height = Math.max(MIN_NODE_HEIGHT, 56 + titleLines * 18 + subtitleLines * 16 + 24);
+      return { width, height };
+    }
+    case 'box':
+    default: {
+      const width = clamp(180 + Math.max(0, longestText - 14) * 6, 180, 320);
+      const charsPerLine = Math.max(14, Math.floor((width - 36) / 8));
+      const titleLines = estimateWrappedLines(title, charsPerLine);
+      const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+      const height = Math.max(MIN_NODE_HEIGHT, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      return { width, height };
+    }
+  }
+}
+
+function renderMockNodeShell(shape: FlowMockShape, borderColor: string, color: string, width: number, height: number) {
+  const fill = 'var(--gantry-bg-primary)';
+
+  switch (shape) {
+    case 'pill':
+      return (
+        <div
+          className="absolute inset-x-0 inset-y-1 rounded-full border"
+          style={{ borderColor, background: fill }}
+        />
+      );
+    case 'diamond':
+      return (
+        <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+          <polygon
+            points={`${width / 2},6 ${width - 14},${height / 2} ${width / 2},${height - 6} 14,${height / 2}`}
+            fill={fill}
+            stroke={borderColor}
+            strokeWidth="1.5"
+          />
+        </svg>
+      );
+    case 'note':
+      return (
+        <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+          <path
+            d={`M 14 8 H ${width - 34} L ${width - 14} 28 V ${height - 14} Q ${width - 14} ${height - 8} ${width - 22} ${height - 8} H 22 Q 14 ${height - 8} 14 ${height - 16} Z`}
+            fill={fill}
+            stroke={borderColor}
+            strokeWidth="1.5"
+          />
+          <path
+            d={`M ${width - 34} 8 V 22 Q ${width - 34} 28 ${width - 28} 28 H ${width - 14} L ${width - 34} 8 Z`}
+            fill={mockFoldFill(color)}
+            stroke={borderColor}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'box':
+    default:
+      return (
+        <div
+          className="absolute inset-0 rounded-2xl border"
+          style={{ borderColor, background: fill }}
+        />
+      );
+  }
+}
+
+function mockContentClasses(shape: FlowMockShape): string {
+  switch (shape) {
+    case 'diamond':
+      return 'items-center justify-center text-center px-10 py-6';
+    case 'pill':
+      return 'justify-center px-7 py-4';
+    case 'note':
+      return 'justify-between px-5 py-4 pr-12';
+    case 'box':
+    default:
+      return 'justify-between px-4 py-3';
+  }
+}
+
+function mockContentStyle(shape: FlowMockShape, width: number): CSSProperties {
+  switch (shape) {
+    case 'diamond':
+      return { maxWidth: Math.max(120, width * 0.44) };
+    case 'pill':
+      return { maxWidth: Math.max(140, width - 32) };
+    case 'note':
+      return { maxWidth: Math.max(140, width - 44) };
+    case 'box':
+    default:
+      return { maxWidth: Math.max(140, width - 28) };
+  }
 }
 
 function entityPath(kind: string, name: string, namespace?: string): string {
@@ -100,26 +323,32 @@ function entityPath(kind: string, name: string, namespace?: string): string {
 }
 
 function edgePath(source: FlowNode, target: FlowNode): string {
-  const x1 = source.position.x + NODE_WIDTH;
-  const y1 = source.position.y + NODE_HEIGHT / 2;
+  const sourceSize = getNodeDimensions(source);
+  const targetSize = getNodeDimensions(target);
+  const x1 = source.position.x + sourceSize.width;
+  const y1 = source.position.y + sourceSize.height / 2;
   const x2 = target.position.x;
-  const y2 = target.position.y + NODE_HEIGHT / 2;
+  const y2 = target.position.y + targetSize.height / 2;
   const dx = Math.max(80, Math.abs(x2 - x1) * 0.45);
   return `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`;
 }
 
 function edgeLabelPosition(source: FlowNode, target: FlowNode) {
+  const sourceSize = getNodeDimensions(source);
+  const targetSize = getNodeDimensions(target);
   return {
-    x: (source.position.x + NODE_WIDTH + target.position.x) / 2,
-    y: (source.position.y + target.position.y) / 2 + NODE_HEIGHT / 2 - 10,
+    x: (source.position.x + sourceSize.width + target.position.x) / 2,
+    y: (source.position.y + target.position.y) / 2 + (sourceSize.height + targetSize.height) / 4 - 10,
   };
 }
 
 function edgeOffsetTransform(source: FlowNode, target: FlowNode, offset: number): string {
-  const x1 = source.position.x + NODE_WIDTH;
-  const y1 = source.position.y + NODE_HEIGHT / 2;
+  const sourceSize = getNodeDimensions(source);
+  const targetSize = getNodeDimensions(target);
+  const x1 = source.position.x + sourceSize.width;
+  const y1 = source.position.y + sourceSize.height / 2;
   const x2 = target.position.x;
-  const y2 = target.position.y + NODE_HEIGHT / 2;
+  const y2 = target.position.y + targetSize.height / 2;
   const dx = x2 - x1;
   const dy = y2 - y1;
   const length = Math.hypot(dx, dy) || 1;
@@ -128,15 +357,91 @@ function edgeOffsetTransform(source: FlowNode, target: FlowNode, offset: number)
   return `translate(${nx * offset}, ${ny * offset})`;
 }
 
+function getFlowBounds(spec: FlowSpec) {
+  if (spec.nodes.length === 0) {
+    return {
+      minX: 0,
+      minY: 0,
+      maxX: CANVAS_WIDTH,
+      maxY: CANVAS_HEIGHT,
+      width: CANVAS_WIDTH,
+      height: CANVAS_HEIGHT,
+    };
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const node of spec.nodes) {
+    const size = getNodeDimensions(node);
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + size.width);
+    maxY = Math.max(maxY, node.position.y + size.height);
+  }
+
+  minX -= CONTENT_PADDING;
+  minY -= CONTENT_PADDING;
+  maxX += CONTENT_PADDING;
+  maxY += CONTENT_PADDING;
+
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+function getFitViewState(width: number, height: number, spec: FlowSpec) {
+  if (width <= 0 || height <= 0) {
+    return { zoom: 1, offset: { x: 24, y: 24 } };
+  }
+
+  const bounds = getFlowBounds(spec);
+  const stageMinX = Math.min(0, bounds.minX);
+  const stageMinY = Math.min(0, bounds.minY);
+  const renderMinX = bounds.minX - stageMinX;
+  const renderMinY = bounds.minY - stageMinY;
+  const zoom = clamp(
+    Math.min(
+      (width - FIT_PADDING * 2) / bounds.width,
+      (height - FIT_PADDING * 2) / bounds.height,
+      1
+    ),
+    MIN_ZOOM,
+    1
+  );
+
+  return {
+    zoom,
+    offset: {
+      x: (width - bounds.width * zoom) / 2 - renderMinX * zoom,
+      y: (height - bounds.height * zoom) / 2 - renderMinY * zoom,
+    },
+  };
+}
+
 export default function Flow() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const suppressNodeClickRef = useRef(false);
+  const suppressCanvasClickRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [pluginEnabled, setPluginEnabled] = useState(false);
+  const [flowSettings, setFlowSettings] = useState<FlowPluginSettings>({
+    showInSidebar: true,
+    editorRole: 'developer',
+    canEdit: true,
+  });
   const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
   const [flows, setFlows] = useState<Entity[]>([]);
   const [currentFlowName, setCurrentFlowName] = useState<string | null>(null);
@@ -154,24 +459,85 @@ export default function Flow() {
   const [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false);
   const [dragging, setDragging] = useState<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
+  const [panning, setPanning] = useState<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const [zoomMode, setZoomMode] = useState<'fit' | 'manual'>('fit');
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const requestedFlow = searchParams.get('flow') || '';
   const requestedNamespace = searchParams.get('namespace') || 'default';
   const requestedMode = searchParams.get('mode') === 'edit' ? 'edit' : 'view';
+  const flowBounds = getFlowBounds(flowSpec);
+  const [renderBounds, setRenderBounds] = useState(flowBounds);
+  const activeBounds = dragging ? renderBounds : flowBounds;
+  const stageMinX = Math.min(0, activeBounds.minX);
+  const stageMinY = Math.min(0, activeBounds.minY);
+  const stageMaxX = Math.max(CANVAS_WIDTH, activeBounds.maxX);
+  const stageMaxY = Math.max(CANVAS_HEIGHT, activeBounds.maxY);
+  const contentOffsetX = -stageMinX;
+  const contentOffsetY = -stageMinY;
+  const stageWidth = stageMaxX - stageMinX;
+  const stageHeight = stageMaxY - stageMinY;
+  const scaledCanvasWidth = stageWidth * canvasZoom;
+  const scaledCanvasHeight = stageHeight * canvasZoom;
+  const canvasOffset = {
+    x: panOffset.x,
+    y: panOffset.y,
+  };
+
+  function getViewportDimensions() {
+    if (viewportRef.current) {
+      return {
+        width: viewportRef.current.clientWidth,
+        height: viewportRef.current.clientHeight,
+      };
+    }
+    return viewportSize;
+  }
+
+  function applyManualZoom(nextZoom: number) {
+    setZoomMode('manual');
+    setCanvasZoom(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM));
+  }
+
+  function fitCanvas() {
+    setZoomMode('fit');
+    const { width, height } = getViewportDimensions();
+    const nextView = getFitViewState(width, height, flowSpec);
+    setPanOffset(nextView.offset);
+    setCanvasZoom(nextView.zoom);
+  }
+
+  function clientPointToCanvas(clientX: number, clientY: number) {
+    if (!canvasRef.current) return { x: 0, y: 0 };
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left) / canvasZoom - contentOffsetX,
+      y: (clientY - rect.top) / canvasZoom - contentOffsetY,
+    };
+  }
+
+  useEffect(() => {
+    if (dragging) return;
+    setRenderBounds(flowBounds);
+  }, [dragging, flowBounds]);
 
   useEffect(() => {
     let active = true;
 
     const load = async () => {
       try {
-        const [plugins, entities, flowEntities] = await Promise.all([
+        const [plugins, entities, flowEntities, nextFlowSettings] = await Promise.all([
           api.listPlugins(),
           api.listEntities(),
           api.listFlows().catch(() => []),
+          api.getFlowSettings().catch(() => ({ showInSidebar: true, editorRole: 'developer', canEdit: true })),
         ]);
         if (!active) return;
 
         const flowPlugin = plugins.find((plugin) => plugin.name === 'flow');
         setPluginEnabled(Boolean(flowPlugin?.enabled));
+        setFlowSettings(nextFlowSettings);
         setAvailableEntities((entities || []).filter((entity) => entity.kind !== 'Flow'));
 
         const sortedFlows = [...(flowEntities || [])].sort((a, b) => flowTitle(a).localeCompare(flowTitle(b)));
@@ -181,10 +547,10 @@ export default function Flow() {
             (flow) => flow.metadata.name === requestedFlow && (flow.metadata.namespace || 'default') === requestedNamespace
           );
           loadFlow(requested || sortedFlows[0]);
-          setMode(requestedMode);
+          setMode(nextFlowSettings.canEdit ? requestedMode : 'view');
         } else {
           resetDraft();
-          setMode(requestedMode);
+          setMode(nextFlowSettings.canEdit ? requestedMode : 'view');
         }
       } catch (err: any) {
         if (!active) return;
@@ -206,11 +572,11 @@ export default function Flow() {
     const currentDrag = dragging;
 
     function handleMove(event: MouseEvent) {
-      if (!canvasRef.current) return;
+      if (!viewportRef.current) return;
       suppressNodeClickRef.current = true;
-      const rect = canvasRef.current.getBoundingClientRect();
-      const nextX = event.clientX - rect.left - currentDrag.offsetX;
-      const nextY = event.clientY - rect.top - currentDrag.offsetY;
+      const nextPoint = clientPointToCanvas(event.clientX, event.clientY);
+      const nextX = nextPoint.x - currentDrag.offsetX;
+      const nextY = nextPoint.y - currentDrag.offsetY;
 
       setFlowSpec((prev) => ({
         ...prev,
@@ -219,8 +585,8 @@ export default function Flow() {
             ? {
                 ...node,
                 position: {
-                  x: Math.max(16, Math.min(CANVAS_WIDTH - NODE_WIDTH - 16, nextX)),
-                  y: Math.max(16, Math.min(CANVAS_HEIGHT - NODE_HEIGHT - 16, nextY)),
+                  x: nextX,
+                  y: nextY,
                 },
               }
             : node
@@ -240,7 +606,65 @@ export default function Flow() {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [dragging]);
+  }, [dragging, canvasZoom]);
+
+  useEffect(() => {
+    if (!panning) return;
+    const currentPan = panning;
+
+    function handleMove(event: MouseEvent) {
+      suppressCanvasClickRef.current = true;
+      setZoomMode('manual');
+      setPanOffset({
+        x: currentPan.originX + (event.clientX - currentPan.startX),
+        y: currentPan.originY + (event.clientY - currentPan.startY),
+      });
+    }
+
+    function handleUp() {
+      setPanning(null);
+    }
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [panning]);
+
+  useEffect(() => {
+    if (!viewportRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setViewportSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
+    });
+    observer.observe(viewportRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (zoomMode !== 'fit' || dragging) return;
+    const frame = requestAnimationFrame(() => {
+      const { width, height } = getViewportDimensions();
+      const nextView = getFitViewState(width, height, flowSpec);
+      setPanOffset(nextView.offset);
+      setCanvasZoom(nextView.zoom);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [zoomMode, dragging, viewportSize.width, viewportSize.height, currentFlowName, currentNamespace, flowSpec]);
+
+  useEffect(() => {
+    if (!flowSettings.canEdit && mode === 'edit') {
+      setMode('view');
+      setConnectFromId(null);
+    }
+  }, [flowSettings.canEdit, mode]);
 
   function resetDraft() {
     setCurrentFlowName(null);
@@ -256,6 +680,8 @@ export default function Flow() {
     setDirty(false);
     setNotice('');
     setError('');
+    setZoomMode('fit');
+    setPanOffset({ x: 0, y: 0 });
   }
 
   function loadFlow(flow: Entity) {
@@ -272,6 +698,8 @@ export default function Flow() {
     setDirty(false);
     setNotice('');
     setError('');
+    setZoomMode('fit');
+    setPanOffset({ x: 0, y: 0 });
   }
 
   function confirmDiscard(): boolean {
@@ -280,6 +708,10 @@ export default function Flow() {
   }
 
   function startNewFlow() {
+    if (!flowSettings.canEdit) {
+      setError(`Editing flows requires the ${flowSettings.editorRole} role or higher.`);
+      return;
+    }
     if (!confirmDiscard()) return;
     resetDraft();
     setMode('edit');
@@ -292,6 +724,10 @@ export default function Flow() {
   }
 
   function openEditor() {
+    if (!flowSettings.canEdit) {
+      setError(`Editing flows requires the ${flowSettings.editorRole} role or higher.`);
+      return;
+    }
     setMode('edit');
   }
 
@@ -307,6 +743,7 @@ export default function Flow() {
   }
 
   function addEntityNode(entity: Entity) {
+    if (!flowSettings.canEdit) return;
     const existingNode = flowSpec.nodes.find((node) => nodeEntityKey(node) === entityKey(entity));
     if (existingNode) {
       setSelectedNodeId(existingNode.id);
@@ -336,7 +773,42 @@ export default function Flow() {
     setNotice('');
   }
 
+  function addMockNode(template: { label: string; subtitle: string; shape: FlowMockShape; color: string }) {
+    if (!flowSettings.canEdit) return;
+    const count = flowSpec.nodes.length;
+    const nextNode: FlowMockNode = {
+      id: crypto.randomUUID(),
+      nodeType: 'mock',
+      label: template.label,
+      subtitle: template.subtitle,
+      shape: template.shape,
+      color: template.color,
+      position: {
+        x: 48 + (count % 4) * 250,
+        y: 48 + Math.floor(count / 4) * 150,
+      },
+    };
+
+    setFlowSpec((prev) => ({ ...prev, nodes: [...prev.nodes, nextNode] }));
+    setSelectedNodeId(nextNode.id);
+    setSelectedEdgeId(null);
+    setConnectFromId(null);
+    setDirty(true);
+    setNotice('');
+  }
+
+  function updateNode(nodeId: string, patch: Partial<FlowNode>) {
+    if (!flowSettings.canEdit) return;
+    setFlowSpec((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((node) => (node.id === nodeId ? { ...node, ...patch } as FlowNode : node)),
+    }));
+    setDirty(true);
+    setNotice('');
+  }
+
   function removeNode(nodeId: string) {
+    if (!flowSettings.canEdit) return;
     setFlowSpec((prev) => ({
       ...prev,
       nodes: prev.nodes.filter((node) => node.id !== nodeId),
@@ -350,6 +822,7 @@ export default function Flow() {
   }
 
   function createEdge(sourceId: string, targetId: string) {
+    if (!flowSettings.canEdit) return;
     if (sourceId === targetId) return;
     const duplicate = flowSpec.edges.find((edge) => edge.source === sourceId && edge.target === targetId);
     if (duplicate) {
@@ -378,6 +851,7 @@ export default function Flow() {
   }
 
   function removeEdge(edgeId: string) {
+    if (!flowSettings.canEdit) return;
     setFlowSpec((prev) => ({ ...prev, edges: prev.edges.filter((edge) => edge.id !== edgeId) }));
     setSelectedEdgeId(null);
     setDirty(true);
@@ -385,6 +859,7 @@ export default function Flow() {
   }
 
   function updateEdge(edgeId: string, patch: Partial<FlowEdge>) {
+    if (!flowSettings.canEdit) return;
     setFlowSpec((prev) => ({
       ...prev,
       edges: prev.edges.map((edge) => (edge.id === edgeId ? { ...edge, ...patch } : edge)),
@@ -394,8 +869,9 @@ export default function Flow() {
   }
 
   function seedEdgesFromRelationships() {
+    if (!flowSettings.canEdit) return;
     const entityMap = new Map(availableEntities.map((entity) => [entityKey(entity), entity]));
-    const nodeByEntity = new Map(flowSpec.nodes.map((node) => [nodeEntityKey(node), node]));
+    const nodeByEntity = new Map(flowSpec.nodes.filter(isEntityNode).map((node) => [nodeEntityKey(node), node]));
     const nextEdges = [...flowSpec.edges];
     let added = 0;
 
@@ -416,6 +892,7 @@ export default function Flow() {
     };
 
     for (const node of flowSpec.nodes) {
+      if (!isEntityNode(node)) continue;
       const entity = entityMap.get(nodeEntityKey(node));
       if (!entity?.spec) continue;
 
@@ -448,6 +925,10 @@ export default function Flow() {
   }
 
   async function saveFlow() {
+    if (!flowSettings.canEdit) {
+      setError(`Editing flows requires the ${flowSettings.editorRole} role or higher.`);
+      return;
+    }
     const name = flowName.trim();
     if (!name) {
       setError('Flow name is required');
@@ -485,6 +966,10 @@ export default function Flow() {
   }
 
   async function deleteFlow() {
+    if (!flowSettings.canEdit) {
+      setError(`Editing flows requires the ${flowSettings.editorRole} role or higher.`);
+      return;
+    }
     if (!currentFlowName) {
       resetDraft();
       return;
@@ -570,210 +1055,339 @@ export default function Flow() {
             <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">{readOnly ? 'Preview' : 'Canvas'}</h2>
             <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
               {readOnly
-                ? 'Browse the flow diagram and select nodes or edges for details.'
-                : 'Drag nodes to arrange the diagram. Click one node, then another while connecting to create an edge.'}
+                ? 'Browse the flow diagram, scroll to zoom, and select nodes or edges for details.'
+                : 'Drag nodes to arrange the diagram. Scroll to zoom, then click one node and another while connecting to create an edge.'}
             </p>
           </div>
-          <div className="text-xs text-[var(--gantry-text-secondary)]">
-            {flowSpec.nodes.length} node{flowSpec.nodes.length === 1 ? '' : 's'} · {flowSpec.edges.length} edge{flowSpec.edges.length === 1 ? '' : 's'}
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-[var(--gantry-text-secondary)]">
+              {flowSpec.nodes.length} node{flowSpec.nodes.length === 1 ? '' : 's'} · {flowSpec.edges.length} edge{flowSpec.edges.length === 1 ? '' : 's'}
+            </div>
+            <div className="inline-flex items-center gap-1 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-1">
+              <button
+                onClick={() => applyManualZoom(canvasZoom - ZOOM_STEP)}
+                disabled={canvasZoom <= MIN_ZOOM}
+                className="rounded-md p-1 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                title="Zoom out"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <button
+                onClick={fitCanvas}
+                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
+                title="Fit to view"
+              >
+                Fit
+              </button>
+              <button
+                onClick={() => applyManualZoom(canvasZoom + ZOOM_STEP)}
+                disabled={canvasZoom >= MAX_ZOOM}
+                className="rounded-md p-1 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                title="Zoom in"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-w-[3.5rem] text-right text-xs tabular-nums text-[var(--gantry-text-secondary)]">
+              {Math.round(canvasZoom * 100)}%
+            </div>
           </div>
         </div>
-        <div className="overflow-auto bg-[var(--gantry-bg-secondary)] p-4">
+        <div className="bg-[var(--gantry-bg-secondary)] p-4">
           <div
-            ref={canvasRef}
-            className="relative rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]"
+            ref={viewportRef}
+            className={`relative h-[min(70vh,44rem)] min-h-[22rem] overflow-hidden rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] ${
+              panning ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
             style={{
-              width: CANVAS_WIDTH,
-              height: CANVAS_HEIGHT,
               backgroundImage: 'linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px)',
-              backgroundSize: '32px 32px',
+              backgroundSize: `${32 * canvasZoom}px ${32 * canvasZoom}px`,
+              backgroundPosition: `${canvasOffset.x + contentOffsetX * canvasZoom}px ${canvasOffset.y + contentOffsetY * canvasZoom}px`,
             }}
-            onClick={() => {
-              setSelectedNodeId(null);
-              setSelectedEdgeId(null);
+            onMouseDown={(event) => {
+              const target = event.target as HTMLElement;
+              if (
+                target.closest('[data-flow-node="true"]')
+                || target.closest('[data-flow-edge-hit="true"]')
+                || target.closest('button, input, textarea, select, a')
+              ) {
+                return;
+              }
+              suppressCanvasClickRef.current = false;
+              setPanning({
+                startX: event.clientX,
+                startY: event.clientY,
+                originX: panOffset.x,
+                originY: panOffset.y,
+              });
+            }}
+            onWheel={(event) => {
+              event.preventDefault();
+              applyManualZoom(canvasZoom + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
             }}
           >
-            <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-              <defs>
-                <marker id="flow-arrow-end" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
-                </marker>
-                <marker id="flow-arrow-start" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
-                </marker>
-              </defs>
-              {flowSpec.edges.map((edge) => {
-                const source = flowSpec.nodes.find((node) => node.id === edge.source);
-                const target = flowSpec.nodes.find((node) => node.id === edge.target);
-                if (!source || !target) return null;
-                const path = edgePath(source, target);
-                const labelPos = edgeLabelPosition(source, target);
-                const active = edge.id === selectedEdgeId;
-                const twoWay = edge.direction === 'two-way';
-                const forwardTransform = twoWay ? edgeOffsetTransform(source, target, 3) : undefined;
-                const reverseTransform = twoWay ? edgeOffsetTransform(source, target, -3) : undefined;
-
-                return (
-                  <g key={edge.id}>
-                    {!twoWay && (
-                      <path
-                        d={path}
-                        fill="none"
-                        stroke={active ? '#0F172A' : '#64748B'}
-                        strokeWidth={active ? 3 : 2}
-                        strokeDasharray={edge.animated ? '8 8' : undefined}
-                        markerEnd="url(#flow-arrow-end)"
-                      >
-                        {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
-                      </path>
-                    )}
-                    {twoWay && (
-                      <>
-                        <path
-                          d={path}
-                          fill="none"
-                          transform={forwardTransform}
-                          stroke={active ? '#0F172A' : '#64748B'}
-                          strokeWidth={active ? 2.8 : 2.1}
-                          strokeDasharray={edge.animated ? '8 8' : undefined}
-                          markerEnd="url(#flow-arrow-end)"
-                        >
-                          {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
-                        </path>
-                        <path
-                          d={path}
-                          fill="none"
-                          transform={reverseTransform}
-                          stroke={active ? '#1E293B' : '#94A3B8'}
-                          strokeWidth={active ? 2.6 : 1.9}
-                          strokeDasharray={edge.animated ? '8 8' : undefined}
-                          markerStart="url(#flow-arrow-start)"
-                        >
-                          {edge.animated && <animate attributeName="stroke-dashoffset" from="0" to="16" dur="1s" repeatCount="indefinite" />}
-                        </path>
-                      </>
-                    )}
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke="transparent"
-                      strokeWidth="16"
-                      className="pointer-events-auto cursor-pointer"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedEdgeId(edge.id);
-                        setSelectedNodeId(null);
-                      }}
-                        />
-                    <rect
-                      x={labelPos.x - (twoWay ? 44 : 30)}
-                      y={labelPos.y - 17}
-                      width={twoWay ? 88 : 60}
-                      height={22}
-                      rx={11}
-                      fill="var(--gantry-bg-primary)"
-                      stroke={twoWay ? '#64748B' : 'var(--gantry-border)'}
-                    />
-                    <text x={labelPos.x} y={labelPos.y - 2} textAnchor="middle" className="fill-[var(--gantry-text-secondary)] text-[11px] font-medium">
-                      {twoWay ? `${edge.label || edge.relation} <->` : edge.label || edge.relation}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-
-            {flowSpec.nodes.map((node) => {
-              const entity = entityMap.get(nodeEntityKey(node));
-              const active = node.id === selectedNodeId;
-              const connectSource = node.id === connectFromId;
-              const color = kindColors[node.entityRef.kind] || '#64748B';
-
-              return (
+            <div
+              ref={canvasRef}
+              className="absolute left-0 top-0"
+              style={{
+                width: scaledCanvasWidth,
+                height: scaledCanvasHeight,
+                transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
+              }}
+            >
+              <div
+                className="absolute left-0 top-0 rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]"
+                style={{
+                  width: stageWidth,
+                  height: stageHeight,
+                  transform: `scale(${canvasZoom})`,
+                  transformOrigin: 'top left',
+                  background: 'transparent',
+                  borderColor: 'transparent',
+                }}
+                onClick={() => {
+                  if (suppressCanvasClickRef.current) {
+                    suppressCanvasClickRef.current = false;
+                    return;
+                  }
+                  setSelectedNodeId(null);
+                  setSelectedEdgeId(null);
+                }}
+              >
                 <div
-                  key={node.id}
-                  className={`absolute rounded-2xl border shadow-sm transition-shadow ${
-                    active || connectSource ? 'shadow-lg' : 'hover:shadow-md'
-                  }`}
+                  className="absolute left-0 top-0"
                   style={{
-                    left: node.position.x,
-                    top: node.position.y,
-                    width: NODE_WIDTH,
-                    height: NODE_HEIGHT,
-                    borderColor: active || connectSource ? color : 'var(--gantry-border)',
-                    background: 'var(--gantry-bg-primary)',
-                  }}
-                  onMouseDown={(event) => {
-                    if (readOnly) return;
-                    event.stopPropagation();
-                    suppressNodeClickRef.current = false;
-                    if (!canvasRef.current) return;
-                    const rect = canvasRef.current.getBoundingClientRect();
-                    setDragging({
-                      nodeId: node.id,
-                      offsetX: event.clientX - rect.left - node.position.x,
-                      offsetY: event.clientY - rect.top - node.position.y,
-                    });
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (suppressNodeClickRef.current) {
-                      suppressNodeClickRef.current = false;
-                      return;
-                    }
-                    if (!readOnly && connectFromId && connectFromId !== node.id) {
-                      createEdge(connectFromId, node.id);
-                      return;
-                    }
-                    setSelectedNodeId(node.id);
-                    setSelectedEdgeId(null);
+                    width: stageWidth,
+                    height: stageHeight,
+                    transform: `translate(${contentOffsetX}px, ${contentOffsetY}px)`,
                   }}
                 >
-                  <div className="flex h-full flex-col justify-between p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${color}1A`, color }}>
-                          {node.entityRef.kind}
-                        </div>
-                        <div className="mt-2 text-sm font-semibold text-[var(--gantry-text-primary)]">
-                          {entity?.metadata.title || node.entityRef.name}
-                        </div>
-                      </div>
-                      <button
+                  <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+                    <defs>
+                      <marker id="flow-arrow-end" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
+                      </marker>
+                      <marker id="flow-arrow-start" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
+                      </marker>
+                    </defs>
+                    {flowSpec.edges.map((edge) => {
+                      const source = flowSpec.nodes.find((node) => node.id === edge.source);
+                      const target = flowSpec.nodes.find((node) => node.id === edge.target);
+                      if (!source || !target) return null;
+                      const path = edgePath(source, target);
+                      const labelPos = edgeLabelPosition(source, target);
+                      const active = edge.id === selectedEdgeId;
+                      const twoWay = edge.direction === 'two-way';
+                      const forwardTransform = twoWay ? edgeOffsetTransform(source, target, 3) : undefined;
+                      const reverseTransform = twoWay ? edgeOffsetTransform(source, target, -3) : undefined;
+
+                      return (
+                        <g key={edge.id}>
+                          {!twoWay && (
+                            <path
+                              d={path}
+                              fill="none"
+                              stroke={active ? '#0F172A' : '#64748B'}
+                              strokeWidth={active ? 3 : 2}
+                              strokeDasharray={edge.animated ? '8 8' : undefined}
+                              markerEnd="url(#flow-arrow-end)"
+                            >
+                              {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
+                            </path>
+                          )}
+                          {twoWay && (
+                            <>
+                              <path
+                                d={path}
+                                fill="none"
+                                transform={forwardTransform}
+                                stroke={active ? '#0F172A' : '#64748B'}
+                                strokeWidth={active ? 2.8 : 2.1}
+                                strokeDasharray={edge.animated ? '8 8' : undefined}
+                                markerEnd="url(#flow-arrow-end)"
+                              >
+                                {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
+                              </path>
+                              <path
+                                d={path}
+                                fill="none"
+                                transform={reverseTransform}
+                                stroke={active ? '#1E293B' : '#94A3B8'}
+                                strokeWidth={active ? 2.6 : 1.9}
+                                strokeDasharray={edge.animated ? '8 8' : undefined}
+                                markerStart="url(#flow-arrow-start)"
+                              >
+                                {edge.animated && <animate attributeName="stroke-dashoffset" from="0" to="16" dur="1s" repeatCount="indefinite" />}
+                              </path>
+                            </>
+                          )}
+                          <path
+                            d={path}
+                            fill="none"
+                            stroke="transparent"
+                            strokeWidth="16"
+                            data-flow-edge-hit="true"
+                            className="pointer-events-auto cursor-pointer"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedEdgeId(edge.id);
+                              setSelectedNodeId(null);
+                            }}
+                          />
+                          <rect
+                            x={labelPos.x - (twoWay ? 44 : 30)}
+                            y={labelPos.y - 17}
+                            width={twoWay ? 88 : 60}
+                            height={22}
+                            rx={11}
+                            fill="var(--gantry-bg-primary)"
+                            stroke={twoWay ? '#64748B' : 'var(--gantry-border)'}
+                          />
+                          <text x={labelPos.x} y={labelPos.y - 2} textAnchor="middle" className="fill-[var(--gantry-text-secondary)] text-[11px] font-medium">
+                            {twoWay ? `${edge.label || edge.relation} <->` : edge.label || edge.relation}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+
+                  {flowSpec.nodes.map((node) => {
+                    const active = node.id === selectedNodeId;
+                    const connectSource = node.id === connectFromId;
+                    const color = nodeColor(node);
+                    const title = nodeTitle(node, entityMap);
+                    const subtitle = nodeSubtitle(node);
+                    const badge = isMockNode(node) ? `Mock ${mockShapeLabel(node.shape)}` : node.entityRef.kind;
+                    const nodeSize = getNodeDimensions(node);
+                    const nodeOuterStyle: CSSProperties = {
+                      left: node.position.x,
+                      top: node.position.y,
+                      width: nodeSize.width,
+                      height: nodeSize.height,
+                    };
+                    const baseBorderColor = active || connectSource ? color : 'var(--gantry-border)';
+                    const cardStyle: CSSProperties = {
+                      borderColor: baseBorderColor,
+                      background: 'var(--gantry-bg-primary)',
+                    };
+
+                    return (
+                      <div
+                        key={node.id}
+                        data-flow-node="true"
+                        className={`absolute rounded-2xl shadow-sm transition-shadow ${
+                          active || connectSource ? 'shadow-lg' : 'hover:shadow-md'
+                        }`}
+                        style={nodeOuterStyle}
+                        onMouseDown={(event) => {
+                          if (readOnly || !flowSettings.canEdit) return;
+                          event.stopPropagation();
+                          suppressNodeClickRef.current = false;
+                          setRenderBounds(flowBounds);
+                          const point = clientPointToCanvas(event.clientX, event.clientY);
+                          setDragging({
+                            nodeId: node.id,
+                            offsetX: point.x - node.position.x,
+                            offsetY: point.y - node.position.y,
+                          });
+                        }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          navigate(entityPath(node.entityRef.kind, node.entityRef.name, node.entityRef.namespace));
+                          if (suppressNodeClickRef.current) {
+                            suppressNodeClickRef.current = false;
+                            return;
+                          }
+                          if (!readOnly && flowSettings.canEdit && connectFromId && connectFromId !== node.id) {
+                            createEdge(connectFromId, node.id);
+                            return;
+                          }
+                          setSelectedNodeId(node.id);
+                          setSelectedEdgeId(null);
                         }}
-                        className="rounded-lg border border-[var(--gantry-border)] p-1.5 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]"
-                        title="Open entity"
                       >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="text-xs text-[var(--gantry-text-secondary)]">
-                      {node.entityRef.name}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                        <div className="relative h-full w-full">
+                          {isMockNode(node) ? (
+                            renderMockNodeShell(node.shape, baseBorderColor, color, nodeSize.width, nodeSize.height)
+                          ) : (
+                            <div className="absolute inset-0 rounded-2xl border" style={cardStyle} />
+                          )}
 
-            {flowSpec.nodes.length === 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
-                <div className="rounded-2xl bg-[var(--gantry-accent)]/10 p-4 text-[var(--gantry-accent)]">
-                  <Workflow className="h-8 w-8" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-[var(--gantry-text-primary)]">
-                    {readOnly ? 'No flow selected' : 'Start your first flow'}
-                  </h3>
-                  <p className="mt-1 max-w-md text-sm text-[var(--gantry-text-secondary)]">
-                    {readOnly
-                      ? 'Choose a saved flow from the left to preview it, or create a new one when you are ready to edit.'
-                      : 'Add entities from the left rail, drag them into place, then connect them to show request paths, data movement, and ownership boundaries.'}
-                  </p>
+                          {isMockNode(node) ? (
+                            <div className={`relative flex h-full flex-col ${mockContentClasses(node.shape)}`}>
+                              <div
+                                className={`${node.shape === 'diamond' ? 'w-full space-y-2' : ''} min-w-0`}
+                                style={mockContentStyle(node.shape, nodeSize.width)}
+                              >
+                                <div
+                                  className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                  style={{ backgroundColor: `${color}1A`, color }}
+                                >
+                                  {badge}
+                                </div>
+                                <div className={`mt-2 break-words whitespace-pre-wrap text-sm font-semibold leading-5 text-[var(--gantry-text-primary)] ${node.shape === 'diamond' ? 'text-center' : ''}`}>
+                                  {title}
+                                </div>
+                              </div>
+                              <div
+                                className={`min-w-0 break-words whitespace-pre-wrap text-xs leading-4 text-[var(--gantry-text-secondary)] ${node.shape === 'diamond' ? 'text-center' : ''}`}
+                                style={mockContentStyle(node.shape, nodeSize.width)}
+                              >
+                                {subtitle}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="relative flex h-full flex-col justify-between p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${color}1A`, color }}>
+                                    {badge}
+                                  </div>
+                                  <div className="mt-2 break-words text-sm font-semibold leading-5 text-[var(--gantry-text-primary)]">
+                                    {title}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    navigate(entityPath(node.entityRef.kind, node.entityRef.name, node.entityRef.namespace));
+                                  }}
+                                  className="rounded-lg border border-[var(--gantry-border)] p-1.5 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]"
+                                  title="Open entity"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <div className="break-words text-xs leading-4 text-[var(--gantry-text-secondary)]">
+                                {subtitle}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {flowSpec.nodes.length === 0 && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+                      <div className="rounded-2xl bg-[var(--gantry-accent)]/10 p-4 text-[var(--gantry-accent)]">
+                        <Workflow className="h-8 w-8" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-[var(--gantry-text-primary)]">
+                          {readOnly ? 'No flow selected' : 'Start your first flow'}
+                        </h3>
+                        <p className="mt-1 max-w-md text-sm text-[var(--gantry-text-secondary)]">
+                          {readOnly
+                            ? 'Choose a saved flow from the left to preview it, or create a new one when you are ready to edit.'
+                            : 'Add entities or mockup shapes from the left rail, drag them into place, then connect them to show request paths, data movement, and ownership boundaries.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -834,7 +1448,10 @@ export default function Flow() {
         <div className="flex flex-wrap items-center gap-3">
           {mode === 'edit' && connectFromId && (
             <span className="rounded-full border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1 text-xs font-medium text-[var(--gantry-text-secondary)]">
-              Connecting from {flowSpec.nodes.find((node) => node.id === connectFromId)?.entityRef.name}
+              Connecting from {(() => {
+                const connectNode = flowSpec.nodes.find((node) => node.id === connectFromId);
+                return connectNode ? nodeTitle(connectNode, entityMap) : 'selected node';
+              })()}
             </span>
           )}
           {dirty && mode === 'edit' && (
@@ -842,22 +1459,31 @@ export default function Flow() {
               Unsaved changes
             </span>
           )}
+          {!flowSettings.canEdit && (
+            <span className="rounded-full border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1 text-xs font-medium text-[var(--gantry-text-secondary)]">
+              View only
+            </span>
+          )}
           {mode === 'view' ? (
             <>
-              <button
-                onClick={startNewFlow}
-                className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
-              >
-                <Plus className="h-4 w-4" />
-                New Flow
-              </button>
-              <button
-                onClick={openEditor}
-                className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
-              >
-                <Workflow className="h-4 w-4" />
-                {currentFlowName ? 'Open Editor' : 'Create in Editor'}
-              </button>
+              {flowSettings.canEdit && (
+                <>
+                  <button
+                    onClick={startNewFlow}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New Flow
+                  </button>
+                  <button
+                    onClick={openEditor}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
+                  >
+                    <Workflow className="h-4 w-4" />
+                    {currentFlowName ? 'Open Editor' : 'Create in Editor'}
+                  </button>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -894,6 +1520,15 @@ export default function Flow() {
           )}
         </div>
       </div>
+
+      {!flowSettings.canEdit && (
+        <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-3 text-sm text-[var(--gantry-text-secondary)]">
+          <div className="flex items-start gap-2">
+            <Network className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Editing is limited to the <strong className="text-[var(--gantry-text-primary)]">{flowSettings.editorRole}</strong> role and higher. Your current Flow access is read-only.</span>
+          </div>
+        </div>
+      )}
 
       {(error || notice) && (
         <div className={`rounded-xl border px-4 py-3 text-sm ${
@@ -938,7 +1573,7 @@ export default function Flow() {
             </div>
             <div className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1">
               {filteredEntities.map((entity) => {
-                const onCanvas = flowSpec.nodes.some((node) => nodeEntityKey(node) === entityKey(entity));
+                const onCanvas = flowSpec.nodes.some((node) => isEntityNode(node) && nodeEntityKey(node) === entityKey(entity));
                 return (
                   <button
                     key={entityKey(entity)}
@@ -964,6 +1599,35 @@ export default function Flow() {
                 );
               })}
             </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-4">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Add Mockups</h2>
+                <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">Use simple shapes for future systems, external actors, or rough architecture sketches.</p>
+              </div>
+              <div className="mt-4 space-y-2">
+                {MOCK_NODE_LIBRARY.map((template) => (
+                  <button
+                    key={`${template.shape}:${template.label}`}
+                    onClick={() => addMockNode(template)}
+                    className="flex w-full items-start justify-between rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-3 text-left transition-colors hover:bg-[var(--gantry-bg-tertiary)]"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-[var(--gantry-text-primary)]">{template.label}</div>
+                      <div className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                        {mockShapeLabel(template.shape)} · {template.subtitle}
+                      </div>
+                    </div>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                      style={{ backgroundColor: `${template.color}1A`, color: template.color }}
+                    >
+                      Add
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -1027,12 +1691,55 @@ export default function Flow() {
               <div>
                 <div className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Selected Node</div>
                 <h3 className="mt-2 text-lg font-semibold text-[var(--gantry-text-primary)]">
-                  {entityMap.get(nodeEntityKey(selectedNode))?.metadata.title || selectedNode.entityRef.name}
+                  {nodeTitle(selectedNode, entityMap)}
                 </h3>
                 <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
-                  {selectedNode.entityRef.kind} · {selectedNode.entityRef.name}
+                  {nodeMeta(selectedNode)}
                 </p>
               </div>
+              {isMockNode(selectedNode) && (
+                <>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Label</span>
+                    <input
+                      value={selectedNode.label}
+                      onChange={(event) => updateNode(selectedNode.id, { label: event.target.value } as Partial<FlowMockNode>)}
+                      className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Subtitle</span>
+                    <input
+                      value={selectedNode.subtitle || ''}
+                      onChange={(event) => updateNode(selectedNode.id, { subtitle: event.target.value } as Partial<FlowMockNode>)}
+                      className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                    />
+                  </label>
+                  <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Shape</span>
+                      <select
+                        value={selectedNode.shape}
+                        onChange={(event) => updateNode(selectedNode.id, { shape: event.target.value as FlowMockShape } as Partial<FlowMockNode>)}
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                      >
+                        {MOCK_SHAPE_OPTIONS.map((shape) => (
+                          <option key={shape} value={shape}>{mockShapeLabel(shape)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Color</span>
+                      <input
+                        type="color"
+                        value={selectedNode.color || '#64748B'}
+                        onChange={(event) => updateNode(selectedNode.id, { color: event.target.value } as Partial<FlowMockNode>)}
+                        className="h-10 w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-1 py-1"
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1.5">
                   <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">X</span>
@@ -1041,11 +1748,7 @@ export default function Flow() {
                     value={Math.round(selectedNode.position.x)}
                     onChange={(event) => {
                       const next = Number(event.target.value);
-                      setFlowSpec((prev) => ({
-                        ...prev,
-                        nodes: prev.nodes.map((node) => node.id === selectedNode.id ? { ...node, position: { ...node.position, x: next } } : node),
-                      }));
-                      setDirty(true);
+                      updateNode(selectedNode.id, { position: { ...selectedNode.position, x: next } });
                     }}
                     className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                   />
@@ -1057,11 +1760,7 @@ export default function Flow() {
                     value={Math.round(selectedNode.position.y)}
                     onChange={(event) => {
                       const next = Number(event.target.value);
-                      setFlowSpec((prev) => ({
-                        ...prev,
-                        nodes: prev.nodes.map((node) => node.id === selectedNode.id ? { ...node, position: { ...node.position, y: next } } : node),
-                      }));
-                      setDirty(true);
+                      updateNode(selectedNode.id, { position: { ...selectedNode.position, y: next } });
                     }}
                     className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                   />
@@ -1079,13 +1778,15 @@ export default function Flow() {
                   <ArrowRightLeft className="h-4 w-4" />
                   {connectFromId === selectedNode.id ? 'Cancel Connection' : 'Connect From Here'}
                 </button>
-                <button
-                  onClick={() => navigate(entityPath(selectedNode.entityRef.kind, selectedNode.entityRef.name, selectedNode.entityRef.namespace))}
-                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open Entity
-                </button>
+                {isEntityNode(selectedNode) && (
+                  <button
+                    onClick={() => navigate(entityPath(selectedNode.entityRef.kind, selectedNode.entityRef.name, selectedNode.entityRef.namespace))}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open Entity
+                  </button>
+                )}
                 <button
                   onClick={() => removeNode(selectedNode.id)}
                   className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-danger)] px-3 py-2 text-sm font-medium text-[var(--gantry-bg-primary)]"
@@ -1188,13 +1889,19 @@ export default function Flow() {
                     {flowDescription || 'Select a flow to preview it, then open the editor when you want to make changes.'}
                   </p>
                 </div>
-                <button
-                  onClick={openEditor}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
-                >
-                  <Workflow className="h-4 w-4" />
-                  {currentFlowName ? 'Edit This Flow' : 'Create Flow'}
-                </button>
+                {flowSettings.canEdit ? (
+                  <button
+                    onClick={openEditor}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
+                  >
+                    <Workflow className="h-4 w-4" />
+                    {currentFlowName ? 'Edit This Flow' : 'Create Flow'}
+                  </button>
+                ) : (
+                  <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--gantry-text-secondary)]">
+                    Read-only for your role
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1231,19 +1938,25 @@ export default function Flow() {
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Selected Node</div>
                   <h3 className="mt-2 text-lg font-semibold text-[var(--gantry-text-primary)]">
-                    {entityMap.get(nodeEntityKey(selectedNode))?.metadata.title || selectedNode.entityRef.name}
+                    {nodeTitle(selectedNode, entityMap)}
                   </h3>
                   <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
-                    {selectedNode.entityRef.kind} · {selectedNode.entityRef.name}
+                    {nodeMeta(selectedNode)}
                   </p>
                 </div>
-                <button
-                  onClick={() => navigate(entityPath(selectedNode.entityRef.kind, selectedNode.entityRef.name, selectedNode.entityRef.namespace))}
-                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open Entity
-                </button>
+                {isMockNode(selectedNode) ? (
+                  <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-3 text-sm text-[var(--gantry-text-secondary)]">
+                    {selectedNode.subtitle || 'Mockup shape for planning and generalized flows.'}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => navigate(entityPath(selectedNode.entityRef.kind, selectedNode.entityRef.name, selectedNode.entityRef.namespace))}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open Entity
+                  </button>
+                )}
               </div>
             )}
 

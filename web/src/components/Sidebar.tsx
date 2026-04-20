@@ -111,9 +111,9 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
           setFlowEnabled(false);
         } else {
           try {
-            const flowConfig = await api.getPluginConfig('flow');
+            const flowConfig = await api.getFlowSettings();
             if (!active) return;
-            setFlowEnabled(flowConfig.values?.showInSidebar !== false);
+            setFlowEnabled(flowConfig.showInSidebar !== false);
           } catch {
             if (!active) return;
             setFlowEnabled(true);
