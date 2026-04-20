@@ -361,6 +361,7 @@ function ConfigField({
   }
 
   if (isBool) {
+    const effectiveValue = value ?? fieldSchema.default ?? false;
     return (
       <div className="flex items-start justify-between gap-6 py-1">
         <div className="min-w-0 flex-1">
@@ -374,15 +375,15 @@ function ConfigField({
         <button
           type="button"
           role="switch"
-          aria-checked={!!value}
-          onClick={() => onChange(!value)}
+          aria-checked={!!effectiveValue}
+          onClick={() => onChange(!effectiveValue)}
           className={`relative mt-0.5 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--gantry-accent)] focus:ring-offset-2 ${
-            value ? 'bg-[var(--gantry-accent)]' : 'bg-[var(--gantry-border)]'
+            effectiveValue ? 'bg-[var(--gantry-accent)]' : 'bg-[var(--gantry-border)]'
           }`}
         >
           <span
             className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
-              value ? 'translate-x-[19px]' : 'translate-x-[3px]'
+              effectiveValue ? 'translate-x-[19px]' : 'translate-x-[3px]'
             }`}
           />
         </button>

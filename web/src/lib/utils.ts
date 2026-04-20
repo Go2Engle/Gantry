@@ -33,3 +33,20 @@ function pruneValue(value: any): any {
 
   return value;
 }
+
+export function applySchemaDefaults(
+  schema: Record<string, any> | undefined,
+  values?: Record<string, any> | null,
+): Record<string, any> {
+  const next = { ...(values ?? {}) };
+  const properties = schema?.properties ?? {};
+
+  for (const [key, fieldSchema] of Object.entries(properties)) {
+    if (next[key] !== undefined) continue;
+    if (fieldSchema && typeof fieldSchema === 'object' && 'default' in fieldSchema) {
+      next[key] = (fieldSchema as { default: any }).default;
+    }
+  }
+
+  return next;
+}

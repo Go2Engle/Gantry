@@ -11,6 +11,7 @@ import {
   Slash,
 } from 'lucide-react';
 import { api, PLUGINS_UPDATED_EVENT } from '../lib/api';
+import { applySchemaDefaults } from '../lib/utils';
 import type { PluginConfig, PluginRegistryEntry, PluginSyncResult } from '../lib/types';
 import { PluginConfigForm, SYNCABLE_PLUGINS } from './PluginConfigForm';
 
@@ -216,7 +217,7 @@ export default function AdminPluginSettings() {
     try {
       const config = await api.getPluginConfig(name);
       setConfigs((prev) => ({ ...prev, [name]: config }));
-      setValues((prev) => ({ ...prev, [name]: config.values ?? {} }));
+      setValues((prev) => ({ ...prev, [name]: applySchemaDefaults(config.schema, config.values) }));
     } catch (e: any) {
       setLoadErrors((prev) => ({ ...prev, [name]: e.message }));
     } finally {
