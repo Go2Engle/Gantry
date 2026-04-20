@@ -84,6 +84,8 @@ function ensureFlowSpec(spec: Record<string, any> | undefined): FlowSpec {
             subtitle: typeof node.subtitle === 'string' ? node.subtitle : '',
             shape: MOCK_SHAPE_OPTIONS.includes(node.shape) ? node.shape : 'box',
             color: typeof node.color === 'string' && node.color.trim() ? node.color : '#64748B',
+            width: typeof node.width === 'number' ? node.width : undefined,
+            height: typeof node.height === 'number' ? node.height : undefined,
             position,
           };
         }
@@ -204,36 +206,44 @@ function getNodeDimensions(node: FlowNode): { width: number; height: number } {
 
   switch (node.shape) {
     case 'pill': {
-      const width = clamp(188 + Math.max(0, longestText - 12) * 7, 188, 340);
+      const baseWidth = clamp(188 + Math.max(0, longestText - 12) * 7, 188, 340);
+      const width = clamp(Math.max(node.width || 0, baseWidth), 188, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(12, Math.floor((width - 44) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.max(84, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      const baseHeight = Math.max(84, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      const height = Math.max(node.height || 0, baseHeight);
       return { width, height };
     }
     case 'diamond': {
-      const width = clamp(272 + Math.max(0, longestText - 10) * 10, 272, MAX_NODE_WIDTH);
+      const baseWidth = clamp(272 + Math.max(0, longestText - 10) * 10, 272, MAX_NODE_WIDTH);
+      const width = clamp(Math.max(node.width || 0, baseWidth), 272, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(9, Math.floor((width * 0.42) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = clamp(120 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 20, 120, 220);
+      const baseHeight = clamp(120 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 20, 120, 220);
+      const height = Math.max(node.height || 0, baseHeight);
       return { width, height };
     }
     case 'note': {
-      const width = clamp(196 + Math.max(0, longestText - 14) * 7, 196, 360);
+      const baseWidth = clamp(196 + Math.max(0, longestText - 14) * 7, 196, 360);
+      const width = clamp(Math.max(node.width || 0, baseWidth), 196, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(13, Math.floor((width - 52) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.max(MIN_NODE_HEIGHT, 56 + titleLines * 18 + subtitleLines * 16 + 24);
+      const baseHeight = Math.max(MIN_NODE_HEIGHT, 56 + titleLines * 18 + subtitleLines * 16 + 24);
+      const height = Math.max(node.height || 0, baseHeight);
       return { width, height };
     }
     case 'box':
     default: {
-      const width = clamp(180 + Math.max(0, longestText - 14) * 6, 180, 320);
+      const baseWidth = clamp(180 + Math.max(0, longestText - 14) * 6, 180, 320);
+      const width = clamp(Math.max(node.width || 0, baseWidth), 180, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(14, Math.floor((width - 36) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.max(MIN_NODE_HEIGHT, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      const baseHeight = Math.max(MIN_NODE_HEIGHT, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      const height = Math.max(node.height || 0, baseHeight);
       return { width, height };
     }
   }
@@ -459,6 +469,7 @@ export default function Flow() {
   const [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false);
   const [dragging, setDragging] = useState<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
+  const [resizing, setResizing] = useState<{ nodeId: string; startClientX: number; startClientY: number; startWidth: number; startHeight: number } | null>(null);
   const [panning, setPanning] = useState<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [zoomMode, setZoomMode] = useState<'fit' | 'manual'>('fit');
@@ -469,7 +480,7 @@ export default function Flow() {
   const requestedMode = searchParams.get('mode') === 'edit' ? 'edit' : 'view';
   const flowBounds = getFlowBounds(flowSpec);
   const [renderBounds, setRenderBounds] = useState(flowBounds);
-  const activeBounds = dragging ? renderBounds : flowBounds;
+  const activeBounds = dragging || resizing ? renderBounds : flowBounds;
   const stageMinX = Math.min(0, activeBounds.minX);
   const stageMinY = Math.min(0, activeBounds.minY);
   const stageMaxX = Math.max(CANVAS_WIDTH, activeBounds.maxX);
@@ -496,8 +507,27 @@ export default function Flow() {
   }
 
   function applyManualZoom(nextZoom: number) {
+    const { width, height } = getViewportDimensions();
+    applyZoomAtClientPoint(nextZoom, (viewportRef.current?.getBoundingClientRect().left || 0) + width / 2, (viewportRef.current?.getBoundingClientRect().top || 0) + height / 2);
+  }
+
+  function applyZoomAtClientPoint(nextZoom: number, clientX: number, clientY: number) {
+    const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      setZoomMode('manual');
+      setCanvasZoom(zoom);
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    const stageX = (clientX - rect.left - panOffset.x) / canvasZoom;
+    const stageY = (clientY - rect.top - panOffset.y) / canvasZoom;
     setZoomMode('manual');
-    setCanvasZoom(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM));
+    setCanvasZoom(zoom);
+    setPanOffset({
+      x: clientX - rect.left - stageX * zoom,
+      y: clientY - rect.top - stageY * zoom,
+    });
   }
 
   function fitCanvas() {
@@ -518,9 +548,9 @@ export default function Flow() {
   }
 
   useEffect(() => {
-    if (dragging) return;
+    if (dragging || resizing) return;
     setRenderBounds(flowBounds);
-  }, [dragging, flowBounds]);
+  }, [dragging, resizing, flowBounds]);
 
   useEffect(() => {
     let active = true;
@@ -609,6 +639,42 @@ export default function Flow() {
   }, [dragging, canvasZoom]);
 
   useEffect(() => {
+    if (!resizing) return;
+    const currentResize = resizing;
+
+    function handleMove(event: MouseEvent) {
+      const nextWidth = currentResize.startWidth + (event.clientX - currentResize.startClientX) / canvasZoom;
+      const nextHeight = currentResize.startHeight + (event.clientY - currentResize.startClientY) / canvasZoom;
+
+      setFlowSpec((prev) => ({
+        ...prev,
+        nodes: prev.nodes.map((node) => (
+          node.id === currentResize.nodeId && isMockNode(node)
+            ? {
+                ...node,
+                width: clamp(nextWidth, 160, MAX_NODE_WIDTH),
+                height: Math.max(72, nextHeight),
+              }
+            : node
+        )),
+      }));
+      setDirty(true);
+    }
+
+    function handleUp() {
+      setResizing(null);
+    }
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [resizing, canvasZoom]);
+
+  useEffect(() => {
     if (!panning) return;
     const currentPan = panning;
 
@@ -649,7 +715,7 @@ export default function Flow() {
   }, []);
 
   useEffect(() => {
-    if (zoomMode !== 'fit' || dragging) return;
+    if (zoomMode !== 'fit' || dragging || resizing) return;
     const frame = requestAnimationFrame(() => {
       const { width, height } = getViewportDimensions();
       const nextView = getFitViewState(width, height, flowSpec);
@@ -657,7 +723,7 @@ export default function Flow() {
       setCanvasZoom(nextView.zoom);
     });
     return () => cancelAnimationFrame(frame);
-  }, [zoomMode, dragging, viewportSize.width, viewportSize.height, currentFlowName, currentNamespace, flowSpec]);
+  }, [zoomMode, dragging, resizing, viewportSize.width, viewportSize.height, currentFlowName, currentNamespace, flowSpec]);
 
   useEffect(() => {
     if (!flowSettings.canEdit && mode === 'edit') {
@@ -1100,6 +1166,7 @@ export default function Flow() {
               panning ? 'cursor-grabbing' : 'cursor-grab'
             }`}
             style={{
+              overscrollBehavior: 'contain',
               backgroundImage: 'linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px)',
               backgroundSize: `${32 * canvasZoom}px ${32 * canvasZoom}px`,
               backgroundPosition: `${canvasOffset.x + contentOffsetX * canvasZoom}px ${canvasOffset.y + contentOffsetY * canvasZoom}px`,
@@ -1121,9 +1188,10 @@ export default function Flow() {
                 originY: panOffset.y,
               });
             }}
-            onWheel={(event) => {
+            onWheelCapture={(event) => {
               event.preventDefault();
-              applyManualZoom(canvasZoom + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+              event.stopPropagation();
+              applyZoomAtClientPoint(canvasZoom + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP), event.clientX, event.clientY);
             }}
           >
             <div
@@ -1362,6 +1430,28 @@ export default function Flow() {
                                 {subtitle}
                               </div>
                             </div>
+                          )}
+                          {!readOnly && flowSettings.canEdit && isMockNode(node) && (
+                            <button
+                              type="button"
+                              data-flow-resize="true"
+                              onMouseDown={(event) => {
+                                event.stopPropagation();
+                                event.preventDefault();
+                                setRenderBounds(flowBounds);
+                                setResizing({
+                                  nodeId: node.id,
+                                  startClientX: event.clientX,
+                                  startClientY: event.clientY,
+                                  startWidth: nodeSize.width,
+                                  startHeight: nodeSize.height,
+                                });
+                              }}
+                              className="absolute bottom-1.5 right-1.5 h-4 w-4 cursor-se-resize rounded-sm border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]/90 shadow-sm"
+                              title="Resize shape"
+                            >
+                              <span className="pointer-events-none absolute bottom-0.5 right-0.5 h-2 w-2 border-b border-r border-[var(--gantry-text-secondary)]" />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1735,6 +1825,26 @@ export default function Flow() {
                         value={selectedNode.color || '#64748B'}
                         onChange={(event) => updateNode(selectedNode.id, { color: event.target.value } as Partial<FlowMockNode>)}
                         className="h-10 w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-1 py-1"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Width</span>
+                      <input
+                        type="number"
+                        value={Math.round(getNodeDimensions(selectedNode).width)}
+                        onChange={(event) => updateNode(selectedNode.id, { width: Number(event.target.value) } as Partial<FlowMockNode>)}
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Height</span>
+                      <input
+                        type="number"
+                        value={Math.round(getNodeDimensions(selectedNode).height)}
+                        onChange={(event) => updateNode(selectedNode.id, { height: Number(event.target.value) } as Partial<FlowMockNode>)}
+                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                       />
                     </label>
                   </div>

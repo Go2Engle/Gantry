@@ -48,6 +48,8 @@ function ensureFlowSpec(spec: Record<string, any> | undefined): FlowSpec {
             subtitle: typeof node.subtitle === 'string' ? node.subtitle : '',
             shape: MOCK_SHAPE_OPTIONS.includes(node.shape) ? node.shape : 'box',
             color: typeof node.color === 'string' && node.color.trim() ? node.color : '#64748B',
+            width: typeof node.width === 'number' ? node.width : undefined,
+            height: typeof node.height === 'number' ? node.height : undefined,
             position,
           };
         }
@@ -139,36 +141,40 @@ function getNodeDimensions(node: FlowNode): { width: number; height: number } {
 
   switch (node.shape) {
     case 'pill': {
-      const width = Math.min(340, Math.max(188, 188 + Math.max(0, longestText - 12) * 7));
+      const baseWidth = Math.min(340, Math.max(188, 188 + Math.max(0, longestText - 12) * 7));
+      const width = Math.min(MAX_NODE_WIDTH, Math.max(node.width || 0, baseWidth));
       const charsPerLine = Math.max(12, Math.floor((width - 44) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.max(84, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      const height = Math.max(node.height || 0, 84, 48 + titleLines * 18 + subtitleLines * 16 + 18);
       return { width, height };
     }
     case 'diamond': {
-      const width = Math.min(MAX_NODE_WIDTH, Math.max(272, 272 + Math.max(0, longestText - 10) * 10));
+      const baseWidth = Math.min(MAX_NODE_WIDTH, Math.max(272, 272 + Math.max(0, longestText - 10) * 10));
+      const width = Math.min(MAX_NODE_WIDTH, Math.max(node.width || 0, baseWidth));
       const charsPerLine = Math.max(9, Math.floor((width * 0.42) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.min(220, Math.max(120, 120 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 20));
+      const height = Math.max(node.height || 0, Math.min(220, Math.max(120, 120 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 20)));
       return { width, height };
     }
     case 'note': {
-      const width = Math.min(360, Math.max(196, 196 + Math.max(0, longestText - 14) * 7));
+      const baseWidth = Math.min(360, Math.max(196, 196 + Math.max(0, longestText - 14) * 7));
+      const width = Math.min(MAX_NODE_WIDTH, Math.max(node.width || 0, baseWidth));
       const charsPerLine = Math.max(13, Math.floor((width - 52) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.max(MIN_NODE_HEIGHT, 56 + titleLines * 18 + subtitleLines * 16 + 24);
+      const height = Math.max(node.height || 0, MIN_NODE_HEIGHT, 56 + titleLines * 18 + subtitleLines * 16 + 24);
       return { width, height };
     }
     case 'box':
     default: {
-      const width = Math.min(320, Math.max(180, 180 + Math.max(0, longestText - 14) * 6));
+      const baseWidth = Math.min(320, Math.max(180, 180 + Math.max(0, longestText - 14) * 6));
+      const width = Math.min(MAX_NODE_WIDTH, Math.max(node.width || 0, baseWidth));
       const charsPerLine = Math.max(14, Math.floor((width - 36) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
-      const height = Math.max(MIN_NODE_HEIGHT, 48 + titleLines * 18 + subtitleLines * 16 + 18);
+      const height = Math.max(node.height || 0, MIN_NODE_HEIGHT, 48 + titleLines * 18 + subtitleLines * 16 + 18);
       return { width, height };
     }
   }

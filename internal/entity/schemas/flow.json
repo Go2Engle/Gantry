@@ -94,6 +94,12 @@
               "color": {
                 "type": "string"
               },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
               "position": {
                 "type": "object",
                 "properties": {

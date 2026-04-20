@@ -165,6 +165,8 @@ export interface FlowMockNode {
   subtitle?: string;
   shape: FlowMockShape;
   color?: string;
+  width?: number;
+  height?: number;
   position: {
     x: number;
     y: number;
