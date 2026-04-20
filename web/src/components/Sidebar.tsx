@@ -23,6 +23,7 @@ import {
   Package,
   Network,
   Archive,
+  Workflow,
   X,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -38,6 +39,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
   Cloud,
   FileText,
+  Network,
 };
 
 interface NavItem {
@@ -74,6 +76,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
   const [gitopsEnabled, setGitopsEnabled] = useState(false);
   const [harborEnabled, setHarborEnabled] = useState(false);
   const [topologyEnabled, setTopologyEnabled] = useState(false);
+  const [flowEnabled, setFlowEnabled] = useState(false);
   const [nexusEnabled, setNexusEnabled] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -100,6 +103,20 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
 
         const topologyPlugin = plugins.find((p) => p.name === 'topology-explorer');
         setTopologyEnabled(Boolean(topologyPlugin?.enabled));
+
+        const flowPlugin = plugins.find((p) => p.name === 'flow');
+        if (!flowPlugin?.enabled) {
+          setFlowEnabled(false);
+        } else {
+          try {
+            const flowConfig = await api.getFlowSettings();
+            if (!active) return;
+            setFlowEnabled(flowConfig.showInSidebar !== false);
+          } catch {
+            if (!active) return;
+            setFlowEnabled(true);
+          }
+        }
 
         const harborPlugin = plugins.find((p) => p.name === 'harbor');
         if (!harborPlugin?.enabled) {
@@ -134,6 +151,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         setGitopsEnabled(false);
         setHarborEnabled(false);
         setTopologyEnabled(false);
+        setFlowEnabled(false);
         setNexusEnabled(false);
       }
     };
@@ -314,6 +332,22 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
                 >
                   <Network className="h-5 w-5 shrink-0" />
                   {!collapsed && <span className="truncate">Topology</span>}
+                </Link>
+              </li>
+            )}
+            {flowEnabled && (
+              <li>
+                <Link
+                  to="/flow"
+                  className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/flow')
+                      ? 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]'
+                      : 'text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]'
+                  }`}
+                  title={collapsed ? 'Flow' : undefined}
+                >
+                  <Workflow className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="truncate">Flow</span>}
                 </Link>
               </li>
             )}

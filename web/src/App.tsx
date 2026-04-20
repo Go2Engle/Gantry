@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import Sidebar from './components/Sidebar';
@@ -19,7 +19,7 @@ const GitOps = lazy(() => import('./pages/GitOps'));
 const Harbor = lazy(() => import('./pages/Harbor'));
 const Nexus = lazy(() => import('./pages/Nexus'));
 const TopologyExplorer = lazy(() => import('./pages/TopologyExplorer'));
-
+const Flow = lazy(() => import('./pages/Flow'));
 
 function AuthenticatedLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -41,6 +41,7 @@ function AuthenticatedLayout() {
         <ErrorBoundary>
           <Suspense fallback={<PageLoadingState />}>
             <Routes>
+              <Route path="/flow" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><Flow /></div>} />
               <Route path="/topology" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><TopologyExplorer /></div>} />
               <Route path="*" element={
                 <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">

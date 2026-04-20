@@ -825,6 +825,43 @@
     "actionTypes": []
   },
   {
+    "name": "flow",
+    "title": "Flow",
+    "description": "Build editable system flow diagrams from existing catalog entities with GitOps-friendly YAML persistence.",
+    "longDescription": "The Flow plugin gives teams a canvas for mapping how their systems actually work. Add existing Gantry entities onto a diagram, arrange them visually, connect them with directional edges, and save the whole view as a first-class `Flow` entity.\n\nBecause diagrams are stored as normal Gantry entities, the GitOps plugin can export them as YAML, track changes in Git, and re-apply them back into Gantry just like any other catalog object.",
+    "features": [
+      "Drag existing catalog entities onto a shared canvas",
+      "Directional and bi-directional flow links with animated edges",
+      "Direct links from diagram nodes back to entity detail pages",
+      "Flow diagrams stored as normal Gantry entities for GitOps compatibility",
+      "Diagram-first editing surface separate from inferred topology"
+    ],
+    "version": "1.0.0",
+    "author": "Gantry",
+    "category": "entity-kind",
+    "homepage": "https://github.com/go2engle/gantry",
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "editorRole": {
+          "type": "string",
+          "title": "Minimum Role For Editing",
+          "description": "Users with this role or any higher role can create, edit, and delete Flow diagrams. Lower roles get read-only access.",
+          "default": "developer",
+          "x-role-picker": true
+        },
+        "showInSidebar": {
+          "type": "boolean",
+          "title": "Show Flow in Sidebar",
+          "description": "Add the Flow editor page to the main sidebar navigation when the plugin is enabled.",
+          "default": true
+        }
+      }
+    },
+    "entityPanels": ["Flow"],
+    "actionTypes": []
+  },
+  {
     "name": "topology-explorer",
     "title": "Topology Explorer",
     "description": "Interactive org-wide topology view of all entities across environments with dependency mapping and live status overlays.",

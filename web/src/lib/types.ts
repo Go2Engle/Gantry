@@ -110,6 +110,8 @@ export interface JsonSchema {
   maxLength?: number;
   /** Custom extension: entity kind this field references (e.g. "API", "Team"). */
   'x-entity-ref'?: string;
+  /** Custom extension: render a dropdown of Gantry roles. */
+  'x-role-picker'?: boolean;
 }
 
 export interface GraphNode {
@@ -130,6 +132,69 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+}
+
+export interface FlowEntityRef {
+  kind: string;
+  name: string;
+  namespace?: string;
+}
+
+export type FlowMockShape = 'box' | 'pill' | 'diamond' | 'note';
+
+export interface FlowViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface FlowEntityNode {
+  id: string;
+  nodeType?: 'entity';
+  entityRef: FlowEntityRef;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+export interface FlowMockNode {
+  id: string;
+  nodeType: 'mock';
+  label: string;
+  subtitle?: string;
+  shape: FlowMockShape;
+  color?: string;
+  width?: number;
+  height?: number;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+export type FlowNode = FlowEntityNode | FlowMockNode;
+
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  direction: 'one-way' | 'two-way';
+  label?: string;
+  animated: boolean;
+}
+
+export interface FlowSpec {
+  viewport: FlowViewport;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
+export interface FlowPluginSettings {
+  showInSidebar: boolean;
+  editorRole: string;
+  canEdit: boolean;
 }
 
 export interface PluginRegistryEntry {
@@ -349,6 +414,7 @@ export const ENTITY_KINDS = [
   { name: 'Team', plural: 'teams', icon: 'Users' },
   { name: 'Environment', plural: 'environments', icon: 'Cloud' },
   { name: 'Documentation', plural: 'documentation', icon: 'FileText' },
+  { name: 'Flow', plural: 'flows', icon: 'Network' },
 ] as const;
 
 export type EntityKindName = (typeof ENTITY_KINDS)[number]['name'];

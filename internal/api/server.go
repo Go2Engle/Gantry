@@ -220,6 +220,11 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			// Topology Explorer plugin endpoints.
 			protected.Get("/plugins/topology-explorer/data", h.GetTopologyData)
 			protected.Get("/plugins/topology-explorer/status", h.GetTopologyStatus)
+			// Flow plugin endpoints.
+			protected.Get("/plugins/flow/settings", h.GetFlowSettings)
+			protected.Post("/plugins/flow/entities", h.CreateFlowEntity)
+			protected.Put("/plugins/flow/entities/{name}", h.UpdateFlowEntity)
+			protected.Delete("/plugins/flow/entities/{name}", h.DeleteFlowEntity)
 			// Nexus Repository Manager plugin endpoints.
 			protected.Get("/plugins/nexus-repository-manager/repositories", h.GetNexusRepositories)
 			protected.Get("/plugins/nexus-repository-manager/components", h.GetNexusComponents)

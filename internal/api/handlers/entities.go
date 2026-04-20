@@ -174,6 +174,9 @@ func (h *Handlers) CreateEntity(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 	kind := chi.URLParam(r, "kind")
 	name := chi.URLParam(r, "name")
+	if kind == "Flow" && !h.ensureFlowWriteAccess(w, r) {
+		return
+	}
 
 	var e entity.Entity
 	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
@@ -251,6 +254,9 @@ func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteEntity(w http.ResponseWriter, r *http.Request) {
 	kind := chi.URLParam(r, "kind")
 	name := chi.URLParam(r, "name")
+	if kind == "Flow" && !h.ensureFlowWriteAccess(w, r) {
+		return
+	}
 	namespace := r.URL.Query().Get("namespace")
 	if namespace == "" {
 		namespace = entity.DefaultNamespace

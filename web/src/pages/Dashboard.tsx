@@ -70,6 +70,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
   Cloud,
   FileText,
+  Network,
 };
 
 const LINK_ICON_MAP: Record<DashboardLinkIcon, React.ComponentType<{ className?: string }>> = {

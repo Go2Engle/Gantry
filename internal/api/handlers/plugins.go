@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go2engle/gantry/internal/auth"
 	"github.com/go2engle/gantry/internal/gitops"
 	"github.com/go2engle/gantry/internal/plugins"
 	argocd "github.com/go2engle/gantry/internal/plugins/argocd"
@@ -190,6 +191,18 @@ func (h *Handlers) UpdatePluginConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	merged, _ := preserveSecretValues(existing.Config, config).(map[string]any)
+	if name == "flow" {
+		role, _ := merged["editorRole"].(string)
+		role = strings.TrimSpace(role)
+		if role == "" {
+			merged["editorRole"] = "developer"
+		} else if !auth.IsValidRole(role) {
+			writeError(w, http.StatusBadRequest, "invalid flow editor role")
+			return
+		} else {
+			merged["editorRole"] = role
+		}
+	}
 	if err := h.DB.UpdatePluginConfig(r.Context(), name, merged); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

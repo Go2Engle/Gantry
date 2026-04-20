@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Flow",
+  "description": "Interactive system flow diagram backed by catalog entities",
+  "type": "object",
+  "properties": {
+    "viewport": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "default": 0
+        },
+        "y": {
+          "type": "number",
+          "default": 0
+        },
+        "zoom": {
+          "type": "number",
+          "default": 1,
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": ["x", "y", "zoom"],
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "nodeType": {
+                "type": "string",
+                "enum": ["entity"]
+              },
+              "entityRef": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "entityRef", "position"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "nodeType": {
+                "type": "string",
+                "const": "mock"
+              },
+              "label": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "shape": {
+                "type": "string",
+                "enum": ["box", "pill", "diamond", "note"]
+              },
+              "color": {
+                "type": "string"
+              },
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "nodeType", "label", "shape", "position"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "edges": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["one-way", "two-way"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "animated": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": ["id", "source", "target", "relation", "direction", "animated"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["viewport", "nodes", "edges"],
+  "additionalProperties": false
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { ChevronRight, Pencil, Trash2, X, ExternalLink, LayoutDashboard, BookOpen, FileText, Github, MessageSquare, Bell, Activity, Cpu, CircleHelp, RefreshCw } from 'lucide-react';
+import { ChevronRight, Pencil, Trash2, X, ExternalLink, LayoutDashboard, BookOpen, FileText, Github, MessageSquare, Bell, Activity, Cpu, CircleHelp, RefreshCw, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
 import { pruneEmpty } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
@@ -13,6 +13,7 @@ import ArgoCDTab from '../components/ArgoCDTab';
 import APIDocsTab from '../components/APIDocsTab';
 import HarborTab from '../components/HarborTab';
 import NexusTab from '../components/NexusTab';
+import FlowTab from '../components/FlowTab';
 
 const ACTION_COLORS: Record<string, string> = {
   'entity.created': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -77,6 +78,15 @@ function entityToYaml(entity: Entity): string {
     .join('\n');
 }
 
+function flowHref(entity: Entity, mode: 'view' | 'edit') {
+  const params = new URLSearchParams({
+    flow: entity.metadata.name,
+    namespace: entity.metadata.namespace || 'default',
+    mode,
+  });
+  return `/flow?${params.toString()}`;
+}
+
 const LINK_ICONS: Record<string, React.ReactNode> = {
   dashboard: <LayoutDashboard className="h-3.5 w-3.5" />,
   docs:      <BookOpen className="h-3.5 w-3.5" />,
@@ -89,7 +99,7 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
   other:     <CircleHelp className="h-3.5 w-3.5" />,
 };
 
-type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis';
+type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis' | 'flow';
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   relationships: 'Dependencies',
@@ -100,6 +110,7 @@ const TAB_LABELS: Partial<Record<Tab, string>> = {
   harbor: 'Harbor',
   nexus: 'Nexus',
   apis: 'APIs',
+  flow: 'Flow',
 };
 
 export default function EntityDetail() {
@@ -350,8 +361,25 @@ export default function EntityDetail() {
             </div>
           )}
         </div>
+        <div className="flex items-center gap-2">
+        {entity.kind === 'Flow' && enabledPlugins.has('flow') && (
+          <>
+            <Link
+              to={flowHref(entity, 'view')}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--gantry-border)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
+            >
+              <ExternalLink className="h-4 w-4" /> Open in Flow
+            </Link>
+            <Link
+              to={flowHref(entity, 'edit')}
+              className="flex items-center gap-1.5 rounded-lg bg-[var(--gantry-accent)] px-3 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
+            >
+              <Workflow className="h-4 w-4" /> Edit in Flow
+            </Link>
+          </>
+        )}
         {canWrite && (
-          <div className="flex items-center gap-2">
+          <>
             <button
               onClick={openEdit}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--gantry-border)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
@@ -364,8 +392,9 @@ export default function EntityDetail() {
             >
               <Trash2 className="h-4 w-4" /> Delete
             </button>
-          </div>
+          </>
         )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -382,10 +411,12 @@ export default function EntityDetail() {
         const hasAPIDocs = !!(entity.spec?.apiDocsUrl) && (entity.kind === 'Service' || entity.kind === 'API');
         const hasHarbor = !!entity.metadata.annotations?.['harbor.io/project'];
         const hasNexus = !!entity.metadata.annotations?.['nexus-repository-manager/name'];
+        const hasFlow = entity.kind === 'Flow' && enabledPlugins.has('flow');
         const serviceProvidedApis = (entity.spec?.providesApis as string[] | undefined) ?? [];
         const serviceConsumedApis = (entity.spec?.consumesApis as string[] | undefined) ?? [];
         const hasApis = entity.kind === 'Service' && (serviceProvidedApis.length > 0 || serviceConsumedApis.length > 0);
         const tabs: Tab[] = ['overview', 'relationships', 'yaml', 'activity'];
+        if (hasFlow) tabs.splice(1, 0, 'flow');
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
         if (hasArgoCD && entity.kind === 'Service' && enabledPlugins.has('argocd')) tabs.splice(1, 0, 'argocd');
@@ -841,6 +872,10 @@ export default function EntityDetail() {
 
         {tab === 'nexus' && (
           <NexusTab entity={entity} />
+        )}
+
+        {tab === 'flow' && (
+          <FlowTab entity={entity} />
         )}
 
         {tab === 'relationships' && (

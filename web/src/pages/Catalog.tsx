@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
   Search, LayoutGrid, List, Plus, X, ArrowLeft,
-  Server, Globe, Database, Users, Cloud, FileText,
+  Server, Globe, Database, Users, Cloud, FileText, Network,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { ENTITY_KINDS } from '../lib/types';
@@ -43,6 +43,11 @@ const KIND_META: Record<string, { icon: React.ReactNode; description: string; co
     icon: <FileText className="h-7 w-7" />,
     description: 'Technical docs, runbooks, ADRs, and knowledge base articles.',
     color: 'text-yellow-500',
+  },
+  Flow: {
+    icon: <Network className="h-7 w-7" />,
+    description: 'Editable system flow diagrams backed by real catalog entities and GitOps-friendly YAML.',
+    color: 'text-[var(--gantry-accent)]',
   },
 };
 

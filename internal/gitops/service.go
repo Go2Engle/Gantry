@@ -159,6 +159,8 @@ func New(cfg Config, database *db.DB) (*Service, error) {
 		cfg.Branch = defaultBranch
 	}
 
+	installRedirectFollowingHTTPTransport()
+
 	s := &Service{
 		config:     cfg,
 		db:         database,
@@ -200,8 +202,13 @@ func (s *Service) ensureRepo() error {
 	}
 
 	// Clone fresh.
+	repoURL, err := s.uploadPackRepoURL(context.Background())
+	if err != nil {
+		return fmt.Errorf("resolving clone URL: %w", err)
+	}
+
 	opts := &git.CloneOptions{
-		URL:           s.config.RepoURL,
+		URL:           repoURL,
 		ReferenceName: plumbing.NewBranchReferenceName(s.config.Branch),
 		SingleBranch:  true,
 		Auth:          s.authMethod(),
@@ -265,8 +272,14 @@ func (s *Service) pullLatest() error {
 		return fmt.Errorf("getting worktree: %w", err)
 	}
 
+	repoURL, err := s.uploadPackRepoURL(context.Background())
+	if err != nil {
+		return fmt.Errorf("resolving pull URL: %w", err)
+	}
+
 	err = w.Pull(&git.PullOptions{
 		RemoteName:    "origin",
+		RemoteURL:     repoURL,
 		ReferenceName: plumbing.NewBranchReferenceName(s.config.Branch),
 		Auth:          s.authMethod(),
 		Force:         true,
@@ -296,9 +309,14 @@ func (s *Service) pullLatest() error {
 // and checks out the worktree.
 func (s *Service) fetchAndCheckout() error {
 	branchRefName := plumbing.NewBranchReferenceName(s.config.Branch)
+	repoURL, err := s.uploadPackRepoURL(context.Background())
+	if err != nil {
+		return fmt.Errorf("resolving fetch URL: %w", err)
+	}
 
-	err := s.repo.Fetch(&git.FetchOptions{
+	err = s.repo.Fetch(&git.FetchOptions{
 		RemoteName: "origin",
+		RemoteURL:  repoURL,
 		Auth:       s.authMethod(),
 		RefSpecs: []gitconfig.RefSpec{
 			gitconfig.RefSpec("refs/heads/" + s.config.Branch + ":refs/remotes/origin/" + s.config.Branch),
@@ -339,8 +357,14 @@ func (s *Service) push() error {
 		return nil
 	}
 
-	err := s.repo.Push(&git.PushOptions{
+	repoURL, err := s.receivePackRepoURL(context.Background())
+	if err != nil {
+		return fmt.Errorf("resolving push URL: %w", err)
+	}
+
+	err = s.repo.Push(&git.PushOptions{
 		RemoteName: "origin",
+		RemoteURL:  repoURL,
 		Auth:       s.authMethod(),
 		RefSpecs: []gitconfig.RefSpec{
 			gitconfig.RefSpec("refs/heads/" + s.config.Branch + ":refs/heads/" + s.config.Branch),

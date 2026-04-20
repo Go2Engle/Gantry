@@ -5,14 +5,14 @@ import {
   BookOpen, Zap, Layers, CheckSquare, GripVertical,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import type { PluginRegistryEntry, PluginConfig, PluginSyncResult } from '../lib/types';
+import type { PluginRegistryEntry, PluginConfig, PluginSyncResult, Role } from '../lib/types';
 
 // Plugins that expose a server-side sync operation.
 const SYNCABLE_PLUGINS = new Set(['kubernetes', 'github', 'argocd']);
 
 // Plugins with full backend + frontend implementations.
 // Anything not in this set is shown as "Coming Soon" and cannot be enabled.
-const IMPLEMENTED_PLUGINS = new Set(['github', 'microsoft-azure', 'kubernetes', 'argocd', 'status-monitor', 'gitops', 'teams', 'harbor', 'nexus-repository-manager', 'topology-explorer']);
+const IMPLEMENTED_PLUGINS = new Set(['github', 'microsoft-azure', 'kubernetes', 'argocd', 'status-monitor', 'gitops', 'teams', 'harbor', 'nexus-repository-manager', 'topology-explorer', 'flow']);
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },
@@ -176,7 +176,26 @@ const PLUGIN_SECTIONS: Record<string, Array<{
       fields: ['notifyOnStart', 'notifyOnSuccess', 'notifyOnFailure'],
     },
   ],
+  flow: [
+    {
+      title: 'Access',
+      description: 'Choose which role can edit shared Flow diagrams. Anyone below that role can still browse diagrams in read-only mode.',
+      fields: ['editorRole'],
+    },
+    {
+      title: 'Navigation',
+      description: 'Control whether the Flow page appears in the main sidebar navigation.',
+      fields: ['showInSidebar'],
+    },
+  ],
 };
+
+const FALLBACK_ROLES: Role[] = [
+  { id: 'viewer', name: 'viewer', displayName: 'Viewer', level: 1, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+  { id: 'developer', name: 'developer', displayName: 'Developer', level: 2, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+  { id: 'platform-engineer', name: 'platform-engineer', displayName: 'Platform Engineer', level: 3, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+  { id: 'admin', name: 'admin', displayName: 'Admin', level: 4, builtIn: true, permissions: {}, createdAt: '', updatedAt: '' },
+];
 
 // Conditional field visibility
 type VisibilityFn = (values: Record<string, any>) => boolean;
@@ -335,16 +354,19 @@ function ConfigField({
   fieldSchema,
   value,
   required,
+  roleOptions,
   onChange,
 }: {
   fieldKey: string;
   fieldSchema: any;
   value: any;
   required: boolean;
+  roleOptions: Role[];
   onChange: (v: any) => void;
 }) {
   const isBool = fieldSchema.type === 'boolean';
   const isEnum = Array.isArray(fieldSchema.enum);
+  const isRolePicker = fieldSchema['x-role-picker'] === true;
   const isArr  = fieldSchema.type === 'array' && fieldSchema.items?.type === 'object';
   const isStringArr = fieldSchema.type === 'array' && fieldSchema.items?.type === 'string';
   const isLong = isLongText(fieldKey);
@@ -427,7 +449,7 @@ function ConfigField({
       {fieldSchema.description && (
         <p className="text-xs text-[var(--gantry-text-secondary)] mb-2">{fieldSchema.description}</p>
       )}
-      {isEnum ? (
+      {isEnum || isRolePicker ? (
         <select
           className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gantry-accent)]"
           value={value ?? fieldSchema.default ?? ''}
@@ -436,9 +458,15 @@ function ConfigField({
           {!value && !fieldSchema.default && (
             <option value="" disabled>Select…</option>
           )}
-          {fieldSchema.enum.map((opt: string) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
+          {(isRolePicker ? roleOptions : fieldSchema.enum).map((opt: Role | string) => {
+            const optionValue = typeof opt === 'string' ? opt : opt.name;
+            const optionLabel = typeof opt === 'string' ? opt : (opt.displayName || opt.name);
+            return (
+              <option key={optionValue} value={optionValue}>
+                {optionLabel}
+              </option>
+            );
+          })}
         </select>
       ) : isLong ? (
         <textarea
@@ -619,6 +647,7 @@ function ConfigFormBody({
   const required: string[] = config?.schema?.required ?? [];
   const sections = PLUGIN_SECTIONS[plugin.name];
   const visibility = FIELD_VISIBILITY[plugin.name] ?? {};
+  const [roleOptions, setRoleOptions] = useState<Role[]>(FALLBACK_ROLES);
 
   const sectionedKeys = sections ? new Set(sections.flatMap((s) => s.fields)) : null;
   const ungroupedKeys = sections
@@ -630,6 +659,32 @@ function ConfigFormBody({
     return !fn || fn(values);
   }
 
+  useEffect(() => {
+    let active = true;
+    const needsRolePicker = Object.values(allFields).some((field) => field?.['x-role-picker'] === true);
+    if (!needsRolePicker) {
+      setRoleOptions(FALLBACK_ROLES);
+      return () => {
+        active = false;
+      };
+    }
+
+    api.listRoles()
+      .then((roles) => {
+        if (!active) return;
+        const sorted = [...roles].sort((a, b) => a.level - b.level);
+        setRoleOptions(sorted.length > 0 ? sorted : FALLBACK_ROLES);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRoleOptions(FALLBACK_ROLES);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [allFields]);
+
   function renderField(key: string) {
     const fieldSchema = allFields[key];
     if (!fieldSchema || !isVisible(key)) return null;
@@ -640,6 +695,7 @@ function ConfigFormBody({
         fieldSchema={fieldSchema}
         value={values[key]}
         required={required.includes(key)}
+        roleOptions={roleOptions}
         onChange={(v) => setValues((prev) => ({ ...prev, [key]: v }))}
       />
     );

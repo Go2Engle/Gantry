@@ -1,4 +1,4 @@
-import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, NexusRepository, TopologyData, TopologyStatusMap } from './types';
+import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, NexusRepository, TopologyData, TopologyStatusMap, FlowPluginSettings, FlowSpec } from './types';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 export const PLUGINS_UPDATED_EVENT = 'gantry:plugins-updated';
@@ -200,6 +200,24 @@ export const api = {
     request<TopologyData>('GET', `/plugins/topology-explorer/data${env ? `?environment=${encodeURIComponent(env)}` : ''}`),
   getTopologyStatus: () =>
     request<TopologyStatusMap>('GET', '/plugins/topology-explorer/status'),
+
+  // Flow
+  getFlowSettings: () => request<FlowPluginSettings>('GET', '/plugins/flow/settings'),
+  listFlows: () => request<Entity[]>('GET', '/entities/Flow'),
+  createFlow: (metadata: Entity['metadata'], spec: FlowSpec) =>
+    request<Entity>('POST', '/plugins/flow/entities', { kind: 'Flow', apiVersion: 'gantry.io/v1', metadata, spec }),
+  updateFlow: (name: string, metadata: Entity['metadata'], spec: FlowSpec, namespace?: string) =>
+    request<Entity>('PUT', `/plugins/flow/entities/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, {
+      kind: 'Flow',
+      apiVersion: 'gantry.io/v1',
+      metadata: {
+        ...metadata,
+        ...(namespace ? { namespace } : {}),
+      },
+      spec,
+    }),
+  deleteFlow: (name: string, namespace?: string) =>
+    request<void>('DELETE', `/plugins/flow/entities/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   // Health check proxy
   checkHealth: (url: string) =>
