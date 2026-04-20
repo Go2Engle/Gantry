@@ -20,6 +20,7 @@ import Harbor from './pages/Harbor';
 import Nexus from './pages/Nexus';
 import RBAC from './pages/RBAC';
 import TopologyExplorer from './pages/TopologyExplorer';
+import Flow from './pages/Flow';
 
 
 function AuthenticatedLayout() {
@@ -41,6 +42,7 @@ function AuthenticatedLayout() {
         </div>
         <ErrorBoundary>
           <Routes>
+            <Route path="/flow" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><Flow /></div>} />
             <Route path="/topology" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><TopologyExplorer /></div>} />
             <Route path="/users" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><UsersPage /></div>} />
             <Route path="*" element={

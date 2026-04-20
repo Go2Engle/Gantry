@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Server, Globe, Database, Users, Cloud, FileText, Box } from 'lucide-react';
+import { Search, Server, Globe, Database, Users, Cloud, FileText, Box, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
 import type { SearchResult } from '../lib/types';
 
@@ -11,6 +11,7 @@ const kindIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   Team: Users,
   Environment: Cloud,
   Documentation: FileText,
+  Flow: Workflow,
 };
 
 export default function CommandPalette() {

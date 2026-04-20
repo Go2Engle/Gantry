@@ -132,6 +132,43 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
+export interface FlowEntityRef {
+  kind: string;
+  name: string;
+  namespace?: string;
+}
+
+export interface FlowViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface FlowNode {
+  id: string;
+  entityRef: FlowEntityRef;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  direction: 'one-way' | 'two-way';
+  label?: string;
+  animated: boolean;
+}
+
+export interface FlowSpec {
+  viewport: FlowViewport;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
 export interface PluginRegistryEntry {
   name: string;
   title: string;

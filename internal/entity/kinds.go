@@ -22,6 +22,7 @@ var BuiltinKinds = []KindDefinition{
 	{Name: "Team", Plural: "teams", Description: "Engineering team or group"},
 	{Name: "Environment", Plural: "environments", Description: "Deployment target or cloud account"},
 	{Name: "Documentation", Plural: "documentation", Description: "Link to external documentation or runbook"},
+	{Name: "Flow", Plural: "flows", Description: "Interactive system flow diagram backed by catalog entities"},
 	{Name: "Action", Plural: "actions", Description: "Self-service workflow definition"},
 }
 

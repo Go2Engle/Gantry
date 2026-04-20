@@ -135,6 +135,10 @@ func (h *Handlers) GetTopologyData(w http.ResponseWriter, r *http.Request) {
 
 	// Second pass: collect all non-Environment entities and build edges.
 	for _, e := range all {
+		if e.Kind == "Flow" {
+			continue
+		}
+
 		nodeID := e.Kind + "/" + e.Metadata.Name
 		spec := e.Spec
 		if spec == nil {
