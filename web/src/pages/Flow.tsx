@@ -589,8 +589,8 @@ export default function Flow() {
                 <marker id="flow-arrow-end" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
                 </marker>
-                <marker id="flow-arrow-start" markerWidth="10" markerHeight="10" refX="2" refY="5" orient="auto-start-reverse">
-                  <path d="M 10 0 L 0 5 L 10 10 z" fill="#64748B" />
+                <marker id="flow-arrow-start" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
                 </marker>
               </defs>
               {flowSpec.edges.map((edge) => {
