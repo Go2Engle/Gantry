@@ -108,6 +108,26 @@ function edgePath(source: FlowNode, target: FlowNode): string {
   return `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`;
 }
 
+function edgeLabelPosition(source: FlowNode, target: FlowNode) {
+  return {
+    x: (source.position.x + NODE_WIDTH + target.position.x) / 2,
+    y: (source.position.y + target.position.y) / 2 + NODE_HEIGHT / 2 - 10,
+  };
+}
+
+function edgeOffsetTransform(source: FlowNode, target: FlowNode, offset: number): string {
+  const x1 = source.position.x + NODE_WIDTH;
+  const y1 = source.position.y + NODE_HEIGHT / 2;
+  const x2 = target.position.x;
+  const y2 = target.position.y + NODE_HEIGHT / 2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy) || 1;
+  const nx = -dy / length;
+  const ny = dx / length;
+  return `translate(${nx * offset}, ${ny * offset})`;
+}
+
 export default function Flow() {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -566,8 +586,11 @@ export default function Flow() {
           >
             <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
               <defs>
-                <marker id="flow-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                <marker id="flow-arrow-end" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
+                </marker>
+                <marker id="flow-arrow-start" markerWidth="10" markerHeight="10" refX="2" refY="5" orient="auto-start-reverse">
+                  <path d="M 10 0 L 0 5 L 10 10 z" fill="#64748B" />
                 </marker>
               </defs>
               {flowSpec.edges.map((edge) => {
@@ -575,23 +598,52 @@ export default function Flow() {
                 const target = flowSpec.nodes.find((node) => node.id === edge.target);
                 if (!source || !target) return null;
                 const path = edgePath(source, target);
-                const labelX = (source.position.x + NODE_WIDTH + target.position.x) / 2;
-                const labelY = (source.position.y + target.position.y) / 2 + NODE_HEIGHT / 2 - 10;
+                const labelPos = edgeLabelPosition(source, target);
                 const active = edge.id === selectedEdgeId;
+                const twoWay = edge.direction === 'two-way';
+                const forwardTransform = twoWay ? edgeOffsetTransform(source, target, 3) : undefined;
+                const reverseTransform = twoWay ? edgeOffsetTransform(source, target, -3) : undefined;
 
                 return (
                   <g key={edge.id}>
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke={active ? '#0F172A' : '#64748B'}
-                      strokeWidth={active ? 3 : 2}
-                      strokeDasharray={edge.animated ? '8 8' : undefined}
-                      markerStart={edge.direction === 'two-way' ? 'url(#flow-arrow)' : undefined}
-                      markerEnd="url(#flow-arrow)"
-                    >
-                      {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
-                    </path>
+                    {!twoWay && (
+                      <path
+                        d={path}
+                        fill="none"
+                        stroke={active ? '#0F172A' : '#64748B'}
+                        strokeWidth={active ? 3 : 2}
+                        strokeDasharray={edge.animated ? '8 8' : undefined}
+                        markerEnd="url(#flow-arrow-end)"
+                      >
+                        {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
+                      </path>
+                    )}
+                    {twoWay && (
+                      <>
+                        <path
+                          d={path}
+                          fill="none"
+                          transform={forwardTransform}
+                          stroke={active ? '#0F172A' : '#64748B'}
+                          strokeWidth={active ? 2.8 : 2.1}
+                          strokeDasharray={edge.animated ? '8 8' : undefined}
+                          markerEnd="url(#flow-arrow-end)"
+                        >
+                          {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
+                        </path>
+                        <path
+                          d={path}
+                          fill="none"
+                          transform={reverseTransform}
+                          stroke={active ? '#1E293B' : '#94A3B8'}
+                          strokeWidth={active ? 2.6 : 1.9}
+                          strokeDasharray={edge.animated ? '8 8' : undefined}
+                          markerStart="url(#flow-arrow-start)"
+                        >
+                          {edge.animated && <animate attributeName="stroke-dashoffset" from="0" to="16" dur="1s" repeatCount="indefinite" />}
+                        </path>
+                      </>
+                    )}
                     <path
                       d={path}
                       fill="none"
@@ -603,9 +655,18 @@ export default function Flow() {
                         setSelectedEdgeId(edge.id);
                         setSelectedNodeId(null);
                       }}
+                        />
+                    <rect
+                      x={labelPos.x - (twoWay ? 44 : 30)}
+                      y={labelPos.y - 17}
+                      width={twoWay ? 88 : 60}
+                      height={22}
+                      rx={11}
+                      fill="var(--gantry-bg-primary)"
+                      stroke={twoWay ? '#64748B' : 'var(--gantry-border)'}
                     />
-                    <text x={labelX} y={labelY} textAnchor="middle" className="fill-[var(--gantry-text-secondary)] text-[11px] font-medium">
-                      {edge.label || edge.relation}
+                    <text x={labelPos.x} y={labelPos.y - 2} textAnchor="middle" className="fill-[var(--gantry-text-secondary)] text-[11px] font-medium">
+                      {twoWay ? `${edge.label || edge.relation} <->` : edge.label || edge.relation}
                     </text>
                   </g>
                 );
