@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -30,7 +30,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { api, PLUGINS_UPDATED_EVENT } from '../lib/api';
 import ThemeToggle from './ThemeToggle';
-import { ENTITY_KINDS } from '../lib/types';
+import { ENTITY_KINDS, filterEntityKindsByPlugins } from '../lib/types';
+import type { PluginRegistryEntry } from '../lib/types';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Server,
@@ -54,21 +55,6 @@ interface SidebarProps {
   onCloseMobile?: () => void;
 }
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-  {
-    label: 'Catalog',
-    path: '/catalog',
-    icon: Box,
-    children: ENTITY_KINDS.map((k) => ({
-      label: k.name,
-      path: `/catalog/${k.name}`,
-      icon: iconMap[k.icon] || Box,
-    })),
-  },
-  { label: 'Actions', path: '/actions', icon: Zap },
-];
-
 export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -78,6 +64,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
   const [topologyEnabled, setTopologyEnabled] = useState(false);
   const [flowEnabled, setFlowEnabled] = useState(false);
   const [nexusEnabled, setNexusEnabled] = useState(false);
+  const [plugins, setPlugins] = useState<PluginRegistryEntry[] | null>(null);
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
@@ -94,6 +81,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
       try {
         const plugins = await api.listPlugins();
         if (!active) return;
+        setPlugins(plugins);
 
         const statusMonitorPlugin = plugins.find((p) => p.name === 'status-monitor');
         setStatusMonitorEnabled(Boolean(statusMonitorPlugin?.enabled));
@@ -147,6 +135,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         }
       } catch {
         if (!active) return;
+        setPlugins([]);
         setStatusMonitorEnabled(false);
         setGitopsEnabled(false);
         setHarborEnabled(false);
@@ -168,6 +157,26 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
       window.removeEventListener(PLUGINS_UPDATED_EVENT, handlePluginsUpdated);
     };
   }, []);
+
+  const catalogKinds = useMemo(
+    () => filterEntityKindsByPlugins(ENTITY_KINDS, plugins),
+    [plugins],
+  );
+
+  const navItems: NavItem[] = useMemo(() => ([
+    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    {
+      label: 'Catalog',
+      path: '/catalog',
+      icon: Box,
+      children: catalogKinds.map((kind) => ({
+        label: kind.name,
+        path: `/catalog/${kind.name}`,
+        icon: iconMap[kind.icon] || Box,
+      })),
+    },
+    { label: 'Actions', path: '/actions', icon: Zap },
+  ]), [catalogKinds]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';

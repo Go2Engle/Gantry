@@ -419,6 +419,21 @@ export const ENTITY_KINDS = [
 
 export type EntityKindName = (typeof ENTITY_KINDS)[number]['name'];
 
+export function filterEntityKindsByPlugins<T extends { name: string }>(
+  kinds: readonly T[],
+  plugins?: PluginRegistryEntry[] | null,
+): T[] {
+  if (!plugins) return [...kinds];
+
+  const hiddenKinds = new Set(
+    plugins
+      .filter((plugin) => plugin.category === 'entity-kind' && !plugin.enabled)
+      .flatMap((plugin) => plugin.entityPanels ?? []),
+  );
+
+  return kinds.filter((kind) => !hiddenKinds.has(kind.name));
+}
+
 // ─── Dashboard Config ──────────────────────────────────────────────────────
 
 export type DashboardSeverity = 'info' | 'warning' | 'danger';

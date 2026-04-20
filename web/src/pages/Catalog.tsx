@@ -5,10 +5,10 @@ import {
   Search, LayoutGrid, List, Plus, X, ArrowLeft,
   Server, Globe, Database, Users, Cloud, FileText, Network,
 } from 'lucide-react';
-import { api } from '../lib/api';
-import { ENTITY_KINDS } from '../lib/types';
+import { api, PLUGINS_UPDATED_EVENT } from '../lib/api';
+import { ENTITY_KINDS, filterEntityKindsByPlugins } from '../lib/types';
 import { pruneEmpty } from '../lib/utils';
-import type { Entity, JsonSchema } from '../lib/types';
+import type { Entity, JsonSchema, PluginRegistryEntry } from '../lib/types';
 import EntityCard from '../components/EntityCard';
 import EntityTable from '../components/EntityTable';
 import SchemaForm from '../components/SchemaForm';
@@ -67,7 +67,7 @@ export default function Catalog() {
   const [createKind, setCreateKind] = useState('Service');
   const [schemas, setSchemas] = useState<Record<string, JsonSchema>>({});
   const [error, setError] = useState('');
-  const [enabledPlugins, setEnabledPlugins] = useState<Set<string>>(new Set());
+  const [plugins, setPlugins] = useState<PluginRegistryEntry[] | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -76,9 +76,37 @@ export default function Catalog() {
   }, [kind]);
 
   useEffect(() => {
+    const refreshPlugins = () => {
+      api.listPlugins().then((data) => setPlugins(data || [])).catch(() => setPlugins([]));
+    };
+
     api.listSchemas().then((data) => setSchemas(data || {})).catch(() => {});
-    api.listPlugins().then((plugins) => setEnabledPlugins(new Set(plugins.filter((p) => p.enabled).map((p) => p.name)))).catch(() => {});
+    refreshPlugins();
+    window.addEventListener(PLUGINS_UPDATED_EVENT, refreshPlugins);
+
+    return () => {
+      window.removeEventListener(PLUGINS_UPDATED_EVENT, refreshPlugins);
+    };
   }, []);
+
+  const enabledPlugins = useMemo(
+    () => new Set((plugins || []).filter((plugin) => plugin.enabled).map((plugin) => plugin.name)),
+    [plugins],
+  );
+
+  const visibleKinds = useMemo(
+    () => filterEntityKindsByPlugins(ENTITY_KINDS, plugins),
+    [plugins],
+  );
+
+  useEffect(() => {
+    if (!kind || plugins === null) return;
+    const isCatalogKind = ENTITY_KINDS.some((entityKind) => entityKind.name === kind);
+    const isVisibleKind = visibleKinds.some((entityKind) => entityKind.name === kind);
+    if (isCatalogKind && !isVisibleKind) {
+      navigate('/catalog', { replace: true });
+    }
+  }, [kind, navigate, plugins, visibleKinds]);
 
   const allOwners = useMemo(() => {
     const owners = new Set(entities.map((e) => e.metadata.owner).filter(Boolean) as string[]);
@@ -288,7 +316,7 @@ export default function Catalog() {
         >
           All
         </button>
-        {ENTITY_KINDS.map((k) => (
+        {visibleKinds.map((k) => (
           <button
             key={k.name}
             onClick={() => navigate(`/catalog/${k.name}`)}
@@ -388,7 +416,7 @@ export default function Catalog() {
                   Select the type of entity you want to add to the catalog.
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {ENTITY_KINDS.map((k) => {
+                  {visibleKinds.map((k) => {
                     const meta = KIND_META[k.name];
                     return (
                       <button
