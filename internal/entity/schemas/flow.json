@@ -17,7 +17,8 @@
         },
         "zoom": {
           "type": "number",
-          "default": 1
+          "default": 1,
+          "exclusiveMinimum": 0
         }
       },
       "required": ["x", "y", "zoom"],
@@ -95,10 +96,12 @@
                 "type": "string"
               },
               "width": {
-                "type": "number"
+                "type": "number",
+                "exclusiveMinimum": 0
               },
               "height": {
-                "type": "number"
+                "type": "number",
+                "exclusiveMinimum": 0
               },
               "position": {
                 "type": "object",

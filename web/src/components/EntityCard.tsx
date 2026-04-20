@@ -19,7 +19,7 @@ const kindColors: Record<string, string> = {
   Team: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   Environment: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
   Documentation: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
-  Flow: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  Flow: 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]',
 };
 
 interface EntityCardProps {

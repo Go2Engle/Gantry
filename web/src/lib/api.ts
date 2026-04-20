@@ -210,7 +210,10 @@ export const api = {
     request<Entity>('PUT', `/plugins/flow/entities/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, {
       kind: 'Flow',
       apiVersion: 'gantry.io/v1',
-      metadata,
+      metadata: {
+        ...metadata,
+        ...(namespace ? { namespace } : {}),
+      },
       spec,
     }),
   deleteFlow: (name: string, namespace?: string) =>

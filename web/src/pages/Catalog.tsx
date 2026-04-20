@@ -47,7 +47,7 @@ const KIND_META: Record<string, { icon: React.ReactNode; description: string; co
   Flow: {
     icon: <Network className="h-7 w-7" />,
     description: 'Editable system flow diagrams backed by real catalog entities and GitOps-friendly YAML.',
-    color: 'text-sky-500',
+    color: 'text-[var(--gantry-accent)]',
   },
 };
 

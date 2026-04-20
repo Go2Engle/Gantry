@@ -21,6 +21,8 @@ type flowSettingsResponse struct {
 	CanEdit       bool   `json:"canEdit"`
 }
 
+const maxFlowEntityRequestBytes int64 = 1 << 20
+
 func flowEditorRole(config map[string]any) string {
 	role, _ := config["editorRole"].(string)
 	role = strings.TrimSpace(role)
@@ -44,7 +46,7 @@ func (h *Handlers) getFlowPlugin(r *http.Request) (*plugins.Plugin, error) {
 		return nil, err
 	}
 	if plugin == nil {
-		return nil, entity.ErrEntityNotFound
+		return nil, plugins.ErrPluginNotInstalled
 	}
 	return plugin, nil
 }
@@ -69,7 +71,7 @@ func (h *Handlers) getFlowSettings(r *http.Request) (*plugins.Plugin, flowSettin
 func (h *Handlers) ensureFlowWriteAccess(w http.ResponseWriter, r *http.Request) bool {
 	plugin, settings, err := h.getFlowSettings(r)
 	if err != nil {
-		if errors.Is(err, entity.ErrEntityNotFound) {
+		if errors.Is(err, plugins.ErrPluginNotInstalled) {
 			writeError(w, http.StatusNotFound, "flow plugin not installed")
 			return false
 		}
@@ -91,7 +93,7 @@ func (h *Handlers) ensureFlowWriteAccess(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) GetFlowSettings(w http.ResponseWriter, r *http.Request) {
 	plugin, settings, err := h.getFlowSettings(r)
 	if err != nil {
-		if errors.Is(err, entity.ErrEntityNotFound) {
+		if errors.Is(err, plugins.ErrPluginNotInstalled) {
 			writeError(w, http.StatusNotFound, "flow plugin not installed")
 			return
 		}
@@ -113,7 +115,12 @@ func (h *Handlers) CreateFlowEntity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var e entity.Entity
-	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxFlowEntityRequestBytes)).Decode(&e); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -180,7 +187,12 @@ func (h *Handlers) UpdateFlowEntity(w http.ResponseWriter, r *http.Request) {
 
 	name := chi.URLParam(r, "name")
 	var e entity.Entity
-	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxFlowEntityRequestBytes)).Decode(&e); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

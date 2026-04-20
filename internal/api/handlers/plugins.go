@@ -199,6 +199,8 @@ func (h *Handlers) UpdatePluginConfig(w http.ResponseWriter, r *http.Request) {
 		} else if !auth.IsValidRole(role) {
 			writeError(w, http.StatusBadRequest, "invalid flow editor role")
 			return
+		} else {
+			merged["editorRole"] = role
 		}
 	}
 	if err := h.DB.UpdatePluginConfig(r.Context(), name, merged); err != nil {
