@@ -1344,7 +1344,7 @@ export default function Flow() {
                       <div
                         key={node.id}
                         data-flow-node="true"
-                        className={`absolute rounded-2xl shadow-sm transition-shadow ${
+                        className={`group absolute rounded-2xl shadow-sm transition-shadow ${
                           active || connectSource ? 'shadow-lg' : 'hover:shadow-md'
                         }`}
                         style={nodeOuterStyle}
@@ -1447,10 +1447,17 @@ export default function Flow() {
                                   startHeight: nodeSize.height,
                                 });
                               }}
-                              className="absolute bottom-1.5 right-1.5 h-4 w-4 cursor-se-resize rounded-sm border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]/90 shadow-sm"
+                              className={`absolute -bottom-2.5 -right-2.5 flex h-6 w-6 cursor-se-resize items-center justify-center rounded-full border shadow-lg transition-all ${
+                                active
+                                  ? 'border-[var(--gantry-accent)] bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)] opacity-100'
+                                  : 'border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] text-[var(--gantry-text-secondary)] opacity-0 group-hover:opacity-100'
+                              }`}
                               title="Resize shape"
                             >
-                              <span className="pointer-events-none absolute bottom-0.5 right-0.5 h-2 w-2 border-b border-r border-[var(--gantry-text-secondary)]" />
+                              <span className="pointer-events-none relative block h-2.5 w-2.5">
+                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-current" />
+                                <span className="absolute bottom-0.5 right-0.5 h-1.5 w-1.5 border-b-2 border-r-2 border-current opacity-80" />
+                              </span>
                             </button>
                           )}
                         </div>
@@ -1639,6 +1646,35 @@ export default function Flow() {
             {renderSavedFlowsCard()}
 
             <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-4">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Add Mockups</h2>
+                <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">Use simple shapes for future systems, external actors, or rough architecture sketches.</p>
+              </div>
+              <div className="mt-4 space-y-2">
+                {MOCK_NODE_LIBRARY.map((template) => (
+                  <button
+                    key={`${template.shape}:${template.label}`}
+                    onClick={() => addMockNode(template)}
+                    className="flex w-full items-start justify-between rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-3 text-left transition-colors hover:bg-[var(--gantry-bg-tertiary)]"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-[var(--gantry-text-primary)]">{template.label}</div>
+                      <div className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                        {mockShapeLabel(template.shape)} · {template.subtitle}
+                      </div>
+                    </div>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                      style={{ backgroundColor: `${template.color}1A`, color: template.color }}
+                    >
+                      Add
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Add Entities</h2>
@@ -1689,35 +1725,6 @@ export default function Flow() {
                 );
               })}
             </div>
-            </div>
-
-            <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-4">
-              <div>
-                <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Add Mockups</h2>
-                <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">Use simple shapes for future systems, external actors, or rough architecture sketches.</p>
-              </div>
-              <div className="mt-4 space-y-2">
-                {MOCK_NODE_LIBRARY.map((template) => (
-                  <button
-                    key={`${template.shape}:${template.label}`}
-                    onClick={() => addMockNode(template)}
-                    className="flex w-full items-start justify-between rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-3 text-left transition-colors hover:bg-[var(--gantry-bg-tertiary)]"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-[var(--gantry-text-primary)]">{template.label}</div>
-                      <div className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
-                        {mockShapeLabel(template.shape)} · {template.subtitle}
-                      </div>
-                    </div>
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[11px] font-medium"
-                      style={{ backgroundColor: `${template.color}1A`, color: template.color }}
-                    >
-                      Add
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
           </section>
 

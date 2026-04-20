@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { Suspense, lazy, useCallback, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
@@ -6,21 +6,21 @@ import Sidebar from './components/Sidebar';
 import CommandPalette from './components/CommandPalette';
 import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Catalog from './pages/Catalog';
-import EntityDetail from './pages/EntityDetail';
-import Actions from './pages/Actions';
-import AuditLog from './pages/AuditLog';
-import Settings from './pages/Settings';
-import UsersPage from './pages/Users';
-import Plugins from './pages/Plugins';
-import StatusMonitor from './pages/StatusMonitor';
-import GitOps from './pages/GitOps';
-import Harbor from './pages/Harbor';
-import Nexus from './pages/Nexus';
-import RBAC from './pages/RBAC';
-import TopologyExplorer from './pages/TopologyExplorer';
-import Flow from './pages/Flow';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Catalog = lazy(() => import('./pages/Catalog'));
+const EntityDetail = lazy(() => import('./pages/EntityDetail'));
+const Actions = lazy(() => import('./pages/Actions'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
+const Settings = lazy(() => import('./pages/Settings'));
+const UsersPage = lazy(() => import('./pages/Users'));
+const Plugins = lazy(() => import('./pages/Plugins'));
+const StatusMonitor = lazy(() => import('./pages/StatusMonitor'));
+const GitOps = lazy(() => import('./pages/GitOps'));
+const Harbor = lazy(() => import('./pages/Harbor'));
+const Nexus = lazy(() => import('./pages/Nexus'));
+const RBAC = lazy(() => import('./pages/RBAC'));
+const TopologyExplorer = lazy(() => import('./pages/TopologyExplorer'));
+const Flow = lazy(() => import('./pages/Flow'));
 
 
 function AuthenticatedLayout() {
@@ -41,30 +41,32 @@ function AuthenticatedLayout() {
           </button>
         </div>
         <ErrorBoundary>
-          <Routes>
-            <Route path="/flow" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><Flow /></div>} />
-            <Route path="/topology" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><TopologyExplorer /></div>} />
-            <Route path="/users" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><UsersPage /></div>} />
-            <Route path="*" element={
-              <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/catalog" element={<Catalog />} />
-                  <Route path="/catalog/:kind" element={<Catalog />} />
-                  <Route path="/catalog/:kind/:name" element={<EntityDetail />} />
-                  <Route path="/actions" element={<Actions />} />
-                  <Route path="/audit" element={<AuditLog />} />
-                  <Route path="/plugins" element={<Plugins />} />
-                  <Route path="/status" element={<StatusMonitor />} />
-                  <Route path="/gitops" element={<GitOps />} />
-                  <Route path="/harbor" element={<Harbor />} />
-                  <Route path="/nexus" element={<Nexus />} />
-                  <Route path="/rbac" element={<RBAC />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </div>
-            } />
-          </Routes>
+          <Suspense fallback={<LoadingScreen />}>
+            <Routes>
+              <Route path="/flow" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><Flow /></div>} />
+              <Route path="/topology" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><TopologyExplorer /></div>} />
+              <Route path="/users" element={<div className="px-4 py-6 sm:px-6 sm:py-8"><UsersPage /></div>} />
+              <Route path="*" element={
+                <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/catalog" element={<Catalog />} />
+                    <Route path="/catalog/:kind" element={<Catalog />} />
+                    <Route path="/catalog/:kind/:name" element={<EntityDetail />} />
+                    <Route path="/actions" element={<Actions />} />
+                    <Route path="/audit" element={<AuditLog />} />
+                    <Route path="/plugins" element={<Plugins />} />
+                    <Route path="/status" element={<StatusMonitor />} />
+                    <Route path="/gitops" element={<GitOps />} />
+                    <Route path="/harbor" element={<Harbor />} />
+                    <Route path="/nexus" element={<Nexus />} />
+                    <Route path="/rbac" element={<RBAC />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Routes>
+                </div>
+              } />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
       <CommandPalette />
