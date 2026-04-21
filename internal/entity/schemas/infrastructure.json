@@ -22,6 +22,11 @@
       "type": "string",
       "description": "Connection string or endpoint for the infrastructure resource"
     },
+    "healthCheckUrl": {
+      "type": "string",
+      "title": "Health Check URL",
+      "description": "URL to the infrastructure health endpoint (e.g., https://postgres.example.com/healthz)"
+    },
     "system": {
       "type": "string",
       "description": "Parent system or domain"
