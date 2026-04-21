@@ -77,7 +77,15 @@ export default function Catalog() {
 
   useEffect(() => {
     const refreshPlugins = () => {
-      api.listPlugins().then((data) => setPlugins(data || [])).catch(() => setPlugins([]));
+      api.listPlugins()
+        .then((data) => {
+          if (data != null) {
+            setPlugins(data);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to refresh plugin registry for catalog', err);
+        });
     };
 
     api.listSchemas().then((data) => setSchemas(data || {})).catch(() => {});
@@ -99,6 +107,7 @@ export default function Catalog() {
     [plugins],
   );
   const kindsResolved = plugins !== null;
+  const fallbackCreateKind = visibleKinds[0]?.name ?? 'Service';
 
   useEffect(() => {
     if (!kind || plugins === null) return;
@@ -108,6 +117,18 @@ export default function Catalog() {
       navigate('/catalog', { replace: true });
     }
   }, [kind, navigate, plugins, visibleKinds]);
+
+  useEffect(() => {
+    if (plugins === null) return;
+    const createKindIsVisible = visibleKinds.some((entityKind) => entityKind.name === createKind);
+    if (createKindIsVisible) return;
+
+    setCreateKind(fallbackCreateKind);
+    if (showCreate) {
+      setShowCreate(false);
+      setCreateStep('kind');
+    }
+  }, [plugins, visibleKinds, createKind, fallbackCreateKind, showCreate]);
 
   const allOwners = useMemo(() => {
     const owners = new Set(entities.map((e) => e.metadata.owner).filter(Boolean) as string[]);
@@ -139,6 +160,9 @@ export default function Catalog() {
   const hasFilters = searchQuery || ownerFilter || tagFilter;
 
   const openCreate = () => {
+    if (!visibleKinds.some((entityKind) => entityKind.name === createKind)) {
+      setCreateKind(fallbackCreateKind);
+    }
     setCreateStep('kind');
     setShowCreate(true);
   };
@@ -150,6 +174,13 @@ export default function Catalog() {
 
   const handleCreate = async (raw: Record<string, any>) => {
     try {
+      if (!visibleKinds.some((entityKind) => entityKind.name === createKind)) {
+        setError('The selected entity kind is no longer available. Please choose a kind again.');
+        setCreateKind(fallbackCreateKind);
+        closeCreate();
+        return;
+      }
+
       const name = (raw._name as string) || '';
       const title = (raw._title as string) || '';
       const owner = (raw._owner as string) || '';
