@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.2](https://github.com/Go2Engle/Gantry/compare/v0.11.1...v0.11.2) (2026-04-21)
+
+
+### Features
+
+* Enhance log viewer with search functionality and improve lognormalization ([#80](https://github.com/Go2Engle/Gantry/issues/80)) ([d9e458a](https://github.com/Go2Engle/Gantry/commit/d9e458a9e2a98ae0b5c498e9109059a78894c51e))
+* flow enhancements ([#78](https://github.com/Go2Engle/Gantry/issues/78)) ([7079e6c](https://github.com/Go2Engle/Gantry/commit/7079e6c1ccc6c082c8de5fe2fccea5b0d3fc570d))
+
 ## [0.11.1](https://github.com/Go2Engle/Gantry/compare/v0.11.0...v0.11.1) (2026-04-20)
 
 
