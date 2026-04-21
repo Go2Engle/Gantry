@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Terminal, X, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { ChevronDown, ChevronRight, Terminal, X, RefreshCw, Search } from 'lucide-react';
 import { api, getToken } from '../lib/api';
 import type { Entity, K8sWorkloadInfo, K8sPodInfo, K8sContainerInfo } from '../lib/types';
 
@@ -25,6 +25,20 @@ const STATE_BADGE: Record<string, string> = {
   unknown: 'bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)]',
 };
 
+function normalizeLogLine(line: string): string[] {
+  // Drop CR from CRLF streams, unescape common JSON-escape sequences inside
+  // structured log payloads, then split on real newlines so each visual line
+  // becomes its own entry — this keeps search filtering and match counts
+  // honest when a single k8s log line contains an embedded stack trace.
+  const unescaped = line
+    .replace(/\r$/, '')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\\t/g, '\t');
+  return unescaped.split('\n');
+}
+
 function formatAge(startTime?: string): string {
   if (!startTime) return '—';
   const ms = Date.now() - new Date(startTime).getTime();
@@ -35,12 +49,44 @@ function formatAge(startTime?: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightLine(line: string, query: string): React.ReactNode {
+  if (!query) return line;
+  const re = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+  const parts = line.split(re);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <mark key={i} className="rounded bg-yellow-300 px-0.5 text-gray-900 dark:bg-yellow-500/40 dark:text-yellow-100">
+        {part}
+      </mark>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
+}
+
 function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void }) {
   const [lines, setLines] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
+
+  const filteredLines = useMemo(() => {
+    if (!search) return lines;
+    const q = search.toLowerCase();
+    return lines.filter((l) => l.toLowerCase().includes(q));
+  }, [lines, search]);
+
+  const matchCount = useMemo(() => {
+    if (!search) return 0;
+    const re = new RegExp(escapeRegExp(search), 'gi');
+    return lines.reduce((sum, l) => sum + (l.match(re)?.length ?? 0), 0);
+  }, [lines, search]);
 
   function connect() {
     if (controllerRef.current) controllerRef.current.abort();
@@ -54,8 +100,11 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
     const clusterSuffix = target.cluster ? `?cluster=${encodeURIComponent(target.cluster)}` : '';
     const url = `/api/v1/plugins/kubernetes/pods/${target.namespace}/${target.pod}/containers/${target.container}/logs${clusterSuffix}`;
 
+    const reqHeaders: Record<string, string> = {};
+    if (token) reqHeaders.Authorization = `Bearer ${token}`;
+
     fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: reqHeaders,
       signal: controller.signal,
     })
       .then((res) => {
@@ -72,7 +121,9 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
               buf += decoder.decode(value, { stream: true });
               const parts = buf.split('\n');
               buf = parts.pop() ?? '';
-              const newLines = parts.filter((l) => l !== '');
+              const newLines = parts
+                .flatMap(normalizeLogLine)
+                .filter((l) => l !== '');
               if (newLines.length > 0) {
                 setLines((prev) => [...prev, ...newLines].slice(-1000));
               }
@@ -94,42 +145,83 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
   }, [target.namespace, target.pod, target.container]);
 
   useEffect(() => {
+    // Only auto-scroll when not searching — otherwise it yanks the user
+    // away from the match they're reading.
+    if (search) return;
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines]);
+  }, [filteredLines, search]);
 
   return (
-    <div className="mt-4 rounded-lg border border-[var(--gantry-border)] bg-gray-950 dark:bg-black overflow-hidden">
+    <div className="mt-4 w-full min-w-0 overflow-hidden rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
       {/* Log header */}
-      <div className="flex items-center justify-between border-b border-gray-800 px-4 py-2">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-4 w-4 text-gray-400" />
-          <span className="text-xs font-mono text-gray-300">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Terminal className="h-4 w-4 shrink-0 text-[var(--gantry-text-secondary)]" />
+          <span className="truncate font-mono text-xs text-[var(--gantry-text-primary)]">
             {target.pod} / {target.container}
           </span>
-          <span className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-[var(--gantry-text-secondary)]'}`}
+          />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative flex items-center">
+            <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--gantry-text-secondary)]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearch('');
+              }}
+              placeholder="Search logs…"
+              className="w-48 rounded border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] py-1 pl-7 pr-6 text-xs text-[var(--gantry-text-primary)] placeholder:text-[var(--gantry-text-secondary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                title="Clear search"
+                className="absolute right-1 rounded p-0.5 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          {search && (
+            <span className="font-mono text-xs text-[var(--gantry-text-secondary)]">
+              {matchCount} match{matchCount !== 1 ? 'es' : ''}
+            </span>
+          )}
           <button
             onClick={connect}
             title="Reconnect"
-            className="rounded p-1 text-gray-400 hover:text-gray-200"
+            className="rounded p-1 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
-          <button onClick={onClose} className="rounded p-1 text-gray-400 hover:text-gray-200">
+          <button
+            onClick={onClose}
+            title="Close"
+            className="rounded p-1 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
+          >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
       {/* Log body */}
-      <div className="h-72 overflow-y-auto p-4 font-mono text-xs text-gray-300 leading-5">
-        {error && <p className="text-red-400">{error}</p>}
+      <div className="h-72 w-full min-w-0 overflow-auto bg-[var(--gantry-bg-primary)] p-4 font-mono text-xs leading-5 text-[var(--gantry-text-primary)]">
+        {error && <p className="text-[var(--gantry-danger)]">{error}</p>}
         {lines.length === 0 && !error && (
-          <p className="text-gray-500">{connected ? 'Waiting for logs…' : 'No logs.'}</p>
+          <p className="text-[var(--gantry-text-secondary)]">
+            {connected ? 'Waiting for logs…' : 'No logs.'}
+          </p>
         )}
-        {lines.map((line, i) => (
-          <div key={i} className="whitespace-pre-wrap break-all">
-            {line}
+        {lines.length > 0 && search && filteredLines.length === 0 && (
+          <p className="text-[var(--gantry-text-secondary)]">No matches for "{search}".</p>
+        )}
+        {filteredLines.map((line, i) => (
+          <div key={i} className="whitespace-pre-wrap break-words">
+            {highlightLine(line, search)}
           </div>
         ))}
         <div ref={bottomRef} />
@@ -170,8 +262,12 @@ function PodRow({ pod }: { pod: K8sPodInfo }) {
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={7} className="bg-[var(--gantry-bg-secondary)] px-8 pb-4 pt-2">
-            <div className="space-y-2">
+          <td
+            colSpan={7}
+            className="bg-[var(--gantry-bg-secondary)] px-8 pb-4 pt-2"
+            style={{ maxWidth: 0 }}
+          >
+            <div className="min-w-0 space-y-2 overflow-hidden">
               {pod.nodeName && (
                 <p className="text-xs text-[var(--gantry-text-secondary)]">
                   Node: <span className="font-mono text-[var(--gantry-text-primary)]">{pod.nodeName}</span>
@@ -181,18 +277,18 @@ function PodRow({ pod }: { pod: K8sPodInfo }) {
                 {pod.containers.map((c: K8sContainerInfo) => (
                   <div
                     key={c.name}
-                    className="flex items-center gap-3 rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2"
+                    className="flex min-w-0 items-center gap-3 rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2"
                   >
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATE_BADGE[c.state] ?? STATE_BADGE.unknown}`}
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATE_BADGE[c.state] ?? STATE_BADGE.unknown}`}
                     >
                       {c.state}
                       {c.reason ? ` (${c.reason})` : ''}
                     </span>
-                    <span className="text-xs font-medium text-[var(--gantry-text-primary)]">{c.name}</span>
-                    <span className="truncate text-xs text-[var(--gantry-text-secondary)]">{c.image}</span>
+                    <span className="shrink-0 text-xs font-medium text-[var(--gantry-text-primary)]">{c.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-[var(--gantry-text-secondary)]">{c.image}</span>
                     {c.restarts > 0 && (
-                      <span className="ml-auto text-xs text-yellow-600 dark:text-yellow-400">
+                      <span className="shrink-0 text-xs text-yellow-600 dark:text-yellow-400">
                         {c.restarts} restart{c.restarts !== 1 ? 's' : ''}
                       </span>
                     )}
@@ -203,7 +299,7 @@ function PodRow({ pod }: { pod: K8sPodInfo }) {
                           logTarget?.container === c.name ? null : { namespace: pod.namespace, pod: pod.name, container: c.name, cluster: pod.clusterName }
                         );
                       }}
-                      className="ml-auto flex items-center gap-1 rounded border border-[var(--gantry-border)] px-2 py-0.5 text-xs text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
+                      className="flex shrink-0 items-center gap-1 rounded border border-[var(--gantry-border)] px-2 py-0.5 text-xs text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
                     >
                       <Terminal className="h-3 w-3" /> Logs
                     </button>
@@ -323,7 +419,7 @@ export default function KubernetesTab({ entity }: { entity: Entity }) {
         {!hasPods ? (
           <p className="text-sm text-[var(--gantry-text-secondary)]">No pods found.</p>
         ) : (
-          <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
             <table className="min-w-full divide-y divide-[var(--gantry-border)]">
               <thead>
                 <tr className="bg-[var(--gantry-bg-secondary)]">
