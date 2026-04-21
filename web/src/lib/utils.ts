@@ -38,15 +38,75 @@ export function applySchemaDefaults(
   schema: Record<string, any> | undefined,
   values?: Record<string, any> | null,
 ): Record<string, any> {
-  const next = { ...(values ?? {}) };
-  const properties = schema?.properties ?? {};
+  const applied = applyFieldSchemaDefaults(
+    { type: 'object', properties: schema?.properties ?? {} },
+    values ?? {},
+  );
 
-  for (const [key, fieldSchema] of Object.entries(properties)) {
-    if (next[key] !== undefined) continue;
-    if (fieldSchema && typeof fieldSchema === 'object' && 'default' in fieldSchema) {
-      next[key] = (fieldSchema as { default: any }).default;
-    }
+  if (!applied || typeof applied !== 'object' || Array.isArray(applied)) {
+    return {};
   }
 
-  return next;
+  return applied;
+}
+
+function applyFieldSchemaDefaults(fieldSchema: Record<string, any> | undefined, value: any): any {
+  if (!fieldSchema || typeof fieldSchema !== 'object') return value;
+
+  let nextValue = value;
+  if (nextValue === undefined && 'default' in fieldSchema) {
+    nextValue = cloneSchemaDefault(fieldSchema.default);
+  }
+
+  const hasProperties = !!fieldSchema.properties && typeof fieldSchema.properties === 'object';
+  if (hasProperties || fieldSchema.type === 'object') {
+    const properties = fieldSchema.properties ?? {};
+    const hasExplicitObjectValue = nextValue !== undefined;
+    const nextObject = nextValue && typeof nextValue === 'object' && !Array.isArray(nextValue)
+      ? { ...nextValue }
+      : {};
+    let shouldReturnObject = hasExplicitObjectValue;
+    for (const [key, childSchema] of Object.entries(properties)) {
+      const currentChild = nextObject[key];
+      const nextChild = applyFieldSchemaDefaults(childSchema as Record<string, any>, currentChild);
+      if (nextChild !== undefined) {
+        nextObject[key] = nextChild;
+        shouldReturnObject = true;
+      }
+    }
+
+    if (shouldReturnObject || Object.keys(nextObject).length > 0) {
+      return nextObject;
+    }
+    return nextValue;
+  }
+
+  if (Array.isArray(nextValue)) {
+    const itemSchema = fieldSchema.items && typeof fieldSchema.items === 'object'
+      ? fieldSchema.items as Record<string, any>
+      : undefined;
+    if (!itemSchema) return nextValue;
+    return nextValue.map((item) => applyFieldSchemaDefaults(itemSchema, item));
+  }
+
+  return nextValue;
+}
+
+function cloneSchemaDefault<T>(value: T): T {
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(value);
+  }
+  return cloneSchemaDefaultFallback(value);
+}
+
+function cloneSchemaDefaultFallback<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneSchemaDefaultFallback(entry)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, cloneSchemaDefaultFallback(entry)]),
+    ) as T;
+  }
+  return value;
 }

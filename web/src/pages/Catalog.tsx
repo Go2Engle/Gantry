@@ -98,6 +98,7 @@ export default function Catalog() {
     () => filterEntityKindsByPlugins(ENTITY_KINDS, plugins),
     [plugins],
   );
+  const kindsResolved = plugins !== null;
 
   useEffect(() => {
     if (!kind || plugins === null) return;
@@ -305,31 +306,35 @@ export default function Catalog() {
       </div>
 
       {/* Kind tabs */}
-      <div className="mt-4 flex gap-1 overflow-x-auto border-b border-[var(--gantry-border)]">
-        <button
-          onClick={() => navigate('/catalog')}
-          className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-            !kind
-              ? 'border-[var(--gantry-accent)] text-[var(--gantry-accent)]'
-              : 'border-transparent text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
-          }`}
-        >
-          All
-        </button>
-        {visibleKinds.map((k) => (
+      {kindsResolved ? (
+        <div className="mt-4 flex gap-1 overflow-x-auto border-b border-[var(--gantry-border)]">
           <button
-            key={k.name}
-            onClick={() => navigate(`/catalog/${k.name}`)}
+            onClick={() => navigate('/catalog')}
             className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              kind === k.name
+              !kind
                 ? 'border-[var(--gantry-accent)] text-[var(--gantry-accent)]'
                 : 'border-transparent text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
             }`}
           >
-            {k.name}
+            All
           </button>
-        ))}
-      </div>
+          {visibleKinds.map((k) => (
+            <button
+              key={k.name}
+              onClick={() => navigate(`/catalog/${k.name}`)}
+              className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                kind === k.name
+                  ? 'border-[var(--gantry-accent)] text-[var(--gantry-accent)]'
+                  : 'border-transparent text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]'
+              }`}
+            >
+              {k.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 h-10 animate-pulse rounded-lg bg-[var(--gantry-bg-secondary)]" />
+      )}
 
       {/* Error */}
       {error && (
@@ -412,33 +417,41 @@ export default function Catalog() {
             {/* Step 1: Kind picker */}
             {createStep === 'kind' && (
               <div className="flex-1 overflow-y-auto p-6">
-                <p className="mb-6 text-sm text-[var(--gantry-text-secondary)]">
-                  Select the type of entity you want to add to the catalog.
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {visibleKinds.map((k) => {
-                    const meta = KIND_META[k.name];
-                    return (
-                      <button
-                        key={k.name}
-                        onClick={() => { setCreateKind(k.name); setCreateStep('form'); }}
-                        className="group flex items-start gap-4 rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-4 text-left transition-all hover:border-[var(--gantry-accent)] hover:shadow-md"
-                      >
-                        <div className={`mt-0.5 shrink-0 ${meta?.color ?? 'text-[var(--gantry-accent)]'}`}>
-                          {meta?.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-[var(--gantry-text-primary)] group-hover:text-[var(--gantry-accent)]">
-                            {k.name}
-                          </div>
-                          <div className="mt-1 text-xs leading-relaxed text-[var(--gantry-text-secondary)]">
-                            {meta?.description}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                {kindsResolved ? (
+                  <>
+                    <p className="mb-6 text-sm text-[var(--gantry-text-secondary)]">
+                      Select the type of entity you want to add to the catalog.
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {visibleKinds.map((k) => {
+                        const meta = KIND_META[k.name];
+                        return (
+                          <button
+                            key={k.name}
+                            onClick={() => { setCreateKind(k.name); setCreateStep('form'); }}
+                            className="group flex items-start gap-4 rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-4 text-left transition-all hover:border-[var(--gantry-accent)] hover:shadow-md"
+                          >
+                            <div className={`mt-0.5 shrink-0 ${meta?.color ?? 'text-[var(--gantry-accent)]'}`}>
+                              {meta?.icon}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-[var(--gantry-text-primary)] group-hover:text-[var(--gantry-accent)]">
+                                {k.name}
+                              </div>
+                              <div className="mt-1 text-xs leading-relaxed text-[var(--gantry-text-secondary)]">
+                                {meta?.description}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex h-full min-h-48 items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--gantry-accent)] border-t-transparent" />
+                  </div>
+                )}
               </div>
             )}
 

@@ -208,6 +208,13 @@ export interface PluginRegistryEntry {
   category: 'integration' | 'widget' | 'entity-kind' | 'action-type' | 'auth-provider';
   iconUrl?: string;
   homepage?: string;
+  /**
+   * Entity kinds this plugin contributes panels for.
+   *
+   * For plugins where `category === 'entity-kind'`, `filterEntityKindsByPlugins`
+   * also treats `entityPanels` as the exact `ENTITY_KINDS` names provided by the
+   * plugin so disabled kinds can be hidden from catalog navigation.
+   */
   entityPanels?: string[];
   actionTypes?: string[];
   enabled: boolean;
@@ -419,6 +426,12 @@ export const ENTITY_KINDS = [
 
 export type EntityKindName = (typeof ENTITY_KINDS)[number]['name'];
 
+/**
+ * Filters `ENTITY_KINDS`-style lists based on disabled `PluginRegistryEntry`
+ * records. For `category === 'entity-kind'`, the plugin registry must list the
+ * exact kind names in `entityPanels` so hiding remains aligned with the kinds
+ * shown elsewhere in the catalog.
+ */
 export function filterEntityKindsByPlugins<T extends { name: string }>(
   kinds: readonly T[],
   plugins?: PluginRegistryEntry[] | null,

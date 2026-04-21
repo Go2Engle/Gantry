@@ -798,15 +798,27 @@ function PluginDetailModal({
   // Sync initialTab if it changes (e.g. when parent reopens with different tab)
   useEffect(() => { setTab(initialTab); }, [initialTab]);
 
+  useEffect(() => {
+    setConfig(null);
+    setValues({});
+    setSaveError(null);
+  }, [plugin.name]);
+
   // Load config whenever we switch to config tab
   useEffect(() => {
+    let isActive = true;
+    const pluginName = plugin.name;
     if (tab !== 'config') return;
     if (config) return; // already loaded
-    api.getPluginConfig(plugin.name).then((c) => {
+    api.getPluginConfig(pluginName).then((c) => {
+      if (!isActive) return;
       setConfig(c);
       setValues(applySchemaDefaults(c.schema, c.values));
     }).catch(() => {});
-  }, [tab, plugin.name]);
+    return () => {
+      isActive = false;
+    };
+  }, [tab, plugin.name, config]);
 
   async function handleSave() {
     setSaving(true);
