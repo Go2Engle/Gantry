@@ -13,41 +13,49 @@ import EntityCard from '../components/EntityCard';
 import EntityTable from '../components/EntityTable';
 import SchemaForm from '../components/SchemaForm';
 
-const KIND_META: Record<string, { icon: React.ReactNode; description: string; color: string }> = {
+const KIND_COLOR_CLASSES = {
+  accent: 'text-[var(--gantry-accent)]',
+  accentHover: 'text-[var(--gantry-accent-hover)]',
+  textPrimary: 'text-[var(--gantry-text-primary)]',
+  textSecondary: 'text-[var(--gantry-text-secondary)]',
+  danger: 'text-[var(--gantry-danger)]',
+} as const;
+
+const KIND_META: Record<string, { icon: React.ReactNode; description: string; colorClass: string }> = {
   Service: {
     icon: <Server className="h-7 w-7" />,
     description: 'A deployable unit of software — microservice, monolith, or serverless function.',
-    color: 'text-blue-500',
+    colorClass: KIND_COLOR_CLASSES.accent,
   },
   API: {
     icon: <Globe className="h-7 w-7" />,
     description: 'An interface that services expose — REST, GraphQL, gRPC, or event stream.',
-    color: 'text-purple-500',
+    colorClass: KIND_COLOR_CLASSES.accentHover,
   },
   Infrastructure: {
     icon: <Database className="h-7 w-7" />,
     description: 'Cloud resources — databases, queues, storage, and other infrastructure.',
-    color: 'text-orange-500',
+    colorClass: KIND_COLOR_CLASSES.textPrimary,
   },
   Team: {
     icon: <Users className="h-7 w-7" />,
     description: 'A group of people who own and maintain services and resources.',
-    color: 'text-green-500',
+    colorClass: KIND_COLOR_CLASSES.textSecondary,
   },
   Environment: {
     icon: <Cloud className="h-7 w-7" />,
     description: 'A deployment target — production, staging, development, or preview.',
-    color: 'text-cyan-500',
+    colorClass: KIND_COLOR_CLASSES.accentHover,
   },
   Documentation: {
     icon: <FileText className="h-7 w-7" />,
     description: 'Technical docs, runbooks, ADRs, and knowledge base articles.',
-    color: 'text-yellow-500',
+    colorClass: KIND_COLOR_CLASSES.textSecondary,
   },
   Flow: {
     icon: <Network className="h-7 w-7" />,
     description: 'Editable system flow diagrams backed by real catalog entities and GitOps-friendly YAML.',
-    color: 'text-[var(--gantry-accent)]',
+    colorClass: KIND_COLOR_CLASSES.accent,
   },
 };
 
@@ -106,6 +114,10 @@ export default function Catalog() {
     () => filterEntityKindsByPlugins(ENTITY_KINDS, plugins),
     [plugins],
   );
+  const visibleKindNames = useMemo(
+    () => new Set<string>(visibleKinds.map((entityKind) => entityKind.name)),
+    [visibleKinds],
+  );
   const kindsResolved = plugins !== null;
   const fallbackCreateKind = visibleKinds[0]?.name ?? 'Service';
 
@@ -141,6 +153,7 @@ export default function Catalog() {
 
   const filtered = useMemo(() => {
     return entities.filter((e) => {
+      if (!visibleKindNames.has(e.kind)) return false;
       if (ownerFilter && e.metadata.owner !== ownerFilter) return false;
       if (tagFilter && !(e.metadata.tags || []).includes(tagFilter)) return false;
       if (searchQuery) {
@@ -154,7 +167,7 @@ export default function Catalog() {
       }
       return true;
     });
-  }, [entities, searchQuery, ownerFilter, tagFilter]);
+  }, [entities, searchQuery, ownerFilter, tagFilter, visibleKindNames]);
 
   const hasFilters = searchQuery || ownerFilter || tagFilter;
 
@@ -176,7 +189,7 @@ export default function Catalog() {
       if (!visibleKinds.some((entityKind) => entityKind.name === createKind)) {
         setError('The selected entity kind is no longer available. Please choose a kind again.');
         setCreateKind(fallbackCreateKind);
-        closeCreate();
+        setCreateStep('kind');
         return;
       }
 
@@ -461,7 +474,7 @@ export default function Catalog() {
                             onClick={() => { setCreateKind(k.name); setCreateStep('form'); }}
                             className="group flex items-start gap-4 rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-4 text-left transition-all hover:border-[var(--gantry-accent)] hover:shadow-md"
                           >
-                            <div className={`mt-0.5 shrink-0 ${meta?.color ?? 'text-[var(--gantry-accent)]'}`}>
+                            <div className={`mt-0.5 shrink-0 ${meta?.colorClass ?? KIND_COLOR_CLASSES.accent}`}>
                               {meta?.icon}
                             </div>
                             <div className="min-w-0">
@@ -490,7 +503,7 @@ export default function Catalog() {
               <div className="flex-1 overflow-y-auto p-6">
                 {/* Kind badge */}
                 <div className="mb-6 flex items-center gap-3 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-4 py-3">
-                  <div className={`shrink-0 ${KIND_META[createKind]?.color ?? 'text-[var(--gantry-accent)]'}`}>
+                  <div className={`shrink-0 ${KIND_META[createKind]?.colorClass ?? KIND_COLOR_CLASSES.accent}`}>
                     {KIND_META[createKind]?.icon}
                   </div>
                   <div>
