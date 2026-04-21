@@ -142,6 +142,20 @@ export const api = {
   getKubernetesWorkload: (appName: string, namespaces: string[]) =>
     request<K8sWorkloadInfo>('GET', `/plugins/kubernetes/workload/${encodeURIComponent(appName)}?namespaces=${namespaces.join(',')}`),
 
+  streamKubernetesPodLogs: (
+    namespace: string,
+    pod: string,
+    container: string,
+    cluster?: string,
+    signal?: AbortSignal,
+  ): Promise<Response> => {
+    const clusterSuffix = cluster ? `?cluster=${encodeURIComponent(cluster)}` : '';
+    const url = `/api/v1/plugins/kubernetes/pods/${encodeURIComponent(namespace)}/${encodeURIComponent(pod)}/containers/${encodeURIComponent(container)}/logs${clusterSuffix}`;
+    const h: Record<string, string> = {};
+    if (authToken) h.Authorization = `Bearer ${authToken}`;
+    return fetch(url, { headers: h, signal });
+  },
+
   getGitHubSSOConfig: () =>
     request<{ ssoEnabled: boolean }>('GET', '/auth/github/config'),
 

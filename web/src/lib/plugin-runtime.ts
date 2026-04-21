@@ -13,6 +13,7 @@
  */
 
 import type { ComponentType } from 'react';
+import { getToken } from './api';
 
 export interface EntityPanelProps {
   kind: string;
@@ -138,7 +139,7 @@ export function getAuthProviders(): AuthProvider[] {
  */
 export async function loadPlugins(): Promise<void> {
   try {
-    const token = localStorage.getItem('gantry_token');
+    const token = getToken();
     const reqHeaders: Record<string, string> = {};
     if (token) reqHeaders.Authorization = `Bearer ${token}`;
     const res = await fetch('/api/v1/plugins', { headers: reqHeaders });

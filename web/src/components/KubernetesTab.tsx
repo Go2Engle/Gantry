@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, Terminal, X, RefreshCw, Search } from 'lucide-react';
-import { api, getToken } from '../lib/api';
+import { api } from '../lib/api';
 import type { Entity, K8sWorkloadInfo, K8sPodInfo, K8sContainerInfo } from '../lib/types';
 
 interface LogTarget {
@@ -96,17 +96,14 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
     setError('');
     setConnected(true);
 
-    const token = getToken();
-    const clusterSuffix = target.cluster ? `?cluster=${encodeURIComponent(target.cluster)}` : '';
-    const url = `/api/v1/plugins/kubernetes/pods/${target.namespace}/${target.pod}/containers/${target.container}/logs${clusterSuffix}`;
-
-    const reqHeaders: Record<string, string> = {};
-    if (token) reqHeaders.Authorization = `Bearer ${token}`;
-
-    fetch(url, {
-      headers: reqHeaders,
-      signal: controller.signal,
-    })
+    api
+      .streamKubernetesPodLogs(
+        target.namespace,
+        target.pod,
+        target.container,
+        target.cluster,
+        controller.signal,
+      )
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const reader = res.body!.getReader();
@@ -142,7 +139,7 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
   useEffect(() => {
     connect();
     return () => controllerRef.current?.abort();
-  }, [target.namespace, target.pod, target.container]);
+  }, [target.namespace, target.pod, target.container, target.cluster]);
 
   useEffect(() => {
     // Only auto-scroll when not searching — otherwise it yanks the user
@@ -181,6 +178,7 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
               <button
                 onClick={() => setSearch('')}
                 title="Clear search"
+                aria-label="Clear search"
                 className="absolute right-1 rounded p-0.5 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
               >
                 <X className="h-3 w-3" />
@@ -195,6 +193,7 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
           <button
             onClick={connect}
             title="Reconnect"
+            aria-label="Reconnect log stream"
             className="rounded p-1 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -202,6 +201,7 @@ function LogViewer({ target, onClose }: { target: LogTarget; onClose: () => void
           <button
             onClick={onClose}
             title="Close"
+            aria-label="Close log viewer"
             className="rounded p-1 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
           >
             <X className="h-3.5 w-3.5" />
