@@ -125,7 +125,6 @@ export default function Catalog() {
 
     setCreateKind(fallbackCreateKind);
     if (showCreate) {
-      setShowCreate(false);
       setCreateStep('kind');
     }
   }, [plugins, visibleKinds, createKind, fallbackCreateKind, showCreate]);
