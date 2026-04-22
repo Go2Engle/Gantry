@@ -50,8 +50,8 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 		r.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-			ExposedHeaders:   []string{"Link"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Mcp-Session-Id", "MCP-Protocol-Version"},
+			ExposedHeaders:   []string{"Link", "Mcp-Session-Id"},
 			AllowCredentials: true,
 			MaxAge:           300,
 		}))
@@ -59,8 +59,8 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 		r.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   []string{""}, // same-origin only
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-			ExposedHeaders:   []string{"Link"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Mcp-Session-Id", "MCP-Protocol-Version"},
+			ExposedHeaders:   []string{"Link", "Mcp-Session-Id"},
 			AllowCredentials: true,
 			MaxAge:           300,
 		}))
