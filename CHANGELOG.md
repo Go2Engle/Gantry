@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/Go2Engle/Gantry/compare/v0.12.0...v0.12.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* mcp bug ([#85](https://github.com/Go2Engle/Gantry/issues/85)) ([c848306](https://github.com/Go2Engle/Gantry/commit/c8483060005123e030feada578b8b5f9db0ae28b))
+
 ## [0.12.0](https://github.com/Go2Engle/Gantry/compare/v0.11.2...v0.12.0) (2026-04-22)
 
 
