@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/go2engle/gantry/internal/api/handlers"
 	"github.com/go2engle/gantry/internal/entity"
@@ -103,21 +104,12 @@ func filterEntities(entities []*entity.Entity, owner, tag string) []*entity.Enti
 		if owner != "" && e.Metadata.Owner != owner {
 			continue
 		}
-		if tag != "" && !containsString(e.Metadata.Tags, tag) {
+		if tag != "" && !slices.Contains(e.Metadata.Tags, tag) {
 			continue
 		}
 		filtered = append(filtered, e)
 	}
 	return filtered
-}
-
-func containsString(slice []string, v string) bool {
-	for _, s := range slice {
-		if s == v {
-			return true
-		}
-	}
-	return false
 }
 
 // jsonResult wraps a value as MCP structured content. Returning the value as

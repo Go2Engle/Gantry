@@ -24,7 +24,7 @@ Authentication uses the same [API keys](./authentication.md#api-keys) as every o
 Authorization: Bearer gantry_<your-key>
 ```
 
-The permissions of the key's user apply to every tool call. Because v1 exposes only read-only tools, a key scoped to `viewer` is sufficient.
+The `/api/v1/mcp` route is protected by the standard authentication middleware — any authenticated Gantry user (or API key) can connect, regardless of role. The permissions of the key's user still apply to every tool call, so the tools return only data that user is allowed to see. Because v1 exposes only read-only tools, using a `viewer`-role key is a good least-privilege default.
 
 ## Available Tools
 
@@ -128,7 +128,7 @@ curl -i -X POST https://gantry.example.com/api/v1/mcp \
     "id": 1,
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-03-26",
+      "protocolVersion": "2025-11-25",
       "capabilities": {},
       "clientInfo": {"name": "curl", "version": "1"}
     }
