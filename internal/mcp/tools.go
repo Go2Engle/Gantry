@@ -96,6 +96,8 @@ func registerTools(srv *mcpsdk.Server, h *handlers.Handlers) {
 		}
 		return jsonResult(graph)
 	})
+
+	registerWriteTools(srv, h)
 }
 
 func filterEntities(entities []*entity.Entity, owner, tag string) []*entity.Entity {
