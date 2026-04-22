@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/Go2Engle/Gantry/compare/v0.11.2...v0.12.0) (2026-04-22)
+
+
+### Features
+
+* mcp support ([#84](https://github.com/Go2Engle/Gantry/issues/84)) ([687355d](https://github.com/Go2Engle/Gantry/commit/687355d88532e3641669fbd2ed935baa00118715))
+* support health check URLs on infrastructure entities ([#82](https://github.com/Go2Engle/Gantry/issues/82)) ([3305ce8](https://github.com/Go2Engle/Gantry/commit/3305ce89a0461d3e6408fe13f8dbcb68f8200f00))
+
 ## [0.11.2](https://github.com/Go2Engle/Gantry/compare/v0.11.1...v0.11.2) (2026-04-21)
 
 
