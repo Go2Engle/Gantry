@@ -8,6 +8,7 @@ import (
 
 	"github.com/go2engle/gantry/internal/api/handlers"
 	"github.com/go2engle/gantry/internal/entity"
+	"github.com/go2engle/gantry/internal/search"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -43,7 +44,11 @@ func registerTools(srv *mcpsdk.Server, h *handlers.Handlers) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("search failed: %w", err)
 		}
-		return jsonResult(results)
+		if results == nil {
+			results = []*search.Result{}
+		}
+		// MCP structuredContent must be an object, not an array — wrap the slice.
+		return jsonResult(map[string]any{"results": results, "count": len(results)})
 	})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
@@ -73,7 +78,8 @@ func registerTools(srv *mcpsdk.Server, h *handlers.Handlers) {
 			return nil, nil, fmt.Errorf("list entities failed: %w", err)
 		}
 		filtered := filterEntities(entities, in.Owner, in.Tag)
-		return jsonResult(filtered)
+		// MCP structuredContent must be an object, not an array — wrap the slice.
+		return jsonResult(map[string]any{"entities": filtered, "count": len(filtered)})
 	})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
