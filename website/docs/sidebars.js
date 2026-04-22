@@ -38,6 +38,7 @@ const sidebars = {
       items: [
         'api/authentication',
         'api/rest-api',
+        'api/mcp',
       ],
     },
     {
