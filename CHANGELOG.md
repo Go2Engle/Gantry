@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/Go2Engle/Gantry/compare/v0.13.0...v0.14.0) (2026-04-23)
+
+
+### Features
+
+* Add health-based edge coloring to Flow ([#94](https://github.com/Go2Engle/Gantry/issues/94)) ([8d33cbe](https://github.com/Go2Engle/Gantry/commit/8d33cbed2c15248df062cc417ccf668d51377343))
+* **flow:** add flow and node duplication actions ([#91](https://github.com/Go2Engle/Gantry/issues/91)) ([a8f441e](https://github.com/Go2Engle/Gantry/commit/a8f441e5d5ab16ce3748245b9a7723fde3c2588a))
+
+
+### Bug Fixes
+
+* **admin:** align plugin settings actions ([#92](https://github.com/Go2Engle/Gantry/issues/92)) ([b178215](https://github.com/Go2Engle/Gantry/commit/b178215e45ec3564925677f6185768f4617cfe11))
+
 ## [0.13.0](https://github.com/Go2Engle/Gantry/compare/v0.12.1...v0.13.0) (2026-04-22)
 
 
