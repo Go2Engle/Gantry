@@ -207,13 +207,14 @@ export function getNodeDimensions(
   const title = (text.title ?? (entityNode ? node.entityRef.name : node.label)).trim();
   const subtitle = (text.subtitle ?? nodeSubtitle(node)).trim();
   const longestText = Math.max(title.length, subtitle.length, entityNode ? 16 : 12);
+  const manualWidth = typeof node.width === 'number' && node.width > 0 ? node.width : null;
 
   switch (shape) {
     case 'pill': {
       if (entityNode) {
         const baseWidth = clamp(220 + Math.max(0, longestText - 14) * 8, 220, MAX_NODE_WIDTH);
-        const width = clamp(Math.max(node.width || 0, baseWidth), 220, MAX_NODE_WIDTH);
-        const charsPerLine = Math.max(13, Math.floor((width - 68) / 8));
+        const width = clamp(manualWidth ?? baseWidth, 148, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(8, Math.floor((width - 68) / 8));
         const titleLines = estimateWrappedLines(title, charsPerLine);
         const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
         const baseHeight = Math.max(104, 58 + titleLines * 20 + subtitleLines * 16 + 18);
@@ -221,8 +222,8 @@ export function getNodeDimensions(
         return { width, height };
       }
       const baseWidth = clamp(188 + Math.max(0, longestText - 12) * 7, 188, 340);
-      const width = clamp(Math.max(node.width || 0, baseWidth), 188, MAX_NODE_WIDTH);
-      const charsPerLine = Math.max(12, Math.floor((width - 44) / 8));
+      const width = clamp(manualWidth ?? baseWidth, 132, MAX_NODE_WIDTH);
+      const charsPerLine = Math.max(8, Math.floor((width - 44) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
       const baseHeight = Math.max(84, 48 + titleLines * 18 + subtitleLines * 16 + 18);
@@ -232,8 +233,8 @@ export function getNodeDimensions(
     case 'diamond': {
       if (entityNode) {
         const baseWidth = clamp(292 + Math.max(0, longestText - 11) * 10, 292, MAX_NODE_WIDTH);
-        const width = clamp(Math.max(node.width || 0, baseWidth), 292, MAX_NODE_WIDTH);
-        const charsPerLine = Math.max(10, Math.floor((width * 0.44) / 8));
+        const width = clamp(manualWidth ?? baseWidth, 212, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(7, Math.floor((width * 0.44) / 8));
         const titleLines = estimateWrappedLines(title, charsPerLine);
         const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
         const baseHeight = clamp(136 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 18, 136, 280);
@@ -241,8 +242,8 @@ export function getNodeDimensions(
         return { width, height };
       }
       const baseWidth = clamp(272 + Math.max(0, longestText - 10) * 10, 272, MAX_NODE_WIDTH);
-      const width = clamp(Math.max(node.width || 0, baseWidth), 272, MAX_NODE_WIDTH);
-      const charsPerLine = Math.max(9, Math.floor((width * 0.42) / 8));
+      const width = clamp(manualWidth ?? baseWidth, 196, MAX_NODE_WIDTH);
+      const charsPerLine = Math.max(7, Math.floor((width * 0.42) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
       const baseHeight = clamp(120 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 20, 120, 220);
@@ -252,8 +253,8 @@ export function getNodeDimensions(
     case 'note': {
       if (entityNode) {
         const baseWidth = clamp(220 + Math.max(0, longestText - 14) * 7, 220, MAX_NODE_WIDTH);
-        const width = clamp(Math.max(node.width || 0, baseWidth), 220, MAX_NODE_WIDTH);
-        const charsPerLine = Math.max(13, Math.floor((width - 62) / 8));
+        const width = clamp(manualWidth ?? baseWidth, 156, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(8, Math.floor((width - 62) / 8));
         const titleLines = estimateWrappedLines(title, charsPerLine);
         const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
         const baseHeight = Math.max(110, 64 + titleLines * 20 + subtitleLines * 16 + 20);
@@ -261,8 +262,8 @@ export function getNodeDimensions(
         return { width, height };
       }
       const baseWidth = clamp(196 + Math.max(0, longestText - 14) * 7, 196, 360);
-      const width = clamp(Math.max(node.width || 0, baseWidth), 196, MAX_NODE_WIDTH);
-      const charsPerLine = Math.max(13, Math.floor((width - 52) / 8));
+      const width = clamp(manualWidth ?? baseWidth, 148, MAX_NODE_WIDTH);
+      const charsPerLine = Math.max(8, Math.floor((width - 52) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
       const baseHeight = Math.max(MIN_NODE_HEIGHT, 56 + titleLines * 18 + subtitleLines * 16 + 24);
@@ -273,8 +274,8 @@ export function getNodeDimensions(
     default: {
       if (entityNode) {
         const baseWidth = clamp(216 + Math.max(0, longestText - 14) * 7, 216, MAX_NODE_WIDTH);
-        const width = clamp(Math.max(node.width || 0, baseWidth), 216, MAX_NODE_WIDTH);
-        const charsPerLine = Math.max(14, Math.floor((width - 58) / 8));
+        const width = clamp(manualWidth ?? baseWidth, 144, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(8, Math.floor((width - 58) / 8));
         const titleLines = estimateWrappedLines(title, charsPerLine);
         const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
         const baseHeight = Math.max(104, 58 + titleLines * 20 + subtitleLines * 16 + 18);
@@ -282,8 +283,8 @@ export function getNodeDimensions(
         return { width, height };
       }
       const baseWidth = clamp(180 + Math.max(0, longestText - 14) * 6, 180, 320);
-      const width = clamp(Math.max(node.width || 0, baseWidth), 180, MAX_NODE_WIDTH);
-      const charsPerLine = Math.max(14, Math.floor((width - 36) / 8));
+      const width = clamp(manualWidth ?? baseWidth, 128, MAX_NODE_WIDTH);
+      const charsPerLine = Math.max(8, Math.floor((width - 36) / 8));
       const titleLines = estimateWrappedLines(title, charsPerLine);
       const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
       const baseHeight = Math.max(MIN_NODE_HEIGHT, 48 + titleLines * 18 + subtitleLines * 16 + 18);
