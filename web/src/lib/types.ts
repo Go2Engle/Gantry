@@ -152,6 +152,9 @@ export interface FlowEntityNode {
   id: string;
   nodeType?: 'entity';
   entityRef: FlowEntityRef;
+  shape?: FlowMockShape;
+  width?: number;
+  height?: number;
   position: {
     x: number;
     y: number;

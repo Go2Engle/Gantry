@@ -15,6 +15,7 @@ import {
   nodeBadge,
   nodeColor,
   nodeEntityKey,
+  nodeShape,
   nodeSubtitle,
   withAlpha,
 } from './flow';
@@ -178,7 +179,7 @@ function buildFlowSvgDocument(options: NormalizedFlowExportOptions): FlowSvgDocu
   const namespace = (options.namespace || 'default').trim() || 'default';
   const nodeMap = new Map(options.spec.nodes.map((node) => [node.id, node]));
   const childIds = new Set(options.spec.nodes.filter((node) => node.parentId).map((node) => node.parentId!));
-  const bounds = getDiagramBounds(options.spec, nodeMap, options.showFrame ? CARD_PADDING : 0);
+  const bounds = getDiagramBounds(options.spec, nodeMap, options.entitiesByKey, options.showFrame ? CARD_PADDING : 0);
   const backgroundFill = getDocumentBackground(options);
   const nodeCount = options.spec.nodes.length;
   const edgeCount = options.spec.edges.length;
@@ -304,8 +305,8 @@ function renderEdge(
 
   const sourceAbs = getAbsolutePosition(source, nodeMap);
   const targetAbs = getAbsolutePosition(target, nodeMap);
-  const sourceSize = getNodeDimensions(source);
-  const targetSize = getNodeDimensions(target);
+  const sourceSize = getNodeDimensions(source, { title: nodeTitle(source, options.entitiesByKey), subtitle: nodeSubtitle(source) });
+  const targetSize = getNodeDimensions(target, { title: nodeTitle(target, options.entitiesByKey), subtitle: nodeSubtitle(target) });
   const path = edgePath(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
   const labelPos = edgeLabelPosition(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
   const health = connectedEdgeHealth(edge, nodeMap, options.healthStatuses);
@@ -332,12 +333,12 @@ function renderNode(
   nodeMap: Map<string, FlowSpec['nodes'][number]>,
   childIds: Set<string>
 ): string {
-  const size = getNodeDimensions(node);
+  const title = nodeTitle(node, options.entitiesByKey);
+  const subtitle = nodeSubtitle(node);
+  const size = getNodeDimensions(node, { title, subtitle });
   const absPos = getAbsolutePosition(node, nodeMap);
   const color = nodeColor(node);
   const badge = nodeBadge(node);
-  const subtitle = nodeSubtitle(node);
-  const title = nodeTitle(node, options.entitiesByKey);
   const hasChildren = childIds.has(node.id);
   const baseBorderColor = options.style === 'clean' ? withAlpha(color, '66') : options.palette.border;
 
@@ -425,42 +426,58 @@ function renderEntityNode(
   color: string,
   options: NormalizedFlowExportOptions
 ): string {
+  const shape = nodeShape(node);
   const badgeColor = withAlpha(color, '1A');
-  const titleLines = wrapText(title, 22, 3);
-  const subtitleLines = wrapText(subtitle, 24, 2);
+  const titleLines = wrapText(title, mockTitleChars(shape, width), 4);
+  const subtitleLines = wrapText(subtitle, mockSubtitleChars(shape, width), 3);
   const health = options.healthStatuses.get(nodeEntityKey(node));
   const healthColor = health === true ? '#10B981' : health === false ? options.palette.danger : '';
   const borderColor = options.style === 'clean' ? withAlpha(color, '66') : options.palette.border;
-
-  let currentY = y + 18;
-  const badgeSvg = badge
-    ? `<rect x="${x + 14}" y="${currentY}" width="${Math.min(150, badge.length * 8.5 + 22)}" height="18" rx="9" fill="${badgeColor}" />
-       <text class="node-badge" x="${x + 25}" y="${currentY + 13}" fill="${color}">${escapeXml(badge)}</text>`
+  const shell = renderMockShell(shape, x, y, width, height, borderColor, color, options.palette.bgPrimary);
+  const containerSvg = hasChildren
+    ? `<rect x="${x + 4}" y="${y + 4}" width="${width - 8}" height="${height - 8}" rx="${shape === 'pill' ? Math.max(18, (height - 8) / 2) : 20}" fill="none" stroke="${options.style === 'clean' ? withAlpha(color, '35') : options.palette.border}" stroke-width="1.2" stroke-dasharray="6 5" />`
     : '';
-  currentY += badge ? 26 : 8;
+
+  if (shape === 'diamond') {
+    let currentY = y + (badge ? 28 : 22);
+    const badgeSvg = badge
+      ? `<rect x="${x + width / 2 - Math.min(72, badge.length * 4.3 + 16)}" y="${y + 18}" width="${Math.min(144, badge.length * 8.6 + 32)}" height="18" rx="9" fill="${badgeColor}" />
+         <text class="node-badge" x="${x + width / 2}" y="${y + 31}" text-anchor="middle" fill="${color}">${escapeXml(badge)}</text>`
+      : '';
+    const titleSvg = titleLines.map((line) => {
+      const next = `<text class="node-title" x="${x + width / 2}" y="${currentY + 16}" text-anchor="middle">${escapeXml(line)}</text>`;
+      currentY += 18;
+      return next;
+    }).join('');
+    currentY += subtitleLines.length > 0 ? 10 : 0;
+    const healthSvg = healthColor
+      ? `<circle cx="${x + width / 2 - 34}" cy="${currentY + 4}" r="4" fill="${healthColor}" />`
+      : '';
+    const subtitleX = x + width / 2 + (healthColor ? 10 : 0);
+    const subtitleSvg = subtitleLines.map((line, index) => `<text class="node-subtitle" x="${subtitleX}" y="${currentY + 12 + index * 16}" text-anchor="${healthColor ? 'start' : 'middle'}">${escapeXml(line)}</text>`).join('');
+    return `<g>${shell}${containerSvg}${badgeSvg}${titleSvg}${healthSvg}${subtitleSvg}</g>`;
+  }
+
+  const horizontalInset = shape === 'pill' ? 28 : shape === 'note' ? 24 : 18;
+  let currentY = y + 22;
+  const badgeSvg = badge
+    ? `<rect x="${x + horizontalInset}" y="${currentY - 2}" width="${Math.min(150, badge.length * 8.5 + 22)}" height="18" rx="9" fill="${badgeColor}" />
+       <text class="node-badge" x="${x + horizontalInset + 11}" y="${currentY + 11}" fill="${color}">${escapeXml(badge)}</text>`
+    : '';
+  currentY += badge ? 24 : 4;
   const titleSvg = titleLines.map((line) => {
-    const next = `<text class="node-title" x="${x + 14}" y="${currentY + 14}">${escapeXml(line)}</text>`;
+    const next = `<text class="node-title" x="${x + horizontalInset}" y="${currentY + 14}">${escapeXml(line)}</text>`;
     currentY += 18;
     return next;
   }).join('');
-  const subtitleY = Math.min(y + height - 14, currentY + 18);
-  const subtitleX = x + 14 + (healthColor ? 12 : 0);
-  const subtitleSvg = subtitleLines.map((line, index) => `<text class="node-subtitle" x="${subtitleX}" y="${subtitleY + index * 14}">${escapeXml(line)}</text>`).join('');
+  currentY += subtitleLines.length > 0 ? 8 : 0;
+  const subtitleX = x + horizontalInset + (healthColor ? 12 : 0);
   const healthSvg = healthColor
-    ? `<circle cx="${x + 18}" cy="${subtitleY - 4}" r="4" fill="${healthColor}" />`
+    ? `<circle cx="${x + horizontalInset + 4}" cy="${currentY + 3}" r="4" fill="${healthColor}" />`
     : '';
-  const containerSvg = hasChildren
-    ? `<rect x="${x + 4}" y="${y + 4}" width="${width - 8}" height="${height - 8}" rx="20" fill="none" stroke="${options.style === 'clean' ? withAlpha(color, '35') : options.palette.border}" stroke-width="1.2" stroke-dasharray="6 5" />`
-    : '';
+  const subtitleSvg = subtitleLines.map((line, index) => `<text class="node-subtitle" x="${subtitleX}" y="${currentY + 12 + index * 16}">${escapeXml(line)}</text>`).join('');
 
-  return `<g>
-    <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24" fill="${options.palette.bgPrimary}" stroke="${borderColor}" stroke-width="${options.style === 'clean' ? 1.8 : 1.2}" />
-    ${containerSvg}
-    ${badgeSvg}
-    ${titleSvg}
-    ${healthSvg}
-    ${subtitleSvg}
-  </g>`;
+  return `<g>${shell}${containerSvg}${badgeSvg}${titleSvg}${healthSvg}${subtitleSvg}</g>`;
 }
 
 function renderMockShell(
@@ -500,7 +517,12 @@ function renderEmptyState(contentWidth: number, contentHeight: number, palette: 
   </g>`;
 }
 
-function getDiagramBounds(spec: FlowSpec, nodeMap: Map<string, FlowSpec['nodes'][number]>, padding: number) {
+function getDiagramBounds(
+  spec: FlowSpec,
+  nodeMap: Map<string, FlowSpec['nodes'][number]>,
+  entitiesByKey: Map<string, Entity>,
+  padding: number
+) {
   if (spec.nodes.length === 0) {
     return {
       minX: 0,
@@ -519,7 +541,7 @@ function getDiagramBounds(spec: FlowSpec, nodeMap: Map<string, FlowSpec['nodes']
 
   for (const node of spec.nodes) {
     const absPos = getAbsolutePosition(node, nodeMap);
-    const size = getNodeDimensions(node);
+    const size = getNodeDimensions(node, { title: nodeTitle(node, entitiesByKey), subtitle: nodeSubtitle(node) });
     minX = Math.min(minX, absPos.x);
     minY = Math.min(minY, absPos.y);
     maxX = Math.max(maxX, absPos.x + size.width);

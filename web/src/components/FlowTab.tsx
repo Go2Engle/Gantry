@@ -10,6 +10,7 @@ import {
   edgeLabelPosition,
   edgeOffsetTransform,
   edgePath,
+  entityKey,
   ensureFlowSpec,
   FLOW_EDGE_HEALTHY_STROKE,
   FLOW_EDGE_STROKE,
@@ -21,6 +22,8 @@ import {
   mockContentStyle,
   nodeBadge,
   nodeColor,
+  nodeEntityKey,
+  nodeShape,
   nodeSubtitle,
   renderMockNodeShell,
 } from '../lib/flow';
@@ -38,14 +41,24 @@ function flowHref(entity: Entity, mode: 'view' | 'edit') {
   return `/flow?${params.toString()}`;
 }
 
-function nodeTitle(node: Parameters<typeof nodeColor>[0]): string {
-  return isMockNode(node) ? node.label : node.entityRef.name;
+function clampText(lines: number) {
+  return {
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical' as const,
+    WebkitLineClamp: lines,
+    overflow: 'hidden',
+  };
+}
+
+function nodeTitle(node: Parameters<typeof nodeColor>[0], entityMap: Map<string, Entity>): string {
+  return isMockNode(node) ? node.label : entityMap.get(nodeEntityKey(node))?.metadata.title || node.entityRef.name;
 }
 
 export default function FlowTab({ entity }: { entity: Entity }) {
   const flowSpec = ensureFlowSpec(entity.spec);
   const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
   const healthStatuses = useFlowHealth(flowSpec.nodes, availableEntities);
+  const entityMap = new Map(availableEntities.map((candidate) => [entityKey(candidate), candidate]));
 
   useEffect(() => {
     let active = true;
@@ -77,7 +90,7 @@ export default function FlowTab({ entity }: { entity: Entity }) {
     let maxX = -Infinity;
     let maxY = -Infinity;
     for (const node of flowSpec.nodes) {
-      const size = getNodeDimensions(node);
+      const size = getNodeDimensions(node, { title: nodeTitle(node, entityMap), subtitle: nodeSubtitle(node) });
       const abs = getAbsolutePosition(node, nodeMap);
       minX = Math.min(minX, abs.x);
       minY = Math.min(minY, abs.y);
@@ -192,8 +205,8 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                 if (!source || !target) return null;
                 const sourceAbs = getAbsolutePosition(source, nodeMap);
                 const targetAbs = getAbsolutePosition(target, nodeMap);
-                const sourceSize = getNodeDimensions(source);
-                const targetSize = getNodeDimensions(target);
+                const sourceSize = getNodeDimensions(source, { title: nodeTitle(source, entityMap), subtitle: nodeSubtitle(source) });
+                const targetSize = getNodeDimensions(target, { title: nodeTitle(target, entityMap), subtitle: nodeSubtitle(target) });
                 const path = edgePath(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
                 const labelPos = edgeLabelPosition(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
                 const twoWay = edge.direction === 'two-way';
@@ -262,11 +275,13 @@ export default function FlowTab({ entity }: { entity: Entity }) {
             </svg>
 
             {flowSpec.nodes.map((node) => {
+              const shape = nodeShape(node);
               const color = nodeColor(node);
               const badge = nodeBadge(node);
               const subtitle = nodeSubtitle(node);
               const baseBorderColor = 'var(--gantry-border)';
-              const nodeSize = getNodeDimensions(node);
+              const title = nodeTitle(node, entityMap);
+              const nodeSize = getNodeDimensions(node, { title, subtitle });
               const absPos = getAbsolutePosition(node, nodeMap);
               return (
                 <div
@@ -280,58 +295,36 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                   }}
                 >
                   <div className="relative h-full w-full">
-                    {isMockNode(node) ? (
-                      renderMockNodeShell(node.shape, baseBorderColor, color, nodeSize.width, nodeSize.height)
-                    ) : (
-                      <div className="absolute inset-0 rounded-2xl border" style={{ borderColor: baseBorderColor, background: 'var(--gantry-bg-primary)' }} />
-                    )}
-
-                    {isMockNode(node) ? (
-                      <div className={`relative flex h-full flex-col ${mockContentClasses(node.shape)}`}>
-                        <div
-                          className={`${node.shape === 'diamond' ? 'w-full space-y-2' : ''} min-w-0`}
-                          style={mockContentStyle(node.shape, nodeSize.width)}
-                        >
-                          {badge && (
-                            <div
-                              className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                              style={{ backgroundColor: `${color}1A`, color }}
-                            >
-                              {badge}
-                            </div>
-                          )}
-                          <div className={`${badge ? 'mt-2' : ''} break-words whitespace-pre-wrap text-sm font-semibold leading-5 text-[var(--gantry-text-primary)] ${node.shape === 'diamond' ? 'text-center' : ''}`}>
-                            {nodeTitle(node)}
-                          </div>
-                        </div>
-                        {subtitle && (
+                    {renderMockNodeShell(shape, baseBorderColor, color, nodeSize.width, nodeSize.height)}
+                    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${mockContentClasses(shape)}`}>
+                      <div
+                        className={`${shape === 'diamond' ? 'w-full space-y-2' : ''} min-w-0`}
+                        style={mockContentStyle(shape, nodeSize.width)}
+                      >
+                        {badge && (
                           <div
-                            className={`min-w-0 break-words whitespace-pre-wrap text-xs leading-4 text-[var(--gantry-text-secondary)] ${node.shape === 'diamond' ? 'text-center' : ''}`}
-                            style={mockContentStyle(node.shape, nodeSize.width)}
+                            className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                            style={{ backgroundColor: `${color}1A`, color }}
                           >
-                            {subtitle}
+                            {badge}
                           </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className="relative flex h-full flex-col justify-between p-3">
-                        <div>
-                          {badge && (
-                            <div className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${color}1A`, color }}>
-                              {badge}
-                            </div>
-                          )}
-                          <div className={`${badge ? 'mt-2' : ''} break-words text-sm font-semibold leading-5 text-[var(--gantry-text-primary)]`}>
-                            {nodeTitle(node)}
-                          </div>
+                        <div
+                          className={`${badge ? 'mt-2' : ''} break-words text-sm font-semibold leading-5 text-[var(--gantry-text-primary)] ${shape === 'diamond' ? 'text-center' : ''}`}
+                          style={clampText(4)}
+                        >
+                          {title}
                         </div>
-                        {subtitle && (
-                          <div className="break-words text-xs leading-4 text-[var(--gantry-text-secondary)]">
-                            {subtitle}
-                          </div>
-                        )}
                       </div>
-                    )}
+                      {subtitle && (
+                        <div
+                          className={`min-w-0 break-words text-xs leading-4 text-[var(--gantry-text-secondary)] ${shape === 'diamond' ? 'text-center' : ''}`}
+                          style={{ ...mockContentStyle(shape, nodeSize.width), ...clampText(3) }}
+                        >
+                          {subtitle}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

@@ -55,6 +55,18 @@
                 "required": ["kind", "name"],
                 "additionalProperties": false
               },
+              "shape": {
+                "type": "string",
+                "enum": ["box", "pill", "diamond", "note"]
+              },
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
               "position": {
                 "type": "object",
                 "properties": {

@@ -63,6 +63,7 @@ import {
   nodeBadge,
   nodeColor,
   nodeEntityKey,
+  nodeShape,
   nodeSubtitle,
   renderMockNodeShell,
 } from '../lib/flow';
@@ -77,6 +78,9 @@ const ZOOM_STEP = 0.15;
 const FIT_PADDING = 48;
 const CONTENT_PADDING = 64;
 const DUPLICATE_OFFSET = 32;
+const ALIGNMENT_SNAP_THRESHOLD = 10;
+const ARROW_NUDGE_STEP = 1;
+const ARROW_NUDGE_LARGE_STEP = 10;
 const RELATION_OPTIONS = ['calls', 'dependsOn', 'readsFrom', 'writesTo', 'publishesTo', 'subscribesTo', 'consumes', 'provides'];
 const EXPORT_STYLE_OPTIONS: Array<{ value: FlowExportStyle; label: string; description: string }> = [
   {
@@ -183,7 +187,23 @@ function nodeTitle(node: FlowNode, entityMap: Map<string, Entity>): string {
 
 function nodeMeta(node: FlowNode): string {
   if (isMockNode(node)) return `Mock · ${node.shape}`;
-  return `${node.entityRef.kind} · ${node.entityRef.name}`;
+  return `${node.entityRef.kind} · ${node.entityRef.name}${node.shape && node.shape !== 'box' ? ` · ${mockShapeLabel(node.shape)}` : ''}`;
+}
+
+function clampText(lines: number): CSSProperties {
+  return {
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: lines,
+    overflow: 'hidden',
+  };
+}
+
+function guidesMatch(
+  left: { vertical: number | null; horizontal: number | null },
+  right: { vertical: number | null; horizontal: number | null }
+) {
+  return left.vertical === right.vertical && left.horizontal === right.horizontal;
 }
 
 
@@ -248,7 +268,13 @@ function cloneFlowSpecWithNewIDs(spec: FlowSpec): FlowSpec {
 }
 
 
-function getFlowBounds(spec: FlowSpec) {
+function getFlowBounds(
+  spec: FlowSpec,
+  resolveText?: (node: FlowNode) => {
+    title?: string;
+    subtitle?: string;
+  }
+) {
   if (spec.nodes.length === 0) {
     return {
       minX: 0,
@@ -267,7 +293,7 @@ function getFlowBounds(spec: FlowSpec) {
   let maxY = -Infinity;
 
   for (const node of spec.nodes) {
-    const size = getNodeDimensions(node);
+    const size = getNodeDimensions(node, resolveText?.(node));
     const absPos = getAbsolutePosition(node, nodeMap);
     minX = Math.min(minX, absPos.x);
     minY = Math.min(minY, absPos.y);
@@ -290,12 +316,20 @@ function getFlowBounds(spec: FlowSpec) {
   };
 }
 
-function getFitViewState(width: number, height: number, spec: FlowSpec) {
+function getFitViewState(
+  width: number,
+  height: number,
+  spec: FlowSpec,
+  resolveText?: (node: FlowNode) => {
+    title?: string;
+    subtitle?: string;
+  }
+) {
   if (width <= 0 || height <= 0) {
     return { zoom: 1, offset: { x: 24, y: 24 } };
   }
 
-  const bounds = getFlowBounds(spec);
+  const bounds = getFlowBounds(spec, resolveText);
   const stageMinX = Math.min(0, bounds.minX);
   const stageMinY = Math.min(0, bounds.minY);
   const renderMinX = bounds.minX - stageMinX;
@@ -360,6 +394,10 @@ export default function Flow() {
   const [dirty, setDirty] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [snapToGrid, setSnapToGrid] = useState(false);
+  const [alignmentGuides, setAlignmentGuides] = useState<{ vertical: number | null; horizontal: number | null }>({
+    vertical: null,
+    horizontal: null,
+  });
   const [nestTarget, setNestTarget] = useState<string | null>(null);
   const nestTargetRef = useRef<string | null>(null);
   const [dragging, setDragging] = useState<{ nodeId: string; nodeIds: string[]; offsetX: number; offsetY: number } | null>(null);
@@ -372,8 +410,20 @@ export default function Flow() {
   const requestedFlow = searchParams.get('flow') || '';
   const requestedNamespace = searchParams.get('namespace') || 'default';
   const requestedMode = searchParams.get('mode') === 'edit' ? 'edit' : 'view';
-  const flowBounds = useMemo(() => getFlowBounds(flowSpec), [flowSpec]);
-  const [renderBounds, setRenderBounds] = useState(flowBounds);
+  const entityMap = useMemo(
+    () => new Map(availableEntities.map((entity) => [entityKey(entity), entity])),
+    [availableEntities]
+  );
+  const resolveNodeText = useCallback((node: FlowNode) => ({
+    title: nodeTitle(node, entityMap),
+    subtitle: nodeSubtitle(node),
+  }), [entityMap]);
+  const getRenderedNodeDimensions = useCallback(
+    (node: FlowNode) => getNodeDimensions(node, resolveNodeText(node)),
+    [resolveNodeText]
+  );
+  const flowBounds = useMemo(() => getFlowBounds(flowSpec, resolveNodeText), [flowSpec, resolveNodeText]);
+  const [renderBounds, setRenderBounds] = useState(() => getFlowBounds(defaultFlowSpec()));
   const activeBounds = dragging || resizing ? renderBounds : flowBounds;
   const healthStatuses = useFlowHealth(flowSpec.nodes, availableEntities);
   const stageMinX = Math.min(0, activeBounds.minX);
@@ -428,7 +478,7 @@ export default function Flow() {
   function fitCanvas() {
     setZoomMode('fit');
     const { width, height } = getViewportDimensions();
-    const nextView = getFitViewState(width, height, flowSpec);
+    const nextView = getFitViewState(width, height, flowSpec, resolveNodeText);
     setPanOffset(nextView.offset);
     setCanvasZoom(nextView.zoom);
   }
@@ -440,6 +490,84 @@ export default function Flow() {
       x: (clientX - rect.left) / canvasZoom - contentOffsetX,
       y: (clientY - rect.top) / canvasZoom - contentOffsetY,
     };
+  }
+
+  const getAlignmentPosition = useCallback((
+    primaryNode: FlowNode,
+    rawAbsX: number,
+    rawAbsY: number,
+    nodeMap: Map<string, FlowNode>,
+    draggingSet: Set<string>
+  ) => {
+    const primarySize = getRenderedNodeDimensions(primaryNode);
+    const movingX = [rawAbsX, rawAbsX + primarySize.width / 2, rawAbsX + primarySize.width];
+    const movingY = [rawAbsY, rawAbsY + primarySize.height / 2, rawAbsY + primarySize.height];
+
+    let bestX: { delta: number; guide: number } | null = null;
+    let bestY: { delta: number; guide: number } | null = null;
+
+    for (const node of nodeMap.values()) {
+      if (draggingSet.has(node.id)) continue;
+
+      const nodeAbs = getAbsolutePosition(node, nodeMap);
+      const nodeSize = getRenderedNodeDimensions(node);
+      const targetX = [nodeAbs.x, nodeAbs.x + nodeSize.width / 2, nodeAbs.x + nodeSize.width];
+      const targetY = [nodeAbs.y, nodeAbs.y + nodeSize.height / 2, nodeAbs.y + nodeSize.height];
+
+      for (const source of movingX) {
+        for (const target of targetX) {
+          const delta = target - source;
+          if (Math.abs(delta) > ALIGNMENT_SNAP_THRESHOLD) continue;
+          if (!bestX || Math.abs(delta) < Math.abs(bestX.delta)) {
+            bestX = { delta, guide: target };
+          }
+        }
+      }
+
+      for (const source of movingY) {
+        for (const target of targetY) {
+          const delta = target - source;
+          if (Math.abs(delta) > ALIGNMENT_SNAP_THRESHOLD) continue;
+          if (!bestY || Math.abs(delta) < Math.abs(bestY.delta)) {
+            bestY = { delta, guide: target };
+          }
+        }
+      }
+    }
+
+    return {
+      x: rawAbsX + (bestX?.delta || 0),
+      y: rawAbsY + (bestY?.delta || 0),
+      guides: {
+        vertical: bestX?.guide ?? null,
+        horizontal: bestY?.guide ?? null,
+      },
+    };
+  }, [getRenderedNodeDimensions]);
+
+  function nudgeSelectedNodes(dx: number, dy: number) {
+    if (!flowSettings.canEdit || selectedNodeIds.size === 0) return;
+    const ids = selectedNodeIds;
+    let moved = false;
+    setFlowSpec((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((node) => {
+        if (!ids.has(node.id) || node.locked) return node;
+        if (node.parentId && ids.has(node.parentId)) return node;
+        moved = true;
+        return {
+          ...node,
+          position: {
+            x: node.position.x + dx,
+            y: node.position.y + dy,
+          },
+        };
+      }),
+    }));
+    if (moved) {
+      setDirty(true);
+      setNotice('');
+    }
   }
 
   useEffect(() => {
@@ -503,16 +631,23 @@ export default function Flow() {
     function handleMove(event: MouseEvent) {
       if (!viewportRef.current) return;
       suppressNodeClickRef.current = true;
+      let nextGuides = { vertical: null as number | null, horizontal: null as number | null };
 
       setFlowSpec((prev) => {
         const nodeMap = new Map(prev.nodes.map((n) => [n.id, n]));
         const primaryNode = nodeMap.get(currentDrag.nodeId);
         if (!primaryNode) return prev;
+        const draggingSet = new Set(currentDrag.nodeIds);
 
         // Compute where the primary node wants to go
         const nextPoint = clientPointToCanvas(event.clientX, event.clientY);
-        let nextX = snapVal(nextPoint.x - currentDrag.offsetX);
-        let nextY = snapVal(nextPoint.y - currentDrag.offsetY);
+        const rawAbsX = snapVal(nextPoint.x - currentDrag.offsetX);
+        const rawAbsY = snapVal(nextPoint.y - currentDrag.offsetY);
+        const aligned = getAlignmentPosition(primaryNode, rawAbsX, rawAbsY, nodeMap, draggingSet);
+        nextGuides = aligned.guides;
+
+        let nextX = aligned.x;
+        let nextY = aligned.y;
 
         // If the primary node has a parent, constrain movement to relative space
         // (the absolute canvas position minus parent absolute position)
@@ -521,15 +656,13 @@ export default function Flow() {
           const parent = nodeMap.get(parentId);
           if (parent) {
             const parentAbs = getAbsolutePosition(parent, nodeMap);
-            nextX = snapVal(nextPoint.x - currentDrag.offsetX - parentAbs.x);
-            nextY = snapVal(nextPoint.y - currentDrag.offsetY - parentAbs.y);
+            nextX = snapVal(aligned.x - parentAbs.x);
+            nextY = snapVal(aligned.y - parentAbs.y);
           }
         }
 
         const dx = nextX - primaryNode.position.x;
         const dy = nextY - primaryNode.position.y;
-
-        const draggingSet = new Set(currentDrag.nodeIds);
 
         const primaryHasSelectedParent = Boolean(primaryNode.parentId && draggingSet.has(primaryNode.parentId));
         const updatedNodes = prev.nodes.map((node) => {
@@ -551,9 +684,9 @@ export default function Flow() {
 
         // Detect nest target: top-level node hovering over another non-selected, non-descendant node
         if (!primaryNode.parentId) {
-          const absX = nextPoint.x - currentDrag.offsetX;
-          const absY = nextPoint.y - currentDrag.offsetY;
-          const primarySize = getNodeDimensions(primaryNode);
+          const absX = aligned.x;
+          const absY = aligned.y;
+          const primarySize = getRenderedNodeDimensions(primaryNode);
           const midX = absX + primarySize.width / 2;
           const midY = absY + primarySize.height / 2;
           const descendants = collectDescendants(primaryNode.id, prev.nodes);
@@ -563,7 +696,7 @@ export default function Flow() {
             if (draggingSet.has(node.id)) continue;
             if (descendants.has(node.id)) continue;
             const nodeAbs = getAbsolutePosition(node, nodeMap);
-            const nodeSize = getNodeDimensions(node);
+            const nodeSize = getRenderedNodeDimensions(node);
             if (
               midX > nodeAbs.x && midX < nodeAbs.x + nodeSize.width &&
               midY > nodeAbs.y && midY < nodeAbs.y + nodeSize.height
@@ -580,6 +713,7 @@ export default function Flow() {
 
         return { ...prev, nodes: updatedNodes };
       });
+      setAlignmentGuides((prev) => (guidesMatch(prev, nextGuides) ? prev : nextGuides));
       setDirty(true);
     }
 
@@ -615,6 +749,7 @@ export default function Flow() {
       }
       nestTargetRef.current = null;
       setNestTarget(null);
+      setAlignmentGuides({ vertical: null, horizontal: null });
       setDragging(null);
     }
 
@@ -625,7 +760,7 @@ export default function Flow() {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [dragging, canvasZoom, snapToGrid]);
+  }, [dragging, canvasZoom, snapToGrid, getAlignmentPosition, getRenderedNodeDimensions]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -638,11 +773,11 @@ export default function Flow() {
       setFlowSpec((prev) => ({
         ...prev,
         nodes: prev.nodes.map((node) => (
-          node.id === currentResize.nodeId && isMockNode(node)
+          node.id === currentResize.nodeId
             ? {
                 ...node,
-                width: clamp(nextWidth, 160, MAX_NODE_WIDTH),
-                height: Math.max(72, nextHeight),
+                width: clamp(nextWidth, 96, MAX_NODE_WIDTH),
+                height: Math.max(64, nextHeight),
               }
             : node
         )),
@@ -701,6 +836,13 @@ export default function Flow() {
         setSelectedNodeIds(new Set());
         setSelectedEdgeId(null);
         setConnectFromId(null);
+      } else if (event.key.startsWith('Arrow') && selectedNodeIds.size > 0) {
+        event.preventDefault();
+        const step = event.shiftKey ? ARROW_NUDGE_LARGE_STEP : ARROW_NUDGE_STEP;
+        if (event.key === 'ArrowLeft') nudgeSelectedNodes(-step, 0);
+        if (event.key === 'ArrowRight') nudgeSelectedNodes(step, 0);
+        if (event.key === 'ArrowUp') nudgeSelectedNodes(0, -step);
+        if (event.key === 'ArrowDown') nudgeSelectedNodes(0, step);
       } else if (event.key === 'Delete') {
         removeSelectedNodes();
       }
@@ -742,12 +884,12 @@ export default function Flow() {
     if (zoomMode !== 'fit' || dragging || resizing) return;
     const frame = requestAnimationFrame(() => {
       const { width, height } = getViewportDimensions();
-      const nextView = getFitViewState(width, height, flowSpec);
+      const nextView = getFitViewState(width, height, flowSpec, resolveNodeText);
       setPanOffset(nextView.offset);
       setCanvasZoom(nextView.zoom);
     });
     return () => cancelAnimationFrame(frame);
-  }, [zoomMode, dragging, resizing, viewportSize.width, viewportSize.height, currentFlowName, currentNamespace, flowSpec]);
+  }, [zoomMode, dragging, resizing, viewportSize.width, viewportSize.height, currentFlowName, currentNamespace, flowSpec, resolveNodeText]);
 
   useEffect(() => {
     if (!flowSettings.canEdit && mode === 'edit') {
@@ -769,6 +911,7 @@ export default function Flow() {
     setSelectedEdgeId(null);
     setConnectFromId(null);
     setNestTarget(null);
+    setAlignmentGuides({ vertical: null, horizontal: null });
     setDirty(false);
     setNotice('');
     setError('');
@@ -789,6 +932,7 @@ export default function Flow() {
     setSelectedEdgeId(null);
     setConnectFromId(null);
     setNestTarget(null);
+    setAlignmentGuides({ vertical: null, horizontal: null });
     setDirty(false);
     setNotice('');
     setError('');
@@ -1277,7 +1421,6 @@ export default function Flow() {
 
   const selectedNode = flowSpec.nodes.find((node) => node.id === selectedNodeId) || null;
   const selectedEdge = flowSpec.edges.find((edge) => edge.id === selectedEdgeId) || null;
-  const entityMap = new Map(availableEntities.map((entity) => [entityKey(entity), entity]));
   const exportDisabled = flowSpec.nodes.length === 0 && flowSpec.edges.length === 0;
 
   const exportPreview = useMemo<FlowExportPreview | null>(() => {
@@ -1677,7 +1820,7 @@ export default function Flow() {
               <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
                 {readOnly
                   ? 'Browse the flow diagram, scroll to zoom, and select nodes or edges for details.'
-                  : 'Drag nodes to arrange. Shift+click to multi-select. Drag onto another node to nest it inside.'}
+                  : 'Drag nodes to arrange, use arrow keys to fine-tune, and nearby nodes snap into alignment. Shift+click to multi-select and drag onto another node to nest it inside.'}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -1915,8 +2058,8 @@ export default function Flow() {
                       if (!source || !target) return null;
                       const sourceAbs = getAbsolutePosition(source, nodeMap);
                       const targetAbs = getAbsolutePosition(target, nodeMap);
-                      const sourceSize = getNodeDimensions(source);
-                      const targetSize = getNodeDimensions(target);
+                      const sourceSize = getRenderedNodeDimensions(source);
+                      const targetSize = getRenderedNodeDimensions(target);
                       const path = edgePath(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
                       const labelPos = edgeLabelPosition(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
                       const active = edge.id === selectedEdgeId;
@@ -1998,17 +2141,40 @@ export default function Flow() {
                     })}
                   </svg>
 
+                  {alignmentGuides.vertical !== null && (
+                    <div
+                      className="pointer-events-none absolute top-0 opacity-70"
+                      style={{
+                        left: alignmentGuides.vertical,
+                        height: stageHeight,
+                        borderLeft: '1px dashed var(--gantry-accent)',
+                      }}
+                    />
+                  )}
+
+                  {alignmentGuides.horizontal !== null && (
+                    <div
+                      className="pointer-events-none absolute left-0 opacity-70"
+                      style={{
+                        top: alignmentGuides.horizontal,
+                        width: stageWidth,
+                        borderTop: '1px dashed var(--gantry-accent)',
+                      }}
+                    />
+                  )}
+
                   {sortedNodes.map((node) => {
                     const active = node.id === selectedNodeId;
                     const multiSelected = selectedNodeIds.has(node.id);
                     const connectSource = node.id === connectFromId;
                     const isNestTarget = node.id === nestTarget;
                     const isContainer = flowSpec.nodes.some((n) => n.parentId === node.id);
+                    const shape = nodeShape(node);
                     const color = nodeColor(node);
                     const title = nodeTitle(node, entityMap);
                     const subtitle = nodeSubtitle(node);
                     const badge = nodeBadge(node);
-                    const nodeSize = getNodeDimensions(node);
+                    const nodeSize = getRenderedNodeDimensions(node);
                     const absPos = getAbsolutePosition(node, nodeMap);
                     const nodeOuterStyle: CSSProperties = {
                       left: absPos.x,
@@ -2022,10 +2188,6 @@ export default function Flow() {
                       : multiSelected
                       ? 'var(--gantry-accent)'
                       : 'var(--gantry-border)';
-                    const cardStyle: CSSProperties = {
-                      borderColor: baseBorderColor,
-                      background: 'var(--gantry-bg-primary)',
-                    };
 
                     return (
                       <div
@@ -2047,6 +2209,7 @@ export default function Flow() {
                           if (typeof window !== 'undefined') window.getSelection?.()?.removeAllRanges();
                           suppressNodeClickRef.current = false;
                           setRenderBounds(flowBounds);
+                          setAlignmentGuides({ vertical: null, horizontal: null });
                           const absNodePos = getAbsolutePosition(node, nodeMap);
                           const point = clientPointToCanvas(event.clientX, event.clientY);
 
@@ -2094,17 +2257,13 @@ export default function Flow() {
                               style={{ background: `${color}08`, border: `1.5px dashed ${color}60` }}
                             />
                           )}
-                          {isMockNode(node) ? (
-                            renderMockNodeShell(node.shape, baseBorderColor, color, nodeSize.width, nodeSize.height)
-                          ) : (
-                            <div className="absolute inset-0 rounded-2xl border" style={cardStyle} />
-                          )}
+                          {renderMockNodeShell(shape, baseBorderColor, color, nodeSize.width, nodeSize.height)}
 
                           {isMockNode(node) ? (
-                            <div className={`relative flex h-full flex-col ${mockContentClasses(node.shape)}`}>
+                            <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${mockContentClasses(shape)}`}>
                               <div
-                                className={`${node.shape === 'diamond' ? 'w-full space-y-2' : ''} min-w-0`}
-                                style={mockContentStyle(node.shape, nodeSize.width)}
+                                className={`${shape === 'diamond' ? 'w-full space-y-2' : ''} min-w-0`}
+                                style={mockContentStyle(shape, nodeSize.width)}
                               >
                                 {badge && (
                                   <div
@@ -2114,44 +2273,57 @@ export default function Flow() {
                                     {badge}
                                   </div>
                                 )}
-                                <div className={`${badge ? 'mt-2' : ''} break-words whitespace-pre-wrap text-sm font-semibold leading-5 text-[var(--gantry-text-primary)] ${node.shape === 'diamond' ? 'text-center' : ''}`}>
+                                <div
+                                  className={`${badge ? 'mt-2' : ''} break-words text-sm font-semibold leading-5 text-[var(--gantry-text-primary)] ${shape === 'diamond' ? 'text-center' : ''}`}
+                                  style={clampText(4)}
+                                >
                                   {title}
                                 </div>
                               </div>
                               {subtitle && (
                                 <div
-                                  className={`min-w-0 break-words whitespace-pre-wrap text-xs leading-4 text-[var(--gantry-text-secondary)] ${node.shape === 'diamond' ? 'text-center' : ''}`}
-                                  style={mockContentStyle(node.shape, nodeSize.width)}
+                                  className={`min-w-0 break-words text-xs leading-4 text-[var(--gantry-text-secondary)] ${shape === 'diamond' ? 'text-center' : ''}`}
+                                  style={{ ...mockContentStyle(shape, nodeSize.width), ...clampText(3) }}
                                 >
                                   {subtitle}
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <div className="relative flex h-full flex-col justify-between p-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  {badge && (
-                                    <div className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${color}1A`, color }}>
-                                      {badge}
-                                    </div>
-                                  )}
-                                  <div className={`${badge ? 'mt-2' : ''} break-words text-sm font-semibold leading-5 text-[var(--gantry-text-primary)]`}>
-                                    {title}
+                            <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${mockContentClasses(shape)} ${shape === 'diamond' ? 'pr-16' : 'pr-14'}`}>
+                              <button
+                                onMouseDown={(event) => {
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigate(entityPath(node.entityRef.kind, node.entityRef.name, node.entityRef.namespace));
+                                }}
+                                className="absolute right-3 top-3 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]/90 p-1.5 text-[var(--gantry-text-secondary)] backdrop-blur-sm hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]"
+                                title="Open entity"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </button>
+                              <div
+                                className={`${shape === 'diamond' ? 'w-full space-y-2' : ''} min-w-0`}
+                                style={mockContentStyle(shape, nodeSize.width)}
+                              >
+                                {badge && (
+                                  <div className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${color}1A`, color }}>
+                                    {badge}
                                   </div>
-                                </div>
-                                <button
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    navigate(entityPath(node.entityRef.kind, node.entityRef.name, node.entityRef.namespace));
-                                  }}
-                                  className="rounded-lg border border-[var(--gantry-border)] p-1.5 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]"
-                                  title="Open entity"
+                                )}
+                                <div
+                                  className={`${badge ? 'mt-2' : ''} break-words text-sm font-semibold leading-5 text-[var(--gantry-text-primary)] ${shape === 'diamond' ? 'text-center' : ''}`}
+                                  style={clampText(4)}
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                </button>
+                                  {title}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1.5 break-words text-xs leading-4 text-[var(--gantry-text-secondary)]">
+                              <div
+                                className={`flex min-w-0 items-start gap-1.5 break-words text-xs leading-4 text-[var(--gantry-text-secondary)] ${shape === 'diamond' ? 'justify-center text-center' : ''}`}
+                                style={mockContentStyle(shape, nodeSize.width)}
+                              >
                                 {(() => {
                                   const healthKey = isEntityNode(node) ? nodeEntityKey(node) : '';
                                   const health = healthStatuses.get(healthKey);
@@ -2163,7 +2335,7 @@ export default function Flow() {
                                     />
                                   );
                                 })()}
-                                {subtitle}
+                                <span className="min-w-0 break-words" style={clampText(3)}>{subtitle}</span>
                               </div>
                             </div>
                           )}
@@ -2174,7 +2346,7 @@ export default function Flow() {
                             </div>
                           )}
 
-                          {!readOnly && flowSettings.canEdit && isMockNode(node) && (
+                          {!readOnly && flowSettings.canEdit && (
                             <button
                               type="button"
                               data-flow-resize="true"
@@ -2195,7 +2367,7 @@ export default function Flow() {
                                   ? 'border-[var(--gantry-accent)] bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)] opacity-100'
                                   : 'border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] text-[var(--gantry-text-secondary)] opacity-0 group-hover:opacity-100'
                               }`}
-                              title="Resize shape"
+                              title="Resize node"
                             >
                               <span className="pointer-events-none relative block h-2.5 w-2.5">
                                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-current" />
@@ -2575,6 +2747,18 @@ export default function Flow() {
                   className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                 />
               </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Shape</span>
+                <select
+                  value={nodeShape(selectedNode)}
+                  onChange={(event) => updateNode(selectedNode.id, { shape: event.target.value as FlowMockShape })}
+                  className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                >
+                  {MOCK_SHAPE_OPTIONS.map((shape) => (
+                    <option key={shape} value={shape}>{mockShapeLabel(shape)}</option>
+                  ))}
+                </select>
+              </label>
               {isMockNode(selectedNode) && (
                 <>
                   <label className="space-y-1.5">
@@ -2594,51 +2778,37 @@ export default function Flow() {
                       className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                     />
                   </label>
-                  <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
-                    <label className="space-y-1.5">
-                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Shape</span>
-                      <select
-                        value={selectedNode.shape}
-                        onChange={(event) => updateNode(selectedNode.id, { shape: event.target.value as FlowMockShape } as Partial<FlowMockNode>)}
-                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                      >
-                        {MOCK_SHAPE_OPTIONS.map((shape) => (
-                          <option key={shape} value={shape}>{mockShapeLabel(shape)}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="space-y-1.5">
-                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Color</span>
-                      <input
-                        type="color"
-                        value={selectedNode.color || '#64748B'}
-                        onChange={(event) => updateNode(selectedNode.id, { color: event.target.value } as Partial<FlowMockNode>)}
-                        className="h-10 w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-1 py-1"
-                      />
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="space-y-1.5">
-                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Width</span>
-                      <input
-                        type="number"
-                        value={Math.round(getNodeDimensions(selectedNode).width)}
-                        onChange={(event) => updateNode(selectedNode.id, { width: Number(event.target.value) } as Partial<FlowMockNode>)}
-                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                      />
-                    </label>
-                    <label className="space-y-1.5">
-                      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Height</span>
-                      <input
-                        type="number"
-                        value={Math.round(getNodeDimensions(selectedNode).height)}
-                        onChange={(event) => updateNode(selectedNode.id, { height: Number(event.target.value) } as Partial<FlowMockNode>)}
-                        className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
-                      />
-                    </label>
-                  </div>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Color</span>
+                    <input
+                      type="color"
+                      value={selectedNode.color || '#64748B'}
+                      onChange={(event) => updateNode(selectedNode.id, { color: event.target.value } as Partial<FlowMockNode>)}
+                      className="h-10 w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-1 py-1"
+                    />
+                  </label>
                 </>
               )}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Width</span>
+                  <input
+                    type="number"
+                    value={Math.round(getRenderedNodeDimensions(selectedNode).width)}
+                    onChange={(event) => updateNode(selectedNode.id, { width: Number(event.target.value) })}
+                    className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Height</span>
+                  <input
+                    type="number"
+                    value={Math.round(getRenderedNodeDimensions(selectedNode).height)}
+                    onChange={(event) => updateNode(selectedNode.id, { height: Number(event.target.value) })}
+                    className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                  />
+                </label>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1.5">
                   <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">X</span>

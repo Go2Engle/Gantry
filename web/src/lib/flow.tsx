@@ -70,6 +70,9 @@ export function ensureFlowSpec(spec: Record<string, any> | undefined): FlowSpec 
             name: String(node.entityRef?.name || ''),
             namespace: typeof node.entityRef?.namespace === 'string' ? node.entityRef.namespace : undefined,
           },
+          shape: MOCK_SHAPE_OPTIONS.includes(node.shape) ? node.shape : undefined,
+          width: typeof node.width === 'number' ? node.width : undefined,
+          height: typeof node.height === 'number' ? node.height : undefined,
           position,
           locked: typeof node.locked === 'boolean' ? node.locked : undefined,
           zIndex: typeof node.zIndex === 'number' ? node.zIndex : undefined,
@@ -146,6 +149,10 @@ export function nodeColor(node: FlowNode): string {
   return FLOW_KIND_COLORS[node.entityRef.kind] || '#64748B';
 }
 
+export function nodeShape(node: FlowNode): FlowMockShape {
+  return isMockNode(node) ? node.shape : node.shape || 'box';
+}
+
 export function nodeSubtitle(node: FlowNode): string {
   if (isMockNode(node)) return node.subtitle || '';
   return node.entityRef.name;
@@ -188,17 +195,31 @@ export function estimateWrappedLines(text: string, charsPerLine: number): number
     .reduce((total, line) => total + Math.max(1, Math.ceil(line.trim().length / Math.max(1, charsPerLine))), 0);
 }
 
-export function getNodeDimensions(node: FlowNode): { width: number; height: number } {
-  if (isEntityNode(node)) {
-    return { width: ENTITY_NODE_WIDTH, height: ENTITY_NODE_HEIGHT };
-  }
+export function getNodeDimensions(
+  node: FlowNode,
+  text: {
+    title?: string;
+    subtitle?: string;
+  } = {}
+): { width: number; height: number } {
+  const entityNode = isEntityNode(node);
+  const shape = nodeShape(node);
+  const title = (text.title ?? (entityNode ? node.entityRef.name : node.label)).trim();
+  const subtitle = (text.subtitle ?? nodeSubtitle(node)).trim();
+  const longestText = Math.max(title.length, subtitle.length, entityNode ? 16 : 12);
 
-  const title = node.label.trim();
-  const subtitle = (node.subtitle || '').trim();
-  const longestText = Math.max(title.length, subtitle.length, 12);
-
-  switch (node.shape) {
+  switch (shape) {
     case 'pill': {
+      if (entityNode) {
+        const baseWidth = clamp(220 + Math.max(0, longestText - 14) * 8, 220, MAX_NODE_WIDTH);
+        const width = clamp(Math.max(node.width || 0, baseWidth), 220, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(13, Math.floor((width - 68) / 8));
+        const titleLines = estimateWrappedLines(title, charsPerLine);
+        const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+        const baseHeight = Math.max(104, 58 + titleLines * 20 + subtitleLines * 16 + 18);
+        const height = Math.max(node.height || 0, baseHeight);
+        return { width, height };
+      }
       const baseWidth = clamp(188 + Math.max(0, longestText - 12) * 7, 188, 340);
       const width = clamp(Math.max(node.width || 0, baseWidth), 188, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(12, Math.floor((width - 44) / 8));
@@ -209,6 +230,16 @@ export function getNodeDimensions(node: FlowNode): { width: number; height: numb
       return { width, height };
     }
     case 'diamond': {
+      if (entityNode) {
+        const baseWidth = clamp(292 + Math.max(0, longestText - 11) * 10, 292, MAX_NODE_WIDTH);
+        const width = clamp(Math.max(node.width || 0, baseWidth), 292, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(10, Math.floor((width * 0.44) / 8));
+        const titleLines = estimateWrappedLines(title, charsPerLine);
+        const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+        const baseHeight = clamp(136 + Math.max(0, titleLines - 1) * 22 + subtitleLines * 18, 136, 280);
+        const height = Math.max(node.height || 0, baseHeight);
+        return { width, height };
+      }
       const baseWidth = clamp(272 + Math.max(0, longestText - 10) * 10, 272, MAX_NODE_WIDTH);
       const width = clamp(Math.max(node.width || 0, baseWidth), 272, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(9, Math.floor((width * 0.42) / 8));
@@ -219,6 +250,16 @@ export function getNodeDimensions(node: FlowNode): { width: number; height: numb
       return { width, height };
     }
     case 'note': {
+      if (entityNode) {
+        const baseWidth = clamp(220 + Math.max(0, longestText - 14) * 7, 220, MAX_NODE_WIDTH);
+        const width = clamp(Math.max(node.width || 0, baseWidth), 220, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(13, Math.floor((width - 62) / 8));
+        const titleLines = estimateWrappedLines(title, charsPerLine);
+        const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+        const baseHeight = Math.max(110, 64 + titleLines * 20 + subtitleLines * 16 + 20);
+        const height = Math.max(node.height || 0, baseHeight);
+        return { width, height };
+      }
       const baseWidth = clamp(196 + Math.max(0, longestText - 14) * 7, 196, 360);
       const width = clamp(Math.max(node.width || 0, baseWidth), 196, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(13, Math.floor((width - 52) / 8));
@@ -230,6 +271,16 @@ export function getNodeDimensions(node: FlowNode): { width: number; height: numb
     }
     case 'box':
     default: {
+      if (entityNode) {
+        const baseWidth = clamp(216 + Math.max(0, longestText - 14) * 7, 216, MAX_NODE_WIDTH);
+        const width = clamp(Math.max(node.width || 0, baseWidth), 216, MAX_NODE_WIDTH);
+        const charsPerLine = Math.max(14, Math.floor((width - 58) / 8));
+        const titleLines = estimateWrappedLines(title, charsPerLine);
+        const subtitleLines = estimateWrappedLines(subtitle, charsPerLine);
+        const baseHeight = Math.max(104, 58 + titleLines * 20 + subtitleLines * 16 + 18);
+        const height = Math.max(node.height || 0, baseHeight);
+        return { width, height };
+      }
       const baseWidth = clamp(180 + Math.max(0, longestText - 14) * 6, 180, 320);
       const width = clamp(Math.max(node.width || 0, baseWidth), 180, MAX_NODE_WIDTH);
       const charsPerLine = Math.max(14, Math.floor((width - 36) / 8));
