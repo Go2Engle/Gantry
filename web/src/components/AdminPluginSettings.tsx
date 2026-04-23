@@ -57,8 +57,8 @@ function PluginSettingsCard({
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]">
       <div className="border-b border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-5 py-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-lg font-semibold text-[var(--gantry-text-primary)]">{plugin.title}</h3>
               <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -71,12 +71,12 @@ function PluginSettingsCard({
             </div>
             <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">{plugin.description}</p>
           </div>
-          <div className="flex w-full flex-wrap items-stretch justify-start gap-2 sm:w-auto sm:justify-end">
+          <div className="flex w-full flex-wrap items-stretch justify-start gap-2 sm:w-auto sm:justify-end xl:flex-nowrap xl:flex-shrink-0 xl:items-center">
             {canSync && (
               <button
                 onClick={onSync}
                 disabled={syncing}
-                className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 rounded-lg border border-[var(--gantry-border)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] disabled:opacity-50 sm:min-w-[7.5rem]"
+                className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--gantry-border)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] disabled:opacity-50 sm:min-w-[7.5rem]"
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
                 Sync
@@ -84,14 +84,14 @@ function PluginSettingsCard({
             )}
             <button
               onClick={onDisable}
-              className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 rounded-lg border border-[var(--gantry-border)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] sm:min-w-[7.5rem]"
+              className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--gantry-border)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] sm:min-w-[7.5rem]"
             >
               <Slash className="h-4 w-4" />
               Disable
             </button>
             <button
               onClick={onToggleExpanded}
-              className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 rounded-lg bg-[var(--gantry-accent)] px-3 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)] sm:min-w-[8.5rem]"
+              className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-[var(--gantry-accent)] px-3 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)] sm:min-w-[8.5rem]"
             >
               <Settings className="h-4 w-4" />
               {expanded ? 'Hide settings' : 'Configure'}
