@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, Workflow } from 'lucide-react';
+import { api } from '../lib/api';
 import type { Entity } from '../lib/types';
 import {
+  connectedEdgeHealth,
+  edgeStrokeForHealth,
   edgeLabelPosition,
   edgeOffsetTransform,
   edgePath,
+  entityKey,
   ensureFlowSpec,
+  FLOW_EDGE_HEALTHY_STROKE,
+  FLOW_EDGE_STROKE,
+  FLOW_EDGE_UNHEALTHY_STROKE,
   getAbsolutePosition,
   getNodeDimensions,
   isMockNode,
@@ -14,6 +21,7 @@ import {
   mockContentStyle,
   nodeBadge,
   nodeColor,
+  nodeEntityKey,
   nodeSubtitle,
   renderMockNodeShell,
 } from '../lib/flow';
@@ -37,6 +45,75 @@ function nodeTitle(node: Parameters<typeof nodeColor>[0]): string {
 
 export default function FlowTab({ entity }: { entity: Entity }) {
   const flowSpec = ensureFlowSpec(entity.spec);
+  const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
+  const [healthStatuses, setHealthStatuses] = useState<Map<string, boolean | null>>(new Map());
+
+  useEffect(() => {
+    let active = true;
+
+    const loadEntities = async () => {
+      try {
+        const entities = await api.listEntities();
+        if (!active) return;
+        setAvailableEntities((entities || []).filter((candidate) => candidate.kind !== 'Flow'));
+      } catch {
+        if (active) setAvailableEntities([]);
+      }
+    };
+
+    void loadEntities();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const healthUrlKey = useMemo(() => {
+    const entityMap = new Map(availableEntities.map((candidate) => [entityKey(candidate), candidate]));
+    const pairs: string[] = [];
+    for (const node of flowSpec.nodes) {
+      if (isMockNode(node)) continue;
+      const candidate = entityMap.get(nodeEntityKey(node));
+      const url = candidate?.spec?.healthCheckUrl;
+      if (typeof url === 'string' && url.trim()) pairs.push(`${nodeEntityKey(node)}|${url.trim()}`);
+    }
+    return pairs.sort().join('\n');
+  }, [availableEntities, flowSpec.nodes]);
+
+  useEffect(() => {
+    let active = true;
+    const urls = new Map<string, string>();
+    for (const pair of healthUrlKey.split('\n').filter(Boolean)) {
+      const sep = pair.indexOf('|');
+      urls.set(pair.slice(0, sep), pair.slice(sep + 1));
+    }
+
+    if (urls.size === 0) {
+      setHealthStatuses(new Map());
+      return;
+    }
+
+    const check = async () => {
+      const next = new Map<string, boolean | null>();
+      await Promise.all(
+        [...urls.entries()].map(async ([key, url]) => {
+          try {
+            const res = await api.checkHealth(url);
+            if (active) next.set(key, res.reachable);
+          } catch {
+            if (active) next.set(key, null);
+          }
+        })
+      );
+      if (active) setHealthStatuses(next);
+    };
+
+    void check();
+    const interval = setInterval(check, 30_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [healthUrlKey]);
 
   // Compute fit-view transform so all nodes are visible within the fixed canvas.
   const nodeMap = new Map(flowSpec.nodes.map((n) => [n.id, n]));
@@ -142,12 +219,20 @@ export default function FlowTab({ entity }: { entity: Entity }) {
             <div style={{ transform: `translate(${fitTx}px, ${fitTy}px) scale(${fitScale})`, transformOrigin: '0 0', width: CANVAS_WIDTH / fitScale, height: CANVAS_HEIGHT / fitScale }}>
             <svg className="pointer-events-none absolute inset-0 overflow-visible" style={{ width: CANVAS_WIDTH / fitScale, height: CANVAS_HEIGHT / fitScale }}>
               <defs>
-                <marker id="catalog-flow-arrow-end" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
-                </marker>
-                <marker id="catalog-flow-arrow-start" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B" />
-                </marker>
+                {[
+                  ['default', FLOW_EDGE_STROKE],
+                  ['healthy', FLOW_EDGE_HEALTHY_STROKE],
+                  ['unhealthy', FLOW_EDGE_UNHEALTHY_STROKE],
+                ].map(([suffix, fill]) => (
+                  <g key={suffix}>
+                    <marker id={`catalog-flow-arrow-end-${suffix}`} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                      <path d="M 0 0 L 10 5 L 0 10 z" fill={fill} />
+                    </marker>
+                    <marker id={`catalog-flow-arrow-start-${suffix}`} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse">
+                      <path d="M 0 0 L 10 5 L 0 10 z" fill={fill} />
+                    </marker>
+                  </g>
+                ))}
               </defs>
               {(() => {
                 return flowSpec.edges.map((edge) => {
@@ -161,6 +246,9 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                 const path = edgePath(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
                 const labelPos = edgeLabelPosition(sourceAbs, sourceSize, targetAbs, targetSize, edge.sourceHandle, edge.targetHandle);
                 const twoWay = edge.direction === 'two-way';
+                const health = connectedEdgeHealth(edge, nodeMap, healthStatuses);
+                const edgeColor = edgeStrokeForHealth(health);
+                const markerVariant = health === true ? 'healthy' : health === false ? 'unhealthy' : 'default';
                 const forwardTransform = twoWay ? edgeOffsetTransform(sourceAbs, sourceSize, targetAbs, targetSize, 3, edge.sourceHandle, edge.targetHandle) : undefined;
                 const reverseTransform = twoWay ? edgeOffsetTransform(sourceAbs, sourceSize, targetAbs, targetSize, -3, edge.sourceHandle, edge.targetHandle) : undefined;
 
@@ -170,10 +258,10 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                       <path
                         d={path}
                         fill="none"
-                        stroke="#64748B"
+                        stroke={edgeColor}
                         strokeWidth={2}
                         strokeDasharray={edge.animated ? '8 8' : undefined}
-                        markerEnd="url(#catalog-flow-arrow-end)"
+                        markerEnd={`url(#catalog-flow-arrow-end-${markerVariant})`}
                       >
                         {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
                       </path>
@@ -184,10 +272,10 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                           d={path}
                           fill="none"
                           transform={forwardTransform}
-                          stroke="#64748B"
+                          stroke={edgeColor}
                           strokeWidth={2.1}
                           strokeDasharray={edge.animated ? '8 8' : undefined}
-                          markerEnd="url(#catalog-flow-arrow-end)"
+                          markerEnd={`url(#catalog-flow-arrow-end-${markerVariant})`}
                         >
                           {edge.animated && <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1s" repeatCount="indefinite" />}
                         </path>
@@ -195,10 +283,10 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                           d={path}
                           fill="none"
                           transform={reverseTransform}
-                          stroke="#94A3B8"
+                          stroke={edgeColor}
                           strokeWidth={1.9}
                           strokeDasharray={edge.animated ? '8 8' : undefined}
-                          markerStart="url(#catalog-flow-arrow-start)"
+                          markerStart={`url(#catalog-flow-arrow-start-${markerVariant})`}
                         >
                           {edge.animated && <animate attributeName="stroke-dashoffset" from="0" to="16" dur="1s" repeatCount="indefinite" />}
                         </path>
@@ -211,7 +299,7 @@ export default function FlowTab({ entity }: { entity: Entity }) {
                       height={22}
                       rx={11}
                       fill="var(--gantry-bg-primary)"
-                      stroke={twoWay ? '#64748B' : 'var(--gantry-border)'}
+                      stroke={health === undefined ? (twoWay ? FLOW_EDGE_STROKE : 'var(--gantry-border)') : edgeColor}
                     />
                     <text x={labelPos.x} y={labelPos.y - 2} textAnchor="middle" className="fill-[var(--gantry-text-secondary)] text-[11px] font-medium">
                       {edge.label || edge.relation}

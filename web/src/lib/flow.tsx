@@ -1,11 +1,14 @@
 import type { CSSProperties } from 'react';
-import type { FlowEdge, FlowEntityNode, FlowHandleSide, FlowMockNode, FlowMockShape, FlowNode, FlowSpec } from './types';
+import type { Entity, FlowEdge, FlowEntityNode, FlowEntityRef, FlowHandleSide, FlowMockNode, FlowMockShape, FlowNode, FlowSpec } from './types';
 
 export const ENTITY_NODE_WIDTH = 208;
 export const ENTITY_NODE_HEIGHT = 92;
 export const MAX_NODE_WIDTH = 440;
 export const MIN_NODE_HEIGHT = 92;
 export const MOCK_SHAPE_OPTIONS: FlowMockShape[] = ['box', 'pill', 'diamond', 'note'];
+export const FLOW_EDGE_STROKE = '#64748B';
+export const FLOW_EDGE_HEALTHY_STROKE = '#10B981';
+export const FLOW_EDGE_UNHEALTHY_STROKE = '#EF4444';
 
 export const FLOW_KIND_COLORS: Record<string, string> = {
   Service: '#3B82F6',
@@ -100,6 +103,42 @@ export function isMockNode(node: FlowNode): node is FlowMockNode {
 
 export function isEntityNode(node: FlowNode): node is FlowEntityNode {
   return !isMockNode(node);
+}
+
+export function entityKey(entity: Pick<Entity, 'kind' | 'metadata'>): string {
+  return `${entity.kind}:${entity.metadata.namespace || 'default'}:${entity.metadata.name}`;
+}
+
+export function flowEntityRefKey(entityRef: FlowEntityRef): string {
+  return `${entityRef.kind}:${entityRef.namespace || 'default'}:${entityRef.name}`;
+}
+
+export function nodeEntityKey(node: FlowNode): string {
+  if (!isEntityNode(node)) return '';
+  return flowEntityRefKey(node.entityRef);
+}
+
+export function connectedEdgeHealth(
+  edge: FlowEdge,
+  nodeMap: Map<string, FlowNode>,
+  healthStatuses: Map<string, boolean | null>
+): boolean | null | undefined {
+  const connectedStatuses = [edge.source, edge.target]
+    .map((nodeId) => nodeMap.get(nodeId))
+    .filter((node): node is FlowNode => Boolean(node))
+    .filter(isEntityNode)
+    .map((node) => healthStatuses.get(nodeEntityKey(node)));
+
+  if (connectedStatuses.some((status) => status === false)) return false;
+  if (connectedStatuses.some((status) => status === true)) return true;
+  if (connectedStatuses.some((status) => status === null)) return null;
+  return undefined;
+}
+
+export function edgeStrokeForHealth(status: boolean | null | undefined): string {
+  if (status === true) return FLOW_EDGE_HEALTHY_STROKE;
+  if (status === false) return FLOW_EDGE_UNHEALTHY_STROKE;
+  return FLOW_EDGE_STROKE;
 }
 
 export function nodeColor(node: FlowNode): string {
