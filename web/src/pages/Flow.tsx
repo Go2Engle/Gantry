@@ -8,6 +8,7 @@ import {
   ChevronsDown,
   ChevronsUp,
   Copy,
+  Download,
   ExternalLink,
   GitBranch,
   Grid3X3,
@@ -24,8 +25,18 @@ import {
   Unplug,
   Wand2,
   Workflow,
+  X,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import {
+  exportFlowDiagram,
+  getFlowExportPreview,
+  type FlowExportBackground,
+  type FlowExportFormat,
+  type FlowExportPreview,
+  type FlowExportStyle,
+  type FlowExportTheme,
+} from '../lib/flow-export';
 import type { Entity, FlowEdge, FlowMockNode, FlowMockShape, FlowNode, FlowPluginSettings, FlowSpec } from '../lib/types';
 import {
   autoArrangeNodes,
@@ -56,6 +67,7 @@ import {
   renderMockNodeShell,
 } from '../lib/flow';
 import { useFlowHealth } from '../hooks/useFlowHealth';
+import { useTheme } from '../hooks/useTheme';
 
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 900;
@@ -66,12 +78,86 @@ const FIT_PADDING = 48;
 const CONTENT_PADDING = 64;
 const DUPLICATE_OFFSET = 32;
 const RELATION_OPTIONS = ['calls', 'dependsOn', 'readsFrom', 'writesTo', 'publishesTo', 'subscribesTo', 'consumes', 'provides'];
+const EXPORT_STYLE_OPTIONS: Array<{ value: FlowExportStyle; label: string; description: string }> = [
+  {
+    value: 'clean',
+    label: 'Clean Diagram',
+    description: 'Diagram-first export with no canvas chrome. Great for sharing with people outside Gantry.',
+  },
+  {
+    value: 'presentation',
+    label: 'Presentation',
+    description: 'Keeps the title block, framed canvas, and Gantry-style visual treatment.',
+  },
+];
+const EXPORT_FORMAT_OPTIONS: Array<{ value: FlowExportFormat; label: string; description: string }> = [
+  {
+    value: 'pdf',
+    label: 'PDF',
+    description: 'Best for documents, reviews, and people who expect a print-friendly file.',
+  },
+  {
+    value: 'png',
+    label: 'PNG',
+    description: 'A bitmap image that drops well into slides, docs, and chat.',
+  },
+  {
+    value: 'svg',
+    label: 'SVG',
+    description: 'A scalable vector export that stays sharp when resized.',
+  },
+];
+const EXPORT_BACKGROUND_OPTIONS: Array<{ value: FlowExportBackground; label: string; description: string }> = [
+  {
+    value: 'transparent',
+    label: 'Transparent',
+    description: 'Exports only the diagram itself for slides and docs.',
+  },
+  {
+    value: 'light',
+    label: 'White',
+    description: 'Adds a neutral white page behind the diagram.',
+  },
+  {
+    value: 'theme',
+    label: 'Match Theme',
+    description: 'Uses the selected export theme around the diagram.',
+  },
+];
+const EXPORT_THEME_OPTIONS: Array<{ value: FlowExportTheme; label: string; description: string }> = [
+  {
+    value: 'app',
+    label: 'App Theme',
+    description: 'Matches the current Gantry theme.',
+  },
+  {
+    value: 'light',
+    label: 'Light',
+    description: 'Light node surfaces, icons, and chrome.',
+  },
+  {
+    value: 'dark',
+    label: 'Dark',
+    description: 'Dark node surfaces, icons, and chrome.',
+  },
+];
 const MOCK_NODE_LIBRARY: Array<{ label: string; subtitle: string; shape: FlowMockShape; color: string }> = [
   { label: 'Box', subtitle: 'Generic process step', shape: 'box', color: '#64748B' },
   { label: 'Diamond', subtitle: 'Decision or branch point', shape: 'diamond', color: '#F59E0B' },
   { label: 'Pill', subtitle: 'External actor or entry point', shape: 'pill', color: '#8B5CF6' },
   { label: 'Note', subtitle: 'Idea, future state, or comment', shape: 'note', color: '#0EA5E9' },
 ];
+
+function defaultExportStyleForFormat(format: FlowExportFormat): FlowExportStyle {
+  return format === 'svg' ? 'presentation' : 'clean';
+}
+
+function defaultExportBackgroundFor(format: FlowExportFormat, style: FlowExportStyle): FlowExportBackground {
+  if (format === 'pdf') {
+    return style === 'clean' ? 'light' : 'theme';
+  }
+  return style === 'clean' ? 'transparent' : 'theme';
+}
 
 function defaultFlowSpec(): FlowSpec {
   return {
@@ -236,12 +322,19 @@ function getFitViewState(width: number, height: number, spec: FlowSpec) {
 export default function Flow() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { theme: appTheme } = useTheme();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const suppressNodeClickRef = useRef(false);
   const suppressCanvasClickRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<FlowExportFormat | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState<FlowExportFormat>('pdf');
+  const [exportStyle, setExportStyle] = useState<FlowExportStyle>('clean');
+  const [exportBackground, setExportBackground] = useState<FlowExportBackground>('light');
+  const [exportTheme, setExportTheme] = useState<FlowExportTheme>('app');
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [pluginEnabled, setPluginEnabled] = useState(false);
   const [flowSettings, setFlowSettings] = useState<FlowPluginSettings>({
@@ -1185,6 +1278,96 @@ export default function Flow() {
   const selectedNode = flowSpec.nodes.find((node) => node.id === selectedNodeId) || null;
   const selectedEdge = flowSpec.edges.find((edge) => edge.id === selectedEdgeId) || null;
   const entityMap = new Map(availableEntities.map((entity) => [entityKey(entity), entity]));
+  const exportDisabled = flowSpec.nodes.length === 0 && flowSpec.edges.length === 0;
+
+  const exportPreview = useMemo<FlowExportPreview | null>(() => {
+    if (!showExportDialog || exportDisabled) return null;
+    return getFlowExportPreview({
+      name: flowName.trim() || currentFlowName || 'flow',
+      title: flowTitleValue.trim() || undefined,
+      description: flowDescription.trim() || undefined,
+      owner: flowOwner.trim() || undefined,
+      namespace: currentNamespace,
+      spec: flowSpec,
+      entitiesByKey: entityMap,
+      healthStatuses,
+      style: exportStyle,
+      background: exportBackground,
+      theme: exportTheme,
+    }, exportFormat);
+  }, [
+    showExportDialog,
+    exportDisabled,
+    flowName,
+    currentFlowName,
+    flowTitleValue,
+    flowDescription,
+    flowOwner,
+    currentNamespace,
+    flowSpec,
+    entityMap,
+    healthStatuses,
+    exportStyle,
+    exportBackground,
+    exportTheme,
+    exportFormat,
+  ]);
+
+  function openExportDialog() {
+    if (exportDisabled || exportingFormat) return;
+    const nextFormat = exportFormat;
+    const nextStyle = defaultExportStyleForFormat(nextFormat);
+    setExportFormat(nextFormat);
+    setExportStyle(nextStyle);
+    setExportBackground(defaultExportBackgroundFor(nextFormat, nextStyle));
+    setExportTheme('app');
+    setShowExportDialog(true);
+    setError('');
+  }
+
+  function closeExportDialog() {
+    if (exportingFormat) return;
+    setShowExportDialog(false);
+  }
+
+  function updateExportFormat(nextFormat: FlowExportFormat) {
+    setExportFormat(nextFormat);
+    setExportBackground(defaultExportBackgroundFor(nextFormat, exportStyle));
+  }
+
+  function updateExportStyle(nextStyle: FlowExportStyle) {
+    setExportStyle(nextStyle);
+    setExportBackground(defaultExportBackgroundFor(exportFormat, nextStyle));
+  }
+
+  async function confirmExport() {
+    if (!showExportDialog || exportDisabled || exportingFormat) return;
+
+    setExportingFormat(exportFormat);
+    setError('');
+
+    try {
+      await exportFlowDiagram({
+        name: flowName.trim() || currentFlowName || 'flow',
+        title: flowTitleValue.trim() || undefined,
+        description: flowDescription.trim() || undefined,
+        owner: flowOwner.trim() || undefined,
+        namespace: currentNamespace,
+        spec: flowSpec,
+        entitiesByKey: entityMap,
+        healthStatuses,
+        style: exportStyle,
+        background: exportBackground,
+        theme: exportTheme,
+      }, exportFormat);
+      setNotice(`Exported ${flowTitleValue.trim() || flowName.trim() || currentFlowName || 'flow'} as ${exportFormat.toUpperCase()} (${exportStyle === 'clean' ? 'clean diagram' : 'presentation'}).`);
+      setShowExportDialog(false);
+    } catch (err: any) {
+      setError(err.message || `Failed to export Flow as ${exportFormat.toUpperCase()}`);
+    } finally {
+      setExportingFormat(null);
+    }
+  }
 
   const nodeMap = useMemo(
     () => new Map(flowSpec.nodes.map((n) => [n.id, n])),
@@ -1220,7 +1403,7 @@ export default function Flow() {
       <div className="rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-4">
         <h2 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Saved Flows</h2>
         <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
-          Diagrams persist as `Flow` entities and can be exported by GitOps like the rest of your catalog.
+          Diagrams persist as `Flow` entities, so you can share them as SVG, PNG, PDF, or GitOps-backed YAML.
         </p>
         <div className="mt-4 space-y-2">
           {flows.length === 0 ? (
@@ -1249,6 +1432,231 @@ export default function Flow() {
               );
             })
           )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderExportDialog() {
+    if (!showExportDialog) return null;
+
+    const previewUrl = exportPreview
+      ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(exportPreview.svg)}`
+      : '';
+    const selectedThemeLabel = exportTheme === 'app'
+      ? `App ${appTheme === 'dark' ? 'Dark' : 'Light'}`
+      : exportTheme === 'dark'
+      ? 'Dark'
+      : 'Light';
+    const previewBackgroundClass = exportBackground === 'transparent'
+      ? 'bg-[linear-gradient(45deg,rgba(148,163,184,0.18)_25%,transparent_25%,transparent_75%,rgba(148,163,184,0.18)_75%,rgba(148,163,184,0.18)),linear-gradient(45deg,rgba(148,163,184,0.18)_25%,transparent_25%,transparent_75%,rgba(148,163,184,0.18)_75%,rgba(148,163,184,0.18))] bg-[length:24px_24px] bg-[position:0_0,12px_12px]'
+      : '';
+    const previewBackgroundStyle: CSSProperties | undefined = exportBackground === 'transparent'
+      ? undefined
+      : exportBackground === 'light'
+      ? { backgroundColor: '#FFFFFF' }
+      : {
+          backgroundColor: exportTheme === 'dark'
+            ? '#111113'
+            : exportTheme === 'light'
+            ? '#F8FAFC'
+            : 'var(--gantry-bg-secondary)',
+        };
+    const optionButtonClass = (selected: boolean) => `flex h-full min-h-[9.5rem] w-full flex-col items-start justify-start rounded-lg border px-3 py-2.5 text-left transition-colors ${
+      selected
+        ? 'border-[var(--gantry-accent)] bg-[var(--gantry-accent)]/10'
+        : 'border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-bg-tertiary)]'
+    }`;
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/55 p-3 sm:p-6" onClick={closeExportDialog}>
+        <div className="flex min-h-full items-center justify-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="flow-export-dialog-title"
+            className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] shadow-2xl sm:max-h-[calc(100vh-3rem)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--gantry-border)] px-4 py-4 sm:px-6 sm:py-5">
+              <div>
+                <h2 id="flow-export-dialog-title" className="text-lg font-semibold text-[var(--gantry-text-primary)]">
+                  Export Flow
+                </h2>
+                <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
+                  Pick the format, look, and theme, then preview before downloading.
+                </p>
+              </div>
+              <button
+                onClick={closeExportDialog}
+                disabled={Boolean(exportingFormat)}
+                className="rounded-lg p-2 text-[var(--gantry-text-secondary)] hover:bg-[var(--gantry-bg-secondary)] hover:text-[var(--gantry-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-3">
+                    <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Format</h3>
+                    <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                      Choose the file type first.
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {EXPORT_FORMAT_OPTIONS.map((option) => {
+                        const selected = exportFormat === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateExportFormat(option.value)}
+                            className={optionButtonClass(selected)}
+                          >
+                            <div className="text-sm font-semibold text-[var(--gantry-text-primary)]">{option.label}</div>
+                            <p className="mt-1 text-[11px] leading-4 text-[var(--gantry-text-secondary)]">{option.description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-3">
+                    <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Style</h3>
+                    <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                      Clean is diagram-first. Presentation keeps the framed Gantry look.
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {EXPORT_STYLE_OPTIONS.map((option) => {
+                        const selected = exportStyle === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateExportStyle(option.value)}
+                            className={optionButtonClass(selected)}
+                          >
+                            <div className="text-sm font-semibold text-[var(--gantry-text-primary)]">{option.label}</div>
+                            <p className="mt-1 text-[11px] leading-4 text-[var(--gantry-text-secondary)]">{option.description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-3">
+                    <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Theme</h3>
+                    <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                      Controls node surfaces, icon chips, and export chrome. Current app theme: {appTheme}.
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {EXPORT_THEME_OPTIONS.map((option) => {
+                        const selected = exportTheme === option.value;
+                        const description = option.value === 'app'
+                          ? `Matches Gantry’s current ${appTheme} theme.`
+                          : option.description;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setExportTheme(option.value)}
+                            className={optionButtonClass(selected)}
+                          >
+                            <div className="text-sm font-semibold text-[var(--gantry-text-primary)]">{option.label}</div>
+                            <p className="mt-1 text-[11px] leading-4 text-[var(--gantry-text-secondary)]">{description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] p-3">
+                    <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Background</h3>
+                    <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                      Choose what sits behind the diagram in the final file.
+                    </p>
+                    {exportFormat !== 'pdf' ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        {EXPORT_BACKGROUND_OPTIONS.map((option) => {
+                          const selected = exportBackground === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setExportBackground(option.value)}
+                              className={optionButtonClass(selected)}
+                            >
+                              <div className="text-sm font-semibold text-[var(--gantry-text-primary)]">{option.label}</div>
+                              <p className="mt-1 text-[11px] leading-4 text-[var(--gantry-text-secondary)]">{option.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-xs leading-5 text-[var(--gantry-text-secondary)]">
+                        PDF always uses an opaque page. Clean defaults to white, while Match Theme uses the selected export theme.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Preview</h3>
+                      <p className="mt-1 text-xs text-[var(--gantry-text-secondary)]">
+                        This uses the same SVG source as the final export.
+                      </p>
+                    </div>
+                    <div className="rounded-full border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-1 text-xs font-medium text-[var(--gantry-text-secondary)]">
+                      {exportFormat.toUpperCase()} · {exportStyle === 'clean' ? 'Clean' : 'Presentation'} · {selectedThemeLabel}
+                    </div>
+                  </div>
+
+                  <div
+                    className={`max-h-[50vh] overflow-auto rounded-2xl border border-[var(--gantry-border)] p-3 sm:p-4 ${previewBackgroundClass}`}
+                    style={previewBackgroundStyle}
+                  >
+                    {exportPreview ? (
+                      <div className="flex min-h-[14rem] min-w-full items-center justify-center sm:min-h-[18rem]">
+                        <img
+                          src={previewUrl}
+                          alt="Export preview"
+                          className="h-auto max-w-none rounded-lg shadow-sm"
+                          style={{
+                            width: Math.min(exportPreview.width, 960),
+                            minWidth: Math.min(exportPreview.width, 260),
+                            aspectRatio: `${exportPreview.width} / ${exportPreview.height}`,
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-sm text-[var(--gantry-text-secondary)]">Preparing preview…</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-[var(--gantry-border)] px-4 py-4 sm:px-6">
+              <button
+                onClick={closeExportDialog}
+                disabled={Boolean(exportingFormat)}
+                className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirmExport()}
+                disabled={Boolean(exportingFormat)}
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exportingFormat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Export {exportFormat.toUpperCase()}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1863,6 +2271,7 @@ export default function Flow() {
 
   return (
     <div className="space-y-6">
+      {renderExportDialog()}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -1872,7 +2281,7 @@ export default function Flow() {
             <div>
               <h1 className="text-2xl font-bold text-[var(--gantry-text-primary)]">Flow</h1>
               <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">
-                Build shared system diagrams from existing catalog entities and keep them GitOps-friendly as `Flow` YAML.
+                Build shared system diagrams from existing catalog entities and export them in common formats when you need to share outside Gantry.
               </p>
             </div>
           </div>
@@ -1896,6 +2305,14 @@ export default function Flow() {
               View only
             </span>
           )}
+          <button
+            onClick={openExportDialog}
+            disabled={exportDisabled || Boolean(exportingFormat)}
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exportingFormat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Export
+          </button>
           {mode === 'view' ? (
             <>
               {flowSettings.canEdit && (
