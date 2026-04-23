@@ -8,7 +8,7 @@ export const MIN_NODE_HEIGHT = 92;
 export const MOCK_SHAPE_OPTIONS: FlowMockShape[] = ['box', 'pill', 'diamond', 'note'];
 export const FLOW_EDGE_STROKE = '#64748B';
 export const FLOW_EDGE_HEALTHY_STROKE = '#10B981';
-export const FLOW_EDGE_UNHEALTHY_STROKE = '#EF4444';
+export const FLOW_EDGE_UNHEALTHY_STROKE = 'var(--gantry-danger)';
 
 export const FLOW_KIND_COLORS: Record<string, string> = {
   Service: '#3B82F6',

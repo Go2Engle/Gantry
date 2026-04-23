@@ -11,11 +11,12 @@ function headers(): Record<string, string> {
   return h;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api/v1${path}`, {
     method,
     headers: headers(),
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   if (!res.ok) {
     if (res.status === 401 && authToken) {
@@ -234,8 +235,8 @@ export const api = {
     request<void>('DELETE', `/plugins/flow/entities/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   // Health check proxy
-  checkHealth: (url: string) =>
-    request<{ reachable: boolean; statusCode?: number; latencyMs: number; body?: string; error?: string }>('GET', `/health-check?url=${encodeURIComponent(url)}`),
+  checkHealth: (url: string, signal?: AbortSignal) =>
+    request<{ reachable: boolean; statusCode?: number; latencyMs: number; body?: string; error?: string }>('GET', `/health-check?url=${encodeURIComponent(url)}`, undefined, signal),
 
   // Dashboard config
   getDashboardConfig: () => request<DashboardConfig>('GET', '/dashboard/config'),

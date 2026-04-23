@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
+import { useFlowHealth } from '../hooks/useFlowHealth';
 import type { Entity } from '../lib/types';
 import {
   connectedEdgeHealth,
@@ -9,7 +10,6 @@ import {
   edgeLabelPosition,
   edgeOffsetTransform,
   edgePath,
-  entityKey,
   ensureFlowSpec,
   FLOW_EDGE_HEALTHY_STROKE,
   FLOW_EDGE_STROKE,
@@ -21,7 +21,6 @@ import {
   mockContentStyle,
   nodeBadge,
   nodeColor,
-  nodeEntityKey,
   nodeSubtitle,
   renderMockNodeShell,
 } from '../lib/flow';
@@ -46,7 +45,7 @@ function nodeTitle(node: Parameters<typeof nodeColor>[0]): string {
 export default function FlowTab({ entity }: { entity: Entity }) {
   const flowSpec = ensureFlowSpec(entity.spec);
   const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
-  const [healthStatuses, setHealthStatuses] = useState<Map<string, boolean | null>>(new Map());
+  const healthStatuses = useFlowHealth(flowSpec.nodes, availableEntities);
 
   useEffect(() => {
     let active = true;
@@ -66,54 +65,6 @@ export default function FlowTab({ entity }: { entity: Entity }) {
       active = false;
     };
   }, []);
-
-  const healthUrlKey = useMemo(() => {
-    const entityMap = new Map(availableEntities.map((candidate) => [entityKey(candidate), candidate]));
-    const pairs: string[] = [];
-    for (const node of flowSpec.nodes) {
-      if (isMockNode(node)) continue;
-      const candidate = entityMap.get(nodeEntityKey(node));
-      const url = candidate?.spec?.healthCheckUrl;
-      if (typeof url === 'string' && url.trim()) pairs.push(`${nodeEntityKey(node)}|${url.trim()}`);
-    }
-    return pairs.sort().join('\n');
-  }, [availableEntities, flowSpec.nodes]);
-
-  useEffect(() => {
-    let active = true;
-    const urls = new Map<string, string>();
-    for (const pair of healthUrlKey.split('\n').filter(Boolean)) {
-      const sep = pair.indexOf('|');
-      urls.set(pair.slice(0, sep), pair.slice(sep + 1));
-    }
-
-    if (urls.size === 0) {
-      setHealthStatuses(new Map());
-      return;
-    }
-
-    const check = async () => {
-      const next = new Map<string, boolean | null>();
-      await Promise.all(
-        [...urls.entries()].map(async ([key, url]) => {
-          try {
-            const res = await api.checkHealth(url);
-            if (active) next.set(key, res.reachable);
-          } catch {
-            if (active) next.set(key, null);
-          }
-        })
-      );
-      if (active) setHealthStatuses(next);
-    };
-
-    void check();
-    const interval = setInterval(check, 30_000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [healthUrlKey]);
 
   // Compute fit-view transform so all nodes are visible within the fixed canvas.
   const nodeMap = new Map(flowSpec.nodes.map((n) => [n.id, n]));

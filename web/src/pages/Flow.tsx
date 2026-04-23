@@ -55,6 +55,7 @@ import {
   nodeSubtitle,
   renderMockNodeShell,
 } from '../lib/flow';
+import { useFlowHealth } from '../hooks/useFlowHealth';
 
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 900;
@@ -249,7 +250,6 @@ export default function Flow() {
     canEdit: true,
   });
   const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
-  const [healthStatuses, setHealthStatuses] = useState<Map<string, boolean | null>>(new Map());
   const [flows, setFlows] = useState<Entity[]>([]);
   const [currentFlowName, setCurrentFlowName] = useState<string | null>(null);
   const [currentNamespace, setCurrentNamespace] = useState('default');
@@ -282,6 +282,7 @@ export default function Flow() {
   const flowBounds = useMemo(() => getFlowBounds(flowSpec), [flowSpec]);
   const [renderBounds, setRenderBounds] = useState(flowBounds);
   const activeBounds = dragging || resizing ? renderBounds : flowBounds;
+  const healthStatuses = useFlowHealth(flowSpec.nodes, availableEntities);
   const stageMinX = Math.min(0, activeBounds.minX);
   const stageMinY = Math.min(0, activeBounds.minY);
   const stageMaxX = Math.max(CANVAS_WIDTH, activeBounds.maxX);
@@ -397,54 +398,6 @@ export default function Flow() {
       active = false;
     };
   }, [requestedFlow, requestedNamespace, requestedMode]);
-
-  // Periodically check health for entities on the canvas that have healthCheckUrl.
-  // Build a stable key from the sorted set of (entityKey|url) pairs so the effect
-  // only re-subscribes when the monitored URLs actually change, not on every drag.
-  const healthUrlKey = useMemo(() => {
-    const entityMapLocal = new Map(availableEntities.map((e) => [entityKey(e), e]));
-    const pairs: string[] = [];
-    for (const node of flowSpec.nodes) {
-      if (isMockNode(node)) continue;
-      const key = nodeEntityKey(node);
-      const ent = entityMapLocal.get(key);
-      const url = ent?.spec?.healthCheckUrl;
-      if (typeof url === 'string' && url.trim()) pairs.push(`${key}|${url.trim()}`);
-    }
-    return pairs.sort().join('\n');
-  }, [availableEntities, flowSpec.nodes]);
-
-  useEffect(() => {
-    let active = true;
-    const urls = new Map<string, string>();
-    for (const pair of healthUrlKey.split('\n').filter(Boolean)) {
-      const sep = pair.indexOf('|');
-      urls.set(pair.slice(0, sep), pair.slice(sep + 1));
-    }
-
-    if (urls.size === 0) {
-      setHealthStatuses(new Map());
-      return;
-    }
-
-    const check = async () => {
-      const next = new Map<string, boolean | null>();
-      await Promise.all(
-        [...urls.entries()].map(async ([key, url]) => {
-          try {
-            const res = await api.checkHealth(url);
-            if (active) next.set(key, res.reachable);
-          } catch {
-            if (active) next.set(key, null);
-          }
-        })
-      );
-      if (active) setHealthStatuses(next);
-    };
-    void check();
-    const interval = setInterval(check, 30_000);
-    return () => { active = false; clearInterval(interval); };
-  }, [healthUrlKey]);
 
   useEffect(() => {
     if (!dragging) return;
