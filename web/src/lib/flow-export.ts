@@ -372,11 +372,16 @@ function renderMockNode(
     : '';
 
   if (node.shape === 'diamond') {
-    let currentY = y + (badge ? 28 : 22);
+    const blockHeight =
+      (badge ? 18 + 8 : 0) +
+      titleLines.length * 18 +
+      (subtitleLines.length > 0 ? 8 + subtitleLines.length * 16 : 0);
+    let currentY = y + height / 2 - blockHeight / 2;
     const badgeSvg = badge
-      ? `<rect x="${x + width / 2 - Math.min(72, badge.length * 4.3 + 16)}" y="${y + 18}" width="${Math.min(144, badge.length * 8.6 + 32)}" height="18" rx="9" fill="${badgeColor}" />
-         <text class="node-badge" x="${x + width / 2}" y="${y + 31}" text-anchor="middle" fill="${color}">${escapeXml(badge)}</text>`
+      ? `<rect x="${x + width / 2 - Math.min(72, badge.length * 4.3 + 16)}" y="${currentY}" width="${Math.min(144, badge.length * 8.6 + 32)}" height="18" rx="9" fill="${badgeColor}" />
+         <text class="node-badge" x="${x + width / 2}" y="${currentY + 13}" text-anchor="middle" fill="${color}">${escapeXml(badge)}</text>`
       : '';
+    currentY += badge ? 26 : 0;
     const titleSvg = titleLines.map((line) => {
       const next = `<text class="node-title" x="${x + width / 2}" y="${currentY + 16}" text-anchor="middle">${escapeXml(line)}</text>`;
       currentY += 18;
@@ -392,7 +397,12 @@ function renderMockNode(
   }
 
   const horizontalInset = node.shape === 'pill' ? 28 : node.shape === 'note' ? 24 : 18;
-  let currentY = y + 22;
+  const shouldCenter = node.shape === 'pill';
+  const blockHeight =
+    (badge ? 18 + 6 : 0) +
+    titleLines.length * 18 +
+    (subtitleLines.length > 0 ? 8 + subtitleLines.length * 16 : 0);
+  let currentY = shouldCenter ? y + height / 2 - blockHeight / 2 : y + 22;
   const badgeSvg = badge
     ? `<rect x="${x + horizontalInset}" y="${currentY - 2}" width="${Math.min(150, badge.length * 8.5 + 22)}" height="18" rx="9" fill="${badgeColor}" />
        <text class="node-badge" x="${x + horizontalInset + 11}" y="${currentY + 11}" fill="${color}">${escapeXml(badge)}</text>`
@@ -439,11 +449,17 @@ function renderEntityNode(
     : '';
 
   if (shape === 'diamond') {
-    let currentY = y + (badge ? 28 : 22);
+    const subtitleIndent = healthColor ? 10 : 0;
+    const blockHeight =
+      (badge ? 18 + 8 : 0) +
+      titleLines.length * 18 +
+      (subtitleLines.length > 0 ? 10 + subtitleLines.length * 16 : 0);
+    let currentY = y + height / 2 - blockHeight / 2;
     const badgeSvg = badge
-      ? `<rect x="${x + width / 2 - Math.min(72, badge.length * 4.3 + 16)}" y="${y + 18}" width="${Math.min(144, badge.length * 8.6 + 32)}" height="18" rx="9" fill="${badgeColor}" />
-         <text class="node-badge" x="${x + width / 2}" y="${y + 31}" text-anchor="middle" fill="${color}">${escapeXml(badge)}</text>`
+      ? `<rect x="${x + width / 2 - Math.min(72, badge.length * 4.3 + 16)}" y="${currentY}" width="${Math.min(144, badge.length * 8.6 + 32)}" height="18" rx="9" fill="${badgeColor}" />
+         <text class="node-badge" x="${x + width / 2}" y="${currentY + 13}" text-anchor="middle" fill="${color}">${escapeXml(badge)}</text>`
       : '';
+    currentY += badge ? 26 : 0;
     const titleSvg = titleLines.map((line) => {
       const next = `<text class="node-title" x="${x + width / 2}" y="${currentY + 16}" text-anchor="middle">${escapeXml(line)}</text>`;
       currentY += 18;
@@ -453,13 +469,18 @@ function renderEntityNode(
     const healthSvg = healthColor
       ? `<circle cx="${x + width / 2 - 34}" cy="${currentY + 4}" r="4" fill="${healthColor}" />`
       : '';
-    const subtitleX = x + width / 2 + (healthColor ? 10 : 0);
+    const subtitleX = x + width / 2 + subtitleIndent;
     const subtitleSvg = subtitleLines.map((line, index) => `<text class="node-subtitle" x="${subtitleX}" y="${currentY + 12 + index * 16}" text-anchor="${healthColor ? 'start' : 'middle'}">${escapeXml(line)}</text>`).join('');
     return `<g>${shell}${containerSvg}${badgeSvg}${titleSvg}${healthSvg}${subtitleSvg}</g>`;
   }
 
   const horizontalInset = shape === 'pill' ? 28 : shape === 'note' ? 24 : 18;
-  let currentY = y + 22;
+  const shouldCenter = shape === 'pill';
+  const blockHeight =
+    (badge ? 18 + 6 : 0) +
+    titleLines.length * 18 +
+    (subtitleLines.length > 0 ? 8 + subtitleLines.length * 16 : 0);
+  let currentY = shouldCenter ? y + height / 2 - blockHeight / 2 : y + 22;
   const badgeSvg = badge
     ? `<rect x="${x + horizontalInset}" y="${currentY - 2}" width="${Math.min(150, badge.length * 8.5 + 22)}" height="18" rx="9" fill="${badgeColor}" />
        <text class="node-badge" x="${x + horizontalInset + 11}" y="${currentY + 11}" fill="${color}">${escapeXml(badge)}</text>`

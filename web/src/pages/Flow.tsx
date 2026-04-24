@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -81,6 +81,7 @@ const DUPLICATE_OFFSET = 32;
 const ALIGNMENT_SNAP_THRESHOLD = 10;
 const ARROW_NUDGE_STEP = 1;
 const ARROW_NUDGE_LARGE_STEP = 10;
+const RESIZE_EDGE_THICKNESS = 10;
 const RELATION_OPTIONS = ['calls', 'dependsOn', 'readsFrom', 'writesTo', 'publishesTo', 'subscribesTo', 'consumes', 'provides'];
 const EXPORT_STYLE_OPTIONS: Array<{ value: FlowExportStyle; label: string; description: string }> = [
   {
@@ -151,6 +152,8 @@ const MOCK_NODE_LIBRARY: Array<{ label: string; subtitle: string; shape: FlowMoc
   { label: 'Pill', subtitle: 'External actor or entry point', shape: 'pill', color: '#8B5CF6' },
   { label: 'Note', subtitle: 'Idea, future state, or comment', shape: 'note', color: '#0EA5E9' },
 ];
+type ResizeHandle = 'n' | 'e' | 's' | 'w' | 'ne' | 'se' | 'sw' | 'nw';
+const RESIZE_HANDLES: ResizeHandle[] = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'];
 
 function defaultExportStyleForFormat(format: FlowExportFormat): FlowExportStyle {
   return format === 'svg' ? 'presentation' : 'clean';
@@ -204,6 +207,84 @@ function guidesMatch(
   right: { vertical: number | null; horizontal: number | null }
 ) {
   return left.vertical === right.vertical && left.horizontal === right.horizontal;
+}
+
+function resizeCursor(handle: ResizeHandle): string {
+  if (handle === 'n' || handle === 's') return 'ns-resize';
+  if (handle === 'e' || handle === 'w') return 'ew-resize';
+  if (handle === 'ne' || handle === 'sw') return 'nesw-resize';
+  return 'nwse-resize';
+}
+
+function resizeHandleClass(handle: ResizeHandle): string {
+  switch (handle) {
+    case 'n':
+      return 'left-3 right-3 top-0 -translate-y-1/2';
+    case 's':
+      return 'bottom-0 left-3 right-3 translate-y-1/2';
+    case 'e':
+      return 'bottom-3 right-0 top-3 translate-x-1/2';
+    case 'w':
+      return 'bottom-3 left-0 top-3 -translate-x-1/2';
+    case 'ne':
+      return 'right-0 top-0 -translate-y-1/2 translate-x-1/2';
+    case 'se':
+      return 'bottom-0 right-0 translate-x-1/2 translate-y-1/2';
+    case 'sw':
+      return 'bottom-0 left-0 -translate-x-1/2 translate-y-1/2';
+    case 'nw':
+      return 'left-0 top-0 -translate-x-1/2 -translate-y-1/2';
+  }
+}
+
+function entityLinkButtonClass(shape: FlowMockShape): string {
+  switch (shape) {
+    case 'pill':
+      return 'right-5 top-1/2 -translate-y-1/2';
+    case 'note':
+      return 'right-10 top-10';
+    case 'diamond':
+      return 'right-[30%] top-[34%]';
+    case 'box':
+    default:
+      return 'right-3 top-3';
+  }
+}
+
+function shapeSelectionOverlay(shape: FlowMockShape, color: string, width: number, height: number, dashed = false) {
+  const common = {
+    fill: 'none',
+    stroke: color,
+    strokeWidth: 2,
+    strokeDasharray: dashed ? '6 5' : undefined,
+    vectorEffect: 'non-scaling-stroke' as const,
+  };
+
+  switch (shape) {
+    case 'diamond':
+      return (
+        <svg className="pointer-events-none absolute inset-0 overflow-visible" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+          <polygon
+            points={`${width / 2},6 ${width - 14},${height / 2} ${width / 2},${height - 6} 14,${height / 2}`}
+            {...common}
+          />
+        </svg>
+      );
+    case 'pill':
+      return <div className="pointer-events-none absolute inset-x-0 inset-y-1 rounded-full" style={{ border: `${common.strokeWidth}px ${dashed ? 'dashed' : 'solid'} ${color}` }} />;
+    case 'note':
+      return (
+        <svg className="pointer-events-none absolute inset-0 overflow-visible" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+          <path
+            d={`M 14 8 H ${width - 34} L ${width - 14} 28 V ${height - 14} Q ${width - 14} ${height - 8} ${width - 22} ${height - 8} H 22 Q 14 ${height - 8} 14 ${height - 16} Z`}
+            {...common}
+          />
+        </svg>
+      );
+    case 'box':
+    default:
+      return <div className="pointer-events-none absolute inset-0 rounded-2xl" style={{ border: `${common.strokeWidth}px ${dashed ? 'dashed' : 'solid'} ${color}` }} />;
+  }
 }
 
 
@@ -401,7 +482,16 @@ export default function Flow() {
   const [nestTarget, setNestTarget] = useState<string | null>(null);
   const nestTargetRef = useRef<string | null>(null);
   const [dragging, setDragging] = useState<{ nodeId: string; nodeIds: string[]; offsetX: number; offsetY: number } | null>(null);
-  const [resizing, setResizing] = useState<{ nodeId: string; startClientX: number; startClientY: number; startWidth: number; startHeight: number } | null>(null);
+  const [resizing, setResizing] = useState<{
+    nodeId: string;
+    handle: ResizeHandle;
+    startClientX: number;
+    startClientY: number;
+    startWidth: number;
+    startHeight: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const [panning, setPanning] = useState<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [zoomMode, setZoomMode] = useState<'fit' | 'manual'>('fit');
@@ -767,32 +857,79 @@ export default function Flow() {
     const currentResize = resizing;
 
     function handleMove(event: MouseEvent) {
-      const nextWidth = currentResize.startWidth + (event.clientX - currentResize.startClientX) / canvasZoom;
-      const nextHeight = currentResize.startHeight + (event.clientY - currentResize.startClientY) / canvasZoom;
+      suppressNodeClickRef.current = true;
+      const dx = (event.clientX - currentResize.startClientX) / canvasZoom;
+      const dy = (event.clientY - currentResize.startClientY) / canvasZoom;
+      const minWidth = 96;
+      const minHeight = 64;
+      const dragLeft = currentResize.handle.includes('w');
+      const dragRight = currentResize.handle.includes('e');
+      const dragTop = currentResize.handle.includes('n');
+      const dragBottom = currentResize.handle.includes('s');
 
       setFlowSpec((prev) => ({
         ...prev,
-        nodes: prev.nodes.map((node) => (
-          node.id === currentResize.nodeId
-            ? {
-                ...node,
-                width: clamp(nextWidth, 96, MAX_NODE_WIDTH),
-                height: Math.max(64, nextHeight),
-              }
-            : node
-        )),
+        nodes: prev.nodes.map((node) => {
+          if (node.id !== currentResize.nodeId) return node;
+
+          let nextX = currentResize.startX;
+          let nextY = currentResize.startY;
+          let nextWidth = currentResize.startWidth;
+          let nextHeight = currentResize.startHeight;
+
+          if (dragRight) {
+            nextWidth = currentResize.startWidth + dx;
+          }
+          if (dragLeft) {
+            nextWidth = currentResize.startWidth - dx;
+            nextX = currentResize.startX + dx;
+          }
+          if (dragBottom) {
+            nextHeight = currentResize.startHeight + dy;
+          }
+          if (dragTop) {
+            nextHeight = currentResize.startHeight - dy;
+            nextY = currentResize.startY + dy;
+          }
+
+          if (nextWidth < minWidth) {
+            if (dragLeft) nextX = currentResize.startX + currentResize.startWidth - minWidth;
+            nextWidth = minWidth;
+          }
+          if (nextWidth > MAX_NODE_WIDTH) {
+            if (dragLeft) nextX = currentResize.startX + currentResize.startWidth - MAX_NODE_WIDTH;
+            nextWidth = MAX_NODE_WIDTH;
+          }
+          if (nextHeight < minHeight) {
+            if (dragTop) nextY = currentResize.startY + currentResize.startHeight - minHeight;
+            nextHeight = minHeight;
+          }
+
+          return {
+            ...node,
+            position: {
+              x: nextX,
+              y: nextY,
+            },
+            width: nextWidth,
+            height: nextHeight,
+          };
+        }),
       }));
       setDirty(true);
     }
 
     function handleUp() {
+      document.body.style.cursor = '';
       setResizing(null);
     }
 
+    document.body.style.cursor = resizeCursor(currentResize.handle);
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
 
     return () => {
+      document.body.style.cursor = '';
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
@@ -2188,6 +2325,25 @@ export default function Flow() {
                       : multiSelected
                       ? 'var(--gantry-accent)'
                       : 'var(--gantry-border)';
+                    const startNodeResize = (event: ReactMouseEvent, handle: ResizeHandle) => {
+                      event.stopPropagation();
+                      event.preventDefault();
+                      suppressNodeClickRef.current = false;
+                      setSelectedNodeId(node.id);
+                      setSelectedNodeIds(new Set([node.id]));
+                      setSelectedEdgeId(null);
+                      setRenderBounds(flowBounds);
+                      setResizing({
+                        nodeId: node.id,
+                        handle,
+                        startClientX: event.clientX,
+                        startClientY: event.clientY,
+                        startWidth: nodeSize.width,
+                        startHeight: nodeSize.height,
+                        startX: node.position.x,
+                        startY: node.position.y,
+                      });
+                    };
 
                     return (
                       <div
@@ -2197,8 +2353,6 @@ export default function Flow() {
                         onDragStart={(event) => event.preventDefault()}
                         className={`group absolute select-none rounded-2xl shadow-sm transition-shadow ${
                           active || connectSource ? 'shadow-lg' : 'hover:shadow-md'
-                        } ${isNestTarget ? 'ring-2 ring-[var(--gantry-accent)] ring-offset-1' : ''} ${
-                          multiSelected && !active ? 'ring-2 ring-[var(--gantry-accent)]/60' : ''
                         } ${isContainer && !isMockNode(node) ? 'outline outline-1 outline-dashed outline-[var(--gantry-border)]' : ''}`}
                         style={nodeOuterStyle}
                         onMouseDown={(event) => {
@@ -2258,6 +2412,10 @@ export default function Flow() {
                             />
                           )}
                           {renderMockNodeShell(shape, baseBorderColor, color, nodeSize.width, nodeSize.height)}
+                          {active && shapeSelectionOverlay(shape, color, nodeSize.width, nodeSize.height)}
+                          {connectSource && !active && shapeSelectionOverlay(shape, color, nodeSize.width, nodeSize.height)}
+                          {isNestTarget && shapeSelectionOverlay(shape, 'var(--gantry-accent)', nodeSize.width, nodeSize.height)}
+                          {multiSelected && !active && shapeSelectionOverlay(shape, 'var(--gantry-accent)', nodeSize.width, nodeSize.height, true)}
 
                           {isMockNode(node) ? (
                             <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${mockContentClasses(shape)}`}>
@@ -2290,7 +2448,7 @@ export default function Flow() {
                               )}
                             </div>
                           ) : (
-                            <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${mockContentClasses(shape)} ${shape === 'diamond' ? 'pr-16' : 'pr-14'}`}>
+                            <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${mockContentClasses(shape)} ${shape === 'diamond' ? '' : 'pr-14'}`}>
                               <button
                                 onMouseDown={(event) => {
                                   event.stopPropagation();
@@ -2299,7 +2457,7 @@ export default function Flow() {
                                   event.stopPropagation();
                                   navigate(entityPath(node.entityRef.kind, node.entityRef.name, node.entityRef.namespace));
                                 }}
-                                className="absolute right-3 top-3 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]/90 p-1.5 text-[var(--gantry-text-secondary)] backdrop-blur-sm hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)]"
+                                className={`absolute z-20 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)]/90 p-1.5 text-[var(--gantry-text-secondary)] backdrop-blur-sm hover:bg-[var(--gantry-bg-tertiary)] hover:text-[var(--gantry-text-primary)] ${entityLinkButtonClass(shape)}`}
                                 title="Open entity"
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />
@@ -2346,34 +2504,52 @@ export default function Flow() {
                             </div>
                           )}
 
-                          {!readOnly && flowSettings.canEdit && (
-                            <button
-                              type="button"
-                              data-flow-resize="true"
-                              onMouseDown={(event) => {
-                                event.stopPropagation();
-                                event.preventDefault();
-                                setRenderBounds(flowBounds);
-                                setResizing({
-                                  nodeId: node.id,
-                                  startClientX: event.clientX,
-                                  startClientY: event.clientY,
-                                  startWidth: nodeSize.width,
-                                  startHeight: nodeSize.height,
-                                });
-                              }}
-                              className={`absolute -bottom-2.5 -right-2.5 flex h-6 w-6 cursor-se-resize items-center justify-center rounded-full border shadow-lg transition-all ${
-                                active
-                                  ? 'border-[var(--gantry-accent)] bg-[var(--gantry-accent)] text-[var(--gantry-bg-primary)] opacity-100'
-                                  : 'border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] text-[var(--gantry-text-secondary)] opacity-0 group-hover:opacity-100'
-                              }`}
-                              title="Resize node"
-                            >
-                              <span className="pointer-events-none relative block h-2.5 w-2.5">
-                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-current" />
-                                <span className="absolute bottom-0.5 right-0.5 h-1.5 w-1.5 border-b-2 border-r-2 border-current opacity-80" />
-                              </span>
-                            </button>
+                          {!readOnly && flowSettings.canEdit && !node.locked && (
+                            shape === 'diamond' ? (
+                              <svg
+                                className="absolute inset-0 z-10 overflow-visible"
+                                viewBox={`0 0 ${nodeSize.width} ${nodeSize.height}`}
+                                aria-hidden="true"
+                              >
+                                {[
+                                  { handle: 'ne' as ResizeHandle, x1: nodeSize.width / 2, y1: 6, x2: nodeSize.width - 14, y2: nodeSize.height / 2 },
+                                  { handle: 'se' as ResizeHandle, x1: nodeSize.width - 14, y1: nodeSize.height / 2, x2: nodeSize.width / 2, y2: nodeSize.height - 6 },
+                                  { handle: 'sw' as ResizeHandle, x1: nodeSize.width / 2, y1: nodeSize.height - 6, x2: 14, y2: nodeSize.height / 2 },
+                                  { handle: 'nw' as ResizeHandle, x1: 14, y1: nodeSize.height / 2, x2: nodeSize.width / 2, y2: 6 },
+                                ].map((edge) => (
+                                  <line
+                                    key={edge.handle}
+                                    data-flow-resize="true"
+                                    x1={edge.x1}
+                                    y1={edge.y1}
+                                    x2={edge.x2}
+                                    y2={edge.y2}
+                                    stroke="transparent"
+                                    strokeWidth={18}
+                                    strokeLinecap="round"
+                                    style={{ cursor: resizeCursor(edge.handle), pointerEvents: 'stroke' }}
+                                    onMouseDown={(event) => startNodeResize(event, edge.handle)}
+                                  />
+                                ))}
+                              </svg>
+                            ) : (
+                              RESIZE_HANDLES.map((handle) => (
+                                <div
+                                  key={handle}
+                                  data-flow-resize="true"
+                                  className={`absolute z-10 rounded-sm transition-colors ${resizeHandleClass(handle)} ${
+                                    active ? 'bg-[var(--gantry-accent)]/10 hover:bg-[var(--gantry-accent)]/25' : 'bg-transparent'
+                                  }`}
+                                  style={{
+                                    cursor: resizeCursor(handle),
+                                    height: handle === 'n' || handle === 's' ? RESIZE_EDGE_THICKNESS : handle.length === 2 ? RESIZE_EDGE_THICKNESS * 1.8 : undefined,
+                                    width: handle === 'e' || handle === 'w' ? RESIZE_EDGE_THICKNESS : handle.length === 2 ? RESIZE_EDGE_THICKNESS * 1.8 : undefined,
+                                  }}
+                                  title="Resize node"
+                                  onMouseDown={(event) => startNodeResize(event, handle)}
+                                />
+                              ))
+                            )
                           )}
                         </div>
                       </div>
