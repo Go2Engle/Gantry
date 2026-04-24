@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { JsonSchema } from '../lib/types';
+import { sanitizeEntityNameInput } from '../lib/utils';
 import EntityPicker from './EntityPicker';
 
 const ENTITY_KINDS = [
@@ -122,6 +123,8 @@ interface FieldProps {
 function FormField({ name, schema, value, onChange, required, error }: FieldProps) {
   const label = schema.title || name;
   const description = schema.description;
+  const isSlug = schema['x-slug'] === true;
+  const handleStringChange = (nextValue: string) => onChange(isSlug ? sanitizeEntityNameInput(nextValue) : nextValue);
   const borderClass = error
     ? 'border-[var(--gantry-danger)] focus:border-[var(--gantry-danger)] focus:ring-[var(--gantry-danger)]'
     : 'border-[var(--gantry-border)] focus:border-[var(--gantry-accent)] focus:ring-[var(--gantry-accent)]';
@@ -345,7 +348,7 @@ function FormField({ name, schema, value, onChange, required, error }: FieldProp
 
   // Default: string input (or textarea for long text / format: textarea)
   const isMultiline =
-    schema.format === 'textarea' || (schema.maxLength && schema.maxLength > 200);
+    !isSlug && (schema.format === 'textarea' || (schema.maxLength && schema.maxLength > 200));
 
   if (isMultiline) {
     return (
@@ -359,7 +362,7 @@ function FormField({ name, schema, value, onChange, required, error }: FieldProp
         )}
         <textarea
           value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => handleStringChange(e.target.value)}
           rows={4}
           maxLength={schema.maxLength}
           className={`w-full rounded-lg border bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-1 ${borderClass}`}
@@ -381,7 +384,7 @@ function FormField({ name, schema, value, onChange, required, error }: FieldProp
       <input
         type={schema.format === 'password' ? 'password' : schema.format === 'email' ? 'email' : schema.format === 'uri' ? 'url' : 'text'}
         value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => handleStringChange(e.target.value)}
         minLength={schema.minLength}
         maxLength={schema.maxLength}
         pattern={schema.pattern}

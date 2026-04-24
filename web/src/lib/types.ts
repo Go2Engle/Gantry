@@ -111,6 +111,8 @@ export interface JsonSchema {
   pattern?: string;
   /** Custom extension: entity kind this field references (e.g. "API", "Team"). */
   'x-entity-ref'?: string;
+  /** Custom extension: keep this string as a URL-safe entity slug. */
+  'x-slug'?: boolean;
   /** Custom extension: render a dropdown of Gantry roles. */
   'x-role-picker'?: boolean;
 }

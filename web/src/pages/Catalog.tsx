@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { api, PLUGINS_UPDATED_EVENT } from '../lib/api';
 import { ENTITY_KINDS, filterEntityKindsByPlugins } from '../lib/types';
-import { pruneEmpty } from '../lib/utils';
+import { pruneEmpty, sanitizeEntityName } from '../lib/utils';
 import type { Entity, JsonSchema, PluginRegistryEntry } from '../lib/types';
 import EntityCard from '../components/EntityCard';
 import EntityTable from '../components/EntityTable';
@@ -193,7 +193,7 @@ export default function Catalog() {
         return;
       }
 
-      const name = (raw._name as string) || '';
+      const name = sanitizeEntityName((raw._name as string) || '');
       const title = (raw._title as string) || '';
       const owner = (raw._owner as string) || '';
       const description = (raw._description as string) || '';
@@ -249,6 +249,7 @@ export default function Catalog() {
           description: 'Unique URL-safe identifier. Use lowercase letters, numbers, hyphens, or dots.',
           pattern: '[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?',
           maxLength: 253,
+          'x-slug': true,
         },
         _title: { type: 'string', title: 'Title', description: 'Display name' },
         _owner: { type: 'string', title: 'Owner', description: 'Team or user that owns this entity', 'x-entity-ref': 'Team' },

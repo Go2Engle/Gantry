@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ChevronRight, Pencil, Trash2, X, ExternalLink, LayoutDashboard, BookOpen, FileText, Github, MessageSquare, Bell, Activity, Cpu, CircleHelp, RefreshCw, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
-import { catalogEntityPath, isValidEntityName, pruneEmpty, sanitizeEntityName } from '../lib/utils';
+import { catalogEntityPath, isValidEntityName, pruneEmpty, sanitizeEntityName, sanitizeEntityNameInput } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 import type { Entity, JsonSchema, AuditEntry, GraphData, EntityLink, PluginRegistryEntry } from '../lib/types';
 import SchemaForm from '../components/SchemaForm';
@@ -1017,7 +1017,7 @@ export default function EntityDetail() {
                       pattern="[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"
                       maxLength={253}
                       onBlur={() => setEditMeta((m) => ({ ...m, name: sanitizeEntityName(m.name) }))}
-                      onChange={(e) => setEditMeta((m) => ({ ...m, name: e.target.value }))}
+                      onChange={(e) => setEditMeta((m) => ({ ...m, name: sanitizeEntityNameInput(e.target.value) }))}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">

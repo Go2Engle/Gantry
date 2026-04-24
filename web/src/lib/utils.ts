@@ -30,13 +30,18 @@ export function catalogEntityPath(kind: string, name: string, namespace?: string
 }
 
 export function sanitizeEntityName(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
+  return sanitizeEntityNameInput(value).replace(/[^a-z0-9]+$/g, '');
+}
+
+export function sanitizeEntityNameInput(value: string): string {
+  const next = value.toLowerCase().trimStart();
+  const allowTrailingSeparator = /[\s.-]$/.test(next);
+  const sanitized = next
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9.-]/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+    .replace(/^[^a-z0-9]+/g, '');
+  return allowTrailingSeparator ? sanitized : sanitized.replace(/[^a-z0-9]+$/g, '');
 }
 
 export function isValidEntityName(value: string): boolean {

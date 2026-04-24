@@ -69,7 +69,7 @@ import {
 } from '../lib/flow';
 import { useFlowHealth } from '../hooks/useFlowHealth';
 import { useTheme } from '../hooks/useTheme';
-import { catalogEntityPath } from '../lib/utils';
+import { catalogEntityPath, sanitizeEntityNameInput } from '../lib/utils';
 
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 900;
@@ -1177,7 +1177,7 @@ export default function Flow() {
   function loadFlow(flow: Entity) {
     setCurrentFlowName(flow.metadata.name);
     setCurrentNamespace(flow.metadata.namespace || 'default');
-    setFlowName(flow.metadata.name);
+    setFlowName(sanitizeFlowName(flow.metadata.name) || flow.metadata.name);
     setFlowTitleValue(flow.metadata.title || '');
     setFlowDescription(flow.metadata.description || '');
     setFlowOwner(flow.metadata.owner || '');
@@ -2848,7 +2848,7 @@ export default function Flow() {
               </button>
               <button
                 onClick={saveFlow}
-                disabled={saving}
+                disabled={saving || !flowName.trim()}
                 className="inline-flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)] disabled:opacity-60"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -2976,11 +2976,12 @@ export default function Flow() {
                 <span className="text-xs font-medium uppercase tracking-wide text-[var(--gantry-text-secondary)]">Name</span>
                 <input
                   value={flowName}
-                  onChange={(event) => setMeta(() => setFlowName(event.target.value))}
+                  onChange={(event) => setMeta(() => setFlowName(sanitizeEntityNameInput(event.target.value)))}
                   onBlur={() => setFlowName((value) => sanitizeFlowName(value))}
                   disabled={currentFlowName !== null}
                   placeholder="checkout-system"
                   pattern="[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"
+                  maxLength={253}
                   title="Use lowercase letters, numbers, hyphens, or dots."
                   className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
