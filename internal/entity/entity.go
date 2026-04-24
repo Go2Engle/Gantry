@@ -6,6 +6,7 @@ package entity
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -16,7 +17,11 @@ const (
 
 	// DefaultNamespace is the default namespace assigned to entities.
 	DefaultNamespace = "default"
+
+	maxEntityNameLength = 253
 )
+
+var entityNamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
 
 // Entity represents a catalog item in Gantry.
 type Entity struct {
@@ -52,6 +57,12 @@ func (e *Entity) Validate() error {
 
 	if strings.TrimSpace(e.Metadata.Name) == "" {
 		errs = append(errs, "metadata.name is required")
+	} else if !IsValidName(e.Metadata.Name) {
+		errs = append(errs, "metadata.name must be a URL-safe slug: use lowercase letters, numbers, hyphens, or dots, and start and end with a letter or number")
+	}
+
+	if strings.TrimSpace(e.Metadata.Namespace) != "" && !IsValidName(e.Metadata.Namespace) {
+		errs = append(errs, "metadata.namespace must be a URL-safe slug: use lowercase letters, numbers, hyphens, or dots, and start and end with a letter or number")
 	}
 
 	if len(errs) > 0 {
@@ -59,6 +70,15 @@ func (e *Entity) Validate() error {
 	}
 
 	return nil
+}
+
+// IsValidName reports whether a metadata name or namespace is a stable,
+// URL-safe entity identifier. Display text belongs in metadata.title.
+func IsValidName(value string) bool {
+	if value == "" || len(value) > maxEntityNameLength {
+		return false
+	}
+	return entityNamePattern.MatchString(value)
 }
 
 // SetDefaults populates default values for optional fields that are empty.

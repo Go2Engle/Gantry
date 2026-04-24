@@ -185,7 +185,12 @@ func (h *Handlers) UpdateFlowEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := chi.URLParam(r, "name")
+	oldName := chi.URLParam(r, "name")
+	oldNamespace := r.URL.Query().Get("namespace")
+	if oldNamespace == "" {
+		oldNamespace = entity.DefaultNamespace
+	}
+
 	var e entity.Entity
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxFlowEntityRequestBytes)).Decode(&e); err != nil {
 		var maxErr *http.MaxBytesError
@@ -202,7 +207,12 @@ func (h *Handlers) UpdateFlowEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.Kind = "Flow"
-	e.Metadata.Name = name
+	if strings.TrimSpace(e.Metadata.Name) == "" {
+		e.Metadata.Name = oldName
+	}
+	if strings.TrimSpace(e.Metadata.Namespace) == "" {
+		e.Metadata.Namespace = oldNamespace
+	}
 	e.SetDefaults()
 
 	if err := h.Validator.Validate(&e); err != nil {
@@ -210,19 +220,18 @@ func (h *Handlers) UpdateFlowEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ns := e.Metadata.Namespace
-	if ns == "" {
-		ns = entity.DefaultNamespace
-	}
-
 	var beforeState string
-	if prev, err := h.DB.GetEntity(r.Context(), e.Kind, ns, e.Metadata.Name); err == nil {
+	if prev, err := h.DB.GetEntity(r.Context(), "Flow", oldNamespace, oldName); err == nil {
 		beforeState = marshalEntityState(prev)
 	}
 
-	if err := h.DB.UpdateEntity(r.Context(), &e); err != nil {
+	if err := h.DB.UpdateEntityByRef(r.Context(), "Flow", oldNamespace, oldName, &e); err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, entityNotFoundMessage(e.Kind, ns, e.Metadata.Name))
+			writeError(w, http.StatusNotFound, entityNotFoundMessage("Flow", oldNamespace, oldName))
+			return
+		}
+		if errors.Is(err, entity.ErrEntityAlreadyExists) {
+			writeError(w, http.StatusConflict, "entity already exists")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to update flow")

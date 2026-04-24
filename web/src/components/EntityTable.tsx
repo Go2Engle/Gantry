@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Entity } from '../lib/types';
+import { catalogEntityPath } from '../lib/utils';
 
 interface EntityTableProps {
   entities: Entity[];
@@ -113,7 +114,7 @@ export default function EntityTable({ entities }: EntityTableProps) {
               className={`cursor-pointer border-b border-[var(--gantry-border)] transition-colors hover:bg-[var(--gantry-bg-tertiary)] ${
                 i % 2 === 0 ? 'bg-[var(--gantry-bg-primary)]' : 'bg-[var(--gantry-bg-secondary)]'
               }`}
-              onClick={() => navigate(`/catalog/${entity.kind}/${entity.metadata.name}${entity.metadata.namespace && entity.metadata.namespace !== 'default' ? `?namespace=${encodeURIComponent(entity.metadata.namespace)}` : ''}`)}
+              onClick={() => navigate(catalogEntityPath(entity.kind, entity.metadata.name, entity.metadata.namespace))}
             >
               <td className="px-4 py-3">
                 <div>

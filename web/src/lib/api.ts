@@ -1,4 +1,5 @@
 import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, NexusRepository, TopologyData, TopologyStatusMap, FlowPluginSettings, FlowSpec } from './types';
+import { encodePathSegment } from './utils';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 export const PLUGINS_UPDATED_EVENT = 'gantry:plugins-updated';
@@ -54,19 +55,19 @@ export const api = {
   logout: () => request<void>('POST', '/auth/logout'),
 
   listEntities: (kind?: string) =>
-    request<Entity[]>('GET', kind ? `/entities/${kind}` : '/entities'),
+    request<Entity[]>('GET', kind ? `/entities/${encodePathSegment(kind)}` : '/entities'),
 
   getEntity: (kind: string, name: string, namespace?: string) =>
-    request<Entity>('GET', `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<Entity>('GET', `/entities/${encodePathSegment(kind)}/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   createEntity: (entity: Entity) =>
     request<Entity>('POST', '/entities', entity),
 
   updateEntity: (kind: string, name: string, entity: Entity, namespace?: string) =>
-    request<Entity>('PUT', `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, entity),
+    request<Entity>('PUT', `/entities/${encodePathSegment(kind)}/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, entity),
 
   deleteEntity: (kind: string, name: string, namespace?: string) =>
-    request<void>('DELETE', `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<void>('DELETE', `/entities/${encodePathSegment(kind)}/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   search: (q: string) =>
     request<SearchResult[]>('GET', `/search?q=${encodeURIComponent(q)}`),
@@ -123,7 +124,7 @@ export const api = {
     request<void>('DELETE', `/auth/apikeys/${id}`),
 
   getEntityGraph: (kind: string, name: string, namespace?: string) =>
-    request<GraphData>('GET', `/graph/${kind}/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<GraphData>('GET', `/graph/${encodePathSegment(kind)}/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   // Plugin marketplace
   listPlugins: () => request<PluginRegistryEntry[]>('GET', '/plugins'),
@@ -222,7 +223,7 @@ export const api = {
   createFlow: (metadata: Entity['metadata'], spec: FlowSpec) =>
     request<Entity>('POST', '/plugins/flow/entities', { kind: 'Flow', apiVersion: 'gantry.io/v1', metadata, spec }),
   updateFlow: (name: string, metadata: Entity['metadata'], spec: FlowSpec, namespace?: string) =>
-    request<Entity>('PUT', `/plugins/flow/entities/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, {
+    request<Entity>('PUT', `/plugins/flow/entities/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, {
       kind: 'Flow',
       apiVersion: 'gantry.io/v1',
       metadata: {
@@ -232,7 +233,7 @@ export const api = {
       spec,
     }),
   deleteFlow: (name: string, namespace?: string) =>
-    request<void>('DELETE', `/plugins/flow/entities/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<void>('DELETE', `/plugins/flow/entities/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   // Health check proxy
   checkHealth: (url: string, signal?: AbortSignal) =>

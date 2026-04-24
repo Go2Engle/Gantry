@@ -21,6 +21,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { catalogEntityPath } from '../lib/utils';
 import type {
   TopologyData,
   TopologyNode,
@@ -28,6 +29,12 @@ import type {
   TopologyEnvironment,
   TopologyStatusMap,
 } from '../lib/types';
+
+function topologyEntityPath(id: string): string {
+  const separator = id.indexOf('/');
+  if (separator === -1) return '/catalog';
+  return catalogEntityPath(id.slice(0, separator), id.slice(separator + 1));
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -766,7 +773,7 @@ function DetailPanel({
             </span>
           )}
           <Link
-            to={`/catalog/${node.kind}/${node.name}`}
+            to={catalogEntityPath(node.kind, node.name, node.namespace)}
             className="flex items-center gap-1 rounded-lg border border-[var(--gantry-border)] px-3 py-1.5 text-xs font-medium text-[var(--gantry-accent)] hover:bg-[var(--gantry-accent)]/10"
           >
             View <ExternalLink className="h-3 w-3" />
@@ -825,7 +832,7 @@ function DetailPanel({
                     </span>
                     <ArrowRight className="h-3 w-3 shrink-0 text-[var(--gantry-text-secondary)]" />
                     <Link
-                      to={`/catalog/${e.to}`}
+                      to={topologyEntityPath(e.to)}
                       className="truncate text-[var(--gantry-accent)] hover:underline"
                     >
                       {e.to}
@@ -844,7 +851,7 @@ function DetailPanel({
                 {inbound.map((e, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs">
                     <Link
-                      to={`/catalog/${e.from}`}
+                      to={topologyEntityPath(e.from)}
                       className="truncate text-[var(--gantry-accent)] hover:underline"
                     >
                       {e.from}

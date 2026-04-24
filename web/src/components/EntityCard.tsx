@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Server, Globe, Database, Users, Cloud, FileText, Box, Workflow } from 'lucide-react';
 import type { Entity } from '../lib/types';
+import { catalogEntityPath } from '../lib/utils';
 
 const kindIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   Service: Server,
@@ -32,7 +33,7 @@ export default function EntityCard({ entity }: EntityCardProps) {
 
   return (
     <Link
-      to={`/catalog/${entity.kind}/${entity.metadata.name}${entity.metadata.namespace && entity.metadata.namespace !== 'default' ? `?namespace=${encodeURIComponent(entity.metadata.namespace)}` : ''}`}
+      to={catalogEntityPath(entity.kind, entity.metadata.name, entity.metadata.namespace)}
       className="group block rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-5 transition-all hover:shadow-md"
     >
       <div className="flex items-start justify-between">

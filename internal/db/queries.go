@@ -231,6 +231,10 @@ func unmarshalAnyMap(s string) map[string]any {
 // CreateEntity inserts a new entity into the database.
 // It generates a UUID for the entity and sets timestamps.
 func (d *DB) CreateEntity(ctx context.Context, e *entity.Entity) error {
+	if err := e.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", entity.ErrInvalidEntity, err)
+	}
+
 	id := newUUID()
 	now := time.Now().UTC()
 
@@ -347,6 +351,10 @@ func (d *DB) CountEntitiesByKind(ctx context.Context) (map[string]int64, error) 
 // UpdateEntity updates an existing entity identified by kind, namespace, and name.
 // It updates all mutable fields and bumps the updated_at timestamp.
 func (d *DB) UpdateEntity(ctx context.Context, e *entity.Entity) error {
+	if err := e.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", entity.ErrInvalidEntity, err)
+	}
+
 	e.Metadata.UpdatedAt = time.Now().UTC()
 
 	tags := marshalJSON(e.Metadata.Tags)
@@ -375,6 +383,60 @@ func (d *DB) UpdateEntity(ctx context.Context, e *entity.Entity) error {
 		e.Metadata.Name,
 	)
 	if err != nil {
+		return fmt.Errorf("updating entity: %w", err)
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if n == 0 {
+		return entity.ErrEntityNotFound
+	}
+	return nil
+}
+
+// UpdateEntityByRef updates an existing entity identified by oldKind, oldNamespace,
+// and oldName. The entity payload may carry a new valid metadata.name/namespace,
+// which lets operators repair older records created with invalid identifiers.
+func (d *DB) UpdateEntityByRef(ctx context.Context, oldKind, oldNamespace, oldName string, e *entity.Entity) error {
+	if err := e.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", entity.ErrInvalidEntity, err)
+	}
+
+	e.Metadata.UpdatedAt = time.Now().UTC()
+
+	tags := marshalJSON(e.Metadata.Tags)
+	annotations := marshalJSON(e.Metadata.Annotations)
+	labels := marshalJSON(e.Metadata.Labels)
+	spec := marshalJSON(e.Spec)
+
+	result, err := d.exec(ctx,
+		`UPDATE entities
+		 SET api_version = ?, name = ?, namespace = ?, title = ?, description = ?, owner = ?,
+		     tags = ?, annotations = ?, labels = ?, spec = ?,
+		     updated_at = ?, created_by = ?
+		 WHERE kind = ? AND namespace = ? AND name = ?`,
+		e.APIVersion,
+		e.Metadata.Name,
+		e.Metadata.Namespace,
+		e.Metadata.Title,
+		e.Metadata.Description,
+		e.Metadata.Owner,
+		tags,
+		annotations,
+		labels,
+		spec,
+		e.Metadata.UpdatedAt,
+		e.Metadata.CreatedBy,
+		oldKind,
+		oldNamespace,
+		oldName,
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return entity.ErrEntityAlreadyExists
+		}
 		return fmt.Errorf("updating entity: %w", err)
 	}
 

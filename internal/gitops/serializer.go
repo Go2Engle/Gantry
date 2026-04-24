@@ -13,9 +13,9 @@ import (
 
 // yamlEntity mirrors entity.Entity but with YAML tags and omits server-managed fields.
 type yamlEntity struct {
-	Kind       string       `yaml:"kind"`
-	APIVersion string       `yaml:"apiVersion"`
-	Metadata   yamlMetadata `yaml:"metadata"`
+	Kind       string         `yaml:"kind"`
+	APIVersion string         `yaml:"apiVersion"`
+	Metadata   yamlMetadata   `yaml:"metadata"`
 	Spec       map[string]any `yaml:"spec,omitempty"`
 }
 
@@ -91,6 +91,9 @@ func DeserializeEntity(data []byte) (*entity.Entity, error) {
 		Spec: ye.Spec,
 	}
 	e.SetDefaults()
+	if err := e.Validate(); err != nil {
+		return nil, err
+	}
 	return e, nil
 }
 

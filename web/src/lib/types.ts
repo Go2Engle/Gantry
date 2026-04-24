@@ -108,6 +108,7 @@ export interface JsonSchema {
   maximum?: number;
   minLength?: number;
   maxLength?: number;
+  pattern?: string;
   /** Custom extension: entity kind this field references (e.g. "API", "Team"). */
   'x-entity-ref'?: string;
   /** Custom extension: render a dropdown of Gantry roles. */

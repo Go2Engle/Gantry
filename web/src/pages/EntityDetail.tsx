@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ChevronRight, Pencil, Trash2, X, ExternalLink, LayoutDashboard, BookOpen, FileText, Github, MessageSquare, Bell, Activity, Cpu, CircleHelp, RefreshCw, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
-import { pruneEmpty } from '../lib/utils';
+import { catalogEntityPath, isValidEntityName, pruneEmpty, sanitizeEntityName } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 import type { Entity, JsonSchema, AuditEntry, GraphData, EntityLink, PluginRegistryEntry } from '../lib/types';
 import SchemaForm from '../components/SchemaForm';
@@ -128,7 +128,7 @@ export default function EntityDetail() {
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [editMeta, setEditMeta] = useState({ title: '', description: '', owner: '', tags: '', harborProject: '', harborRepository: '', nexusName: '', nexusRepository: '', nexusGroup: '' });
+  const [editMeta, setEditMeta] = useState({ name: '', title: '', description: '', owner: '', tags: '', harborProject: '', harborRepository: '', nexusName: '', nexusRepository: '', nexusGroup: '' });
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [enabledPlugins, setEnabledPlugins] = useState<Set<string>>(new Set());
@@ -209,6 +209,7 @@ export default function EntityDetail() {
   function openEdit() {
     if (!entity) return;
     setEditMeta({
+      name: isValidEntityName(entity.metadata.name) ? entity.metadata.name : sanitizeEntityName(entity.metadata.name),
       title: entity.metadata.title ?? '',
       description: entity.metadata.description ?? '',
       owner: entity.metadata.owner ?? '',
@@ -266,6 +267,7 @@ export default function EntityDetail() {
         ...entity,
         metadata: {
           ...entity.metadata,
+          name: editMeta.name.trim() || entity.metadata.name,
           title: editMeta.title || undefined,
           description: editMeta.description || undefined,
           owner: editMeta.owner || undefined,
@@ -276,6 +278,9 @@ export default function EntityDetail() {
       }, namespace);
       setEntity(updated);
       setEditing(false);
+      if (updated.metadata.name !== name || (updated.metadata.namespace || 'default') !== namespace) {
+        navigate(catalogEntityPath(updated.kind, updated.metadata.name, updated.metadata.namespace), { replace: true });
+      }
     } catch (e: any) {
       setError(e.message);
     }
@@ -925,7 +930,7 @@ export default function EntityDetail() {
                         return (
                           <tr key={n} className="hover:bg-[var(--gantry-bg-secondary)]">
                             <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">
-                              <Link to={`/catalog/API/${n}${(e?.metadata.namespace && e.metadata.namespace !== 'default') ? `?namespace=${e.metadata.namespace}` : ''}`} className="text-[var(--gantry-accent)] hover:underline">
+                              <Link to={catalogEntityPath('API', n, e?.metadata.namespace)} className="text-[var(--gantry-accent)] hover:underline">
                                 {e?.metadata.title || n}
                               </Link>
                             </td>
@@ -1001,6 +1006,20 @@ export default function EntityDetail() {
                   Metadata
                 </h3>
                 <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Name</label>
+                    <p className="text-xs text-[var(--gantry-text-secondary)] mb-1.5">URL-safe identifier. Use lowercase letters, numbers, hyphens, or dots.</p>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
+                      value={editMeta.name}
+                      placeholder="payment-api"
+                      pattern="[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"
+                      maxLength={253}
+                      onBlur={() => setEditMeta((m) => ({ ...m, name: sanitizeEntityName(m.name) }))}
+                      onChange={(e) => setEditMeta((m) => ({ ...m, name: e.target.value }))}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Title</label>

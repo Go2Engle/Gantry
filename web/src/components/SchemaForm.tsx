@@ -384,6 +384,8 @@ function FormField({ name, schema, value, onChange, required, error }: FieldProp
         onChange={(e) => onChange(e.target.value)}
         minLength={schema.minLength}
         maxLength={schema.maxLength}
+        pattern={schema.pattern}
+        title={schema.pattern ? description : undefined}
         className={`w-full rounded-lg border bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:outline-none focus:ring-1 ${borderClass}`}
       />
       {error && <p className="text-xs text-[var(--gantry-danger)]">This field is required</p>}

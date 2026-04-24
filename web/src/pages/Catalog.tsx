@@ -243,7 +243,13 @@ export default function Catalog() {
     return {
       type: 'object',
       properties: {
-        _name: { type: 'string', title: 'Name', description: 'Unique identifier' },
+        _name: {
+          type: 'string',
+          title: 'Name',
+          description: 'Unique URL-safe identifier. Use lowercase letters, numbers, hyphens, or dots.',
+          pattern: '[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?',
+          maxLength: 253,
+        },
         _title: { type: 'string', title: 'Title', description: 'Display name' },
         _owner: { type: 'string', title: 'Owner', description: 'Team or user that owns this entity', 'x-entity-ref': 'Team' },
         _description: { type: 'string', title: 'Description' },

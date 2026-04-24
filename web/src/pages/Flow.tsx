@@ -69,6 +69,7 @@ import {
 } from '../lib/flow';
 import { useFlowHealth } from '../hooks/useFlowHealth';
 import { useTheme } from '../hooks/useTheme';
+import { catalogEntityPath } from '../lib/utils';
 
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 900;
@@ -289,7 +290,7 @@ function shapeSelectionOverlay(shape: FlowMockShape, color: string, width: numbe
 
 
 function entityPath(kind: string, name: string, namespace?: string): string {
-  return `/catalog/${kind}/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`;
+  return catalogEntityPath(kind, name, namespace);
 }
 
 function sanitizeFlowName(value: string): string {
@@ -1611,10 +1612,14 @@ export default function Flow() {
       setError(`Editing flows requires the ${flowSettings.editorRole} role or higher.`);
       return;
     }
-    const name = flowName.trim();
+    const rawName = flowName.trim();
+    const name = sanitizeFlowName(rawName);
     if (!name) {
-      setError('Flow name is required');
+      setError('Flow name is required. Use lowercase letters, numbers, hyphens, or dots.');
       return;
+    }
+    if (rawName !== name) {
+      setFlowName(name);
     }
 
     setSaving(true);
@@ -2972,8 +2977,11 @@ export default function Flow() {
                 <input
                   value={flowName}
                   onChange={(event) => setMeta(() => setFlowName(event.target.value))}
+                  onBlur={() => setFlowName((value) => sanitizeFlowName(value))}
                   disabled={currentFlowName !== null}
                   placeholder="checkout-system"
+                  pattern="[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"
+                  title="Use lowercase letters, numbers, hyphens, or dots."
                   className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>

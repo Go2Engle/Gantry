@@ -62,6 +62,7 @@ import type {
   TopologyData,
 } from '../lib/types';
 import { ENTITY_KINDS } from '../lib/types';
+import { catalogEntityPath } from '../lib/utils';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Server,
@@ -757,7 +758,7 @@ export default function Dashboard() {
                 return (
                   <Link
                     key={`${entity.kind}-${entity.metadata.name}`}
-                    to={`/catalog/${entity.kind}/${entity.metadata.name}${entity.metadata.namespace && entity.metadata.namespace !== 'default' ? `?namespace=${encodeURIComponent(entity.metadata.namespace)}` : ''}`}
+                    to={catalogEntityPath(entity.kind, entity.metadata.name, entity.metadata.namespace)}
                     className="flex items-center gap-4 px-6 py-3 transition-colors hover:bg-[var(--gantry-bg-secondary)]"
                   >
                     <Icon className="h-4 w-4 shrink-0 text-[var(--gantry-text-secondary)]" />
@@ -789,7 +790,7 @@ export default function Dashboard() {
                 return (
                   <Link
                     key={`${entity.kind}-${entity.metadata.name}`}
-                    to={`/catalog/${entity.kind}/${entity.metadata.name}${entity.metadata.namespace && entity.metadata.namespace !== 'default' ? `?namespace=${encodeURIComponent(entity.metadata.namespace)}` : ''}`}
+                    to={catalogEntityPath(entity.kind, entity.metadata.name, entity.metadata.namespace)}
                     className="flex items-center gap-4 px-6 py-3 transition-colors hover:bg-[var(--gantry-bg-secondary)]"
                   >
                     <Icon className="h-5 w-5 shrink-0 text-[var(--gantry-text-secondary)]" />
@@ -851,7 +852,7 @@ export default function Dashboard() {
                 return (
                   <Link
                     key={p.id}
-                    to={`/catalog/${p.kind}/${p.name}`}
+                    to={catalogEntityPath(p.kind, p.name)}
                     className="flex items-center gap-1.5 rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] transition-colors hover:border-[var(--gantry-accent)] hover:text-[var(--gantry-accent)]"
                   >
                     <Icon className="h-4 w-4 shrink-0" />
@@ -881,7 +882,7 @@ export default function Dashboard() {
                   return (
                     <Link
                       key={`${entry.kind}-${entry.name}-${entry.namespace}`}
-                      to={`/catalog/${entry.kind}/${entry.name}${entry.namespace && entry.namespace !== 'default' ? `?namespace=${encodeURIComponent(entry.namespace)}` : ''}`}
+                      to={catalogEntityPath(entry.kind, entry.name, entry.namespace)}
                       className="flex items-center gap-4 px-6 py-3 transition-colors hover:bg-[var(--gantry-bg-secondary)]"
                     >
                       <Icon className="h-4 w-4 shrink-0 text-[var(--gantry-text-secondary)]" />

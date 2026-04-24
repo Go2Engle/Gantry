@@ -190,9 +190,14 @@ func (h *Handlers) CreateEntity(w http.ResponseWriter, r *http.Request) {
 // Parses body, validates, updates in DB, publishes EntityUpdated, and writes audit.
 func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 	kind := chi.URLParam(r, "kind")
-	name := chi.URLParam(r, "name")
+	oldName := chi.URLParam(r, "name")
 	if kind == "Flow" && !h.ensureFlowWriteAccess(w, r) {
 		return
+	}
+
+	oldNamespace := r.URL.Query().Get("namespace")
+	if oldNamespace == "" {
+		oldNamespace = entity.DefaultNamespace
 	}
 
 	var e entity.Entity
@@ -201,9 +206,15 @@ func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the URL path values take precedence.
+	// The URL identifies the existing row; the body carries the desired state.
+	// This allows older entities with invalid names to be renamed to a valid slug.
 	e.Kind = kind
-	e.Metadata.Name = name
+	if strings.TrimSpace(e.Metadata.Name) == "" {
+		e.Metadata.Name = oldName
+	}
+	if strings.TrimSpace(e.Metadata.Namespace) == "" {
+		e.Metadata.Namespace = oldNamespace
+	}
 
 	// Set defaults.
 	e.SetDefaults()
@@ -215,18 +226,18 @@ func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Capture before state for audit log.
-	ns := e.Metadata.Namespace
-	if ns == "" {
-		ns = entity.DefaultNamespace
-	}
 	var beforeState string
-	if prev, err := h.DB.GetEntity(r.Context(), e.Kind, ns, e.Metadata.Name); err == nil {
+	if prev, err := h.DB.GetEntity(r.Context(), kind, oldNamespace, oldName); err == nil {
 		beforeState = marshalEntityState(prev)
 	}
 
-	if err := h.DB.UpdateEntity(r.Context(), &e); err != nil {
+	if err := h.DB.UpdateEntityByRef(r.Context(), kind, oldNamespace, oldName, &e); err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, entityNotFoundMessage(e.Kind, ns, e.Metadata.Name))
+			writeError(w, http.StatusNotFound, entityNotFoundMessage(kind, oldNamespace, oldName))
+			return
+		}
+		if errors.Is(err, entity.ErrEntityAlreadyExists) {
+			writeError(w, http.StatusConflict, "entity already exists")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to update entity")
@@ -237,9 +248,11 @@ func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 	h.Events.Publish(events.Event{
 		Type: events.EntityUpdated,
 		Data: map[string]any{
-			"kind":      e.Kind,
-			"name":      e.Metadata.Name,
-			"namespace": e.Metadata.Namespace,
+			"kind":         e.Kind,
+			"name":         e.Metadata.Name,
+			"namespace":    e.Metadata.Namespace,
+			"oldName":      oldName,
+			"oldNamespace": oldNamespace,
 		},
 	})
 

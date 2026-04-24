@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { GraphData, GraphNode, GraphEdge } from '../lib/types';
+import { catalogEntityPath } from '../lib/utils';
 
 const NODE_W = 156;
 const NODE_H = 54;
@@ -252,7 +253,7 @@ function ListView({
   const renderRow = (node: GraphNode, relation: string) => {
     const color = kindColor(node.kind);
     const label = node.title && node.title !== node.name ? node.title : node.name;
-    const url = `/catalog/${node.kind}/${node.name}${node.namespace && node.namespace !== 'default' ? `?namespace=${encodeURIComponent(node.namespace)}` : ''}`;
+    const url = catalogEntityPath(node.kind, node.name, node.namespace);
 
     return (
       <button
@@ -504,7 +505,7 @@ export default function EntityGraph({
                     pos={pos}
                     isHovered={hoveredNode === node.id}
                     onMouseDown={nodeMouseDown}
-                    onClick={() => navigate(`/catalog/${node.kind}/${node.name}${node.namespace && node.namespace !== 'default' ? `?namespace=${encodeURIComponent(node.namespace)}` : ''}`)}
+                    onClick={() => navigate(catalogEntityPath(node.kind, node.name, node.namespace))}
                     onMouseEnter={() => setHoveredNode(node.id)}
                     onMouseLeave={() => setHoveredNode(null)}
                   />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Server, Globe, Database, Users, Cloud, FileText, Box, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
 import type { SearchResult } from '../lib/types';
+import { catalogEntityPath } from '../lib/utils';
 
 const kindIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   Service: Server,
@@ -71,7 +72,7 @@ export default function CommandPalette() {
         const result = resultsRef.current[selectedIndexRef.current];
         if (result) {
           setOpen(false);
-          navigate(`/catalog/${result.kind}/${result.name}${result.namespace && result.namespace !== 'default' ? `?namespace=${encodeURIComponent(result.namespace)}` : ''}`);
+          navigate(catalogEntityPath(result.kind, result.name, result.namespace));
         }
       } else if (e.key === 'Escape') {
         setOpen(false);
@@ -112,7 +113,7 @@ export default function CommandPalette() {
 
   const selectResult = (result: SearchResult) => {
     setOpen(false);
-    navigate(`/catalog/${result.kind}/${result.name}${result.namespace && result.namespace !== 'default' ? `?namespace=${encodeURIComponent(result.namespace)}` : ''}`);
+    navigate(catalogEntityPath(result.kind, result.name, result.namespace));
   };
 
   const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {

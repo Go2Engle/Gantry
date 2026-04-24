@@ -16,6 +16,33 @@ export function pruneEmpty(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
+export function encodePathSegment(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+export function catalogEntityPath(kind: string, name: string, namespace?: string): string {
+  const namespaceSuffix = namespace && namespace !== 'default'
+    ? `?namespace=${encodeURIComponent(namespace)}`
+    : '';
+  return `/catalog/${encodePathSegment(kind)}/${encodePathSegment(name)}${namespaceSuffix}`;
+}
+
+export function sanitizeEntityName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+}
+
+export function isValidEntityName(value: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(value) && value.length <= 253;
+}
+
 function pruneValue(value: any): any {
   if (value === undefined || value === null || value === '') return undefined;
 
