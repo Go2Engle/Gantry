@@ -3,9 +3,11 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go2engle/gantry/internal/auth"
@@ -23,8 +25,10 @@ func (h *Handlers) GetGitHubSSOConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
 	clientID, _ := p.Config["oauthClientId"].(string)
+	dispatchAsUser, _ := p.Config["dispatchAsUser"].(bool)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ssoEnabled": ssoEnabled && clientID != "",
+		"ssoEnabled":     ssoEnabled && clientID != "",
+		"dispatchAsUser": dispatchAsUser,
 	})
 }
 
@@ -72,10 +76,47 @@ func (h *Handlers) GitHubOAuthBegin(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	authURL := fmt.Sprintf(
-		"https://github.com/login/oauth/authorize?client_id=%s&state=%s&scope=read:user+user:email+read:org",
-		clientID, state,
-	)
+	authURL := githubOAuthAuthorizeURL(clientID, state, []string{"read:user", "user:email", "read:org"})
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+}
+
+// GitHubOAuthTokenBegin starts a short-lived OAuth flow for user-attributed
+// GitHub API calls. The returned token is posted back to the opener window and
+// is not persisted by Gantry.
+func (h *Handlers) GitHubOAuthTokenBegin(w http.ResponseWriter, r *http.Request) {
+	p, err := h.DB.GetPlugin(r.Context(), "github")
+	if err != nil || p == nil || !p.Enabled {
+		writeError(w, http.StatusNotFound, "GitHub plugin not installed or not enabled")
+		return
+	}
+	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
+	clientID, _ := p.Config["oauthClientId"].(string)
+	if !ssoEnabled || clientID == "" {
+		writeError(w, http.StatusBadRequest, "GitHub OAuth is not configured")
+		return
+	}
+	dispatchAsUser, _ := p.Config["dispatchAsUser"].(bool)
+	if !dispatchAsUser {
+		writeError(w, http.StatusBadRequest, "GitHub user-attributed action dispatch is not enabled")
+		return
+	}
+
+	state, err := randomHex16()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate state")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gh_oauth_token_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isHTTPSRequest(r),
+	})
+
+	authURL := githubOAuthAuthorizeURL(clientID, state, githubActionOAuthScopes(p.Config))
 	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 }
 
@@ -84,6 +125,11 @@ func (h *Handlers) GitHubOAuthBegin(w http.ResponseWriter, r *http.Request) {
 // fetches the GitHub user, finds or creates a Gantry account, issues a JWT,
 // then redirects to the frontend with the token in the query string.
 func (h *Handlers) GitHubOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	if tokenStateCookie, err := r.Cookie("gh_oauth_token_state"); err == nil {
+		h.githubOAuthTokenCallback(w, r, tokenStateCookie.Value)
+		return
+	}
+
 	// Validate OAuth state to prevent CSRF.
 	stateCookie, err := r.Cookie("gh_oauth_state")
 	if err != nil || r.URL.Query().Get("state") != stateCookie.Value {
@@ -234,6 +280,87 @@ func (h *Handlers) GitHubOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		redirectURL = returnTo + "/"
 	}
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+}
+
+func githubActionOAuthScopes(config map[string]any) []string {
+	if configured, _ := config["userTokenScopes"].(string); configured != "" {
+		scopes := strings.Fields(strings.ReplaceAll(configured, ",", " "))
+		if len(scopes) > 0 {
+			return scopes
+		}
+	}
+	return []string{"read:user", "user:email", "read:org", "repo", "workflow"}
+}
+
+func githubOAuthAuthorizeURL(clientID, state string, scopes []string) string {
+	values := url.Values{}
+	values.Set("client_id", clientID)
+	values.Set("state", state)
+	values.Set("scope", strings.Join(scopes, " "))
+	return "https://github.com/login/oauth/authorize?" + values.Encode()
+}
+
+func (h *Handlers) githubOAuthTokenCallback(w http.ResponseWriter, r *http.Request, expectedState string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gh_oauth_token_state",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isHTTPSRequest(r),
+	})
+
+	if expectedState == "" || r.URL.Query().Get("state") != expectedState {
+		writeGitHubTokenPopup(w, "", "", "invalid or missing oauth state")
+		return
+	}
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		writeGitHubTokenPopup(w, "", "", "missing oauth code")
+		return
+	}
+
+	p, err := h.DB.GetPlugin(r.Context(), "github")
+	if err != nil || p == nil || !p.Enabled {
+		writeGitHubTokenPopup(w, "", "", "GitHub plugin unavailable")
+		return
+	}
+	clientID, _ := p.Config["oauthClientId"].(string)
+	clientSecret, _ := p.Config["oauthClientSecret"].(string)
+	accessToken, err := ghplugin.ExchangeOAuthCode(code, clientID, clientSecret)
+	if err != nil {
+		writeGitHubTokenPopup(w, "", "", "exchange oauth code: "+err.Error())
+		return
+	}
+	ghUser, err := ghplugin.FetchUserWithToken(accessToken)
+	if err != nil {
+		writeGitHubTokenPopup(w, "", "", "fetch GitHub user: "+err.Error())
+		return
+	}
+	writeGitHubTokenPopup(w, accessToken, ghUser.Login, "")
+}
+
+func writeGitHubTokenPopup(w http.ResponseWriter, token, login, errMsg string) {
+	payload := map[string]string{
+		"type":  "gantry:github-token",
+		"token": token,
+		"login": login,
+		"error": errMsg,
+	}
+	payloadJSON, _ := json.Marshal(payload)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html>
+<html>
+<body>
+<script>
+  if (window.opener) {
+    window.opener.postMessage(%s, window.location.origin);
+  }
+  window.close();
+</script>
+</body>
+</html>`, payloadJSON)
 }
 
 // GetGitHubRepo fetches live repository info from GitHub for a given URL.

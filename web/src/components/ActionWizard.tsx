@@ -16,6 +16,7 @@ interface GitHubConfig {
   repoUrl: string;
   workflow: string;
   ref: string;
+  credentialMode: 'service_account' | 'user';
 }
 
 interface WebhookConfig {
@@ -77,6 +78,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
     repoUrl: existing?.spec?.config?.repoUrl ?? '',
     workflow: existing?.spec?.config?.workflow ?? '',
     ref: existing?.spec?.config?.ref ?? 'main',
+    credentialMode: existing?.spec?.config?.credentialMode === 'user' ? 'user' : 'service_account',
   });
   const [webhookConfig, setWebhookConfig] = useState<WebhookConfig>({
     url: existing?.spec?.config?.url ?? '',
@@ -189,7 +191,12 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
   const buildEntity = (): Entity => {
     let config: Record<string, any> = {};
     if (actionType === 'github-action') {
-      config = { repoUrl: ghConfig.repoUrl, workflow: ghConfig.workflow, ref: ghConfig.ref };
+      config = {
+        repoUrl: ghConfig.repoUrl,
+        workflow: ghConfig.workflow,
+        ref: ghConfig.ref,
+        credentialMode: ghConfig.credentialMode,
+      };
     } else if (actionType === 'webhook') {
       const headers: Record<string, string> = {};
       webhookConfig.headers.forEach(({ key, value }) => { if (key) headers[key] = value; });
@@ -507,6 +514,23 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
                     />
                   </div>
 
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[var(--gantry-text-secondary)]">
+                      GitHub Credentials
+                    </label>
+                    <select
+                      value={ghConfig.credentialMode}
+                      onChange={(e) => setGhConfig((c) => ({ ...c, credentialMode: e.target.value === 'user' ? 'user' : 'service_account' }))}
+                      className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
+                    >
+                      <option value="service_account">Service account</option>
+                      <option value="user">Prompt triggering user</option>
+                    </select>
+                    <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">
+                      User mode requests a one-time GitHub token when the action runs.
+                    </p>
+                  </div>
+
                   {ghConfig.workflow && (
                     <button
                       type="button"
@@ -686,7 +710,10 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
                 {category && <p className="text-[var(--gantry-text-secondary)]"><span className="font-medium text-[var(--gantry-text-primary)]">Category:</span> {category}</p>}
                 <p className="text-[var(--gantry-text-secondary)]"><span className="font-medium text-[var(--gantry-text-primary)]">Type:</span> {ACTION_TYPES.find((t) => t.value === actionType)?.label}</p>
                 {actionType === 'github-action' && (
-                  <p className="text-[var(--gantry-text-secondary)]"><span className="font-medium text-[var(--gantry-text-primary)]">Workflow:</span> {ghConfig.workflow} on {ghConfig.ref}</p>
+                  <>
+                    <p className="text-[var(--gantry-text-secondary)]"><span className="font-medium text-[var(--gantry-text-primary)]">Workflow:</span> {ghConfig.workflow} on {ghConfig.ref}</p>
+                    <p className="text-[var(--gantry-text-secondary)]"><span className="font-medium text-[var(--gantry-text-primary)]">Credentials:</span> {ghConfig.credentialMode === 'user' ? 'Prompt triggering user' : 'Service account'}</p>
+                  </>
                 )}
                 {actionType === 'webhook' && (
                   <p className="text-[var(--gantry-text-secondary)]"><span className="font-medium text-[var(--gantry-text-primary)]">Endpoint:</span> {webhookConfig.method} {webhookConfig.url}</p>

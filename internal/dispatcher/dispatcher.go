@@ -39,7 +39,7 @@ func New(database *db.DB, eventBus *events.Bus) *Manager {
 // Dispatch executes a pending action run asynchronously.
 // It updates run status (running → success/failed) and publishes events.
 // Call from a goroutine; the caller should have already persisted the run as "pending".
-func (m *Manager) Dispatch(action *entity.Entity, run *db.ActionRun) {
+func (m *Manager) Dispatch(action *entity.Entity, run *db.ActionRun, secrets map[string]string) {
 	ctx := context.Background()
 
 	// Transition to running.
@@ -56,7 +56,7 @@ func (m *Manager) Dispatch(action *entity.Entity, run *db.ActionRun) {
 	case "webhook":
 		outputJSON, execErr = m.runWebhook(action, run)
 	case "github-action":
-		outputJSON, execErr = m.runGitHubAction(ctx, action, run)
+		outputJSON, execErr = m.runGitHubAction(ctx, action, run, secrets)
 	default:
 		// Unrecognized type — complete immediately with a note.
 		outputJSON = fmt.Sprintf(`{"message":"action type %q has no executor; marked as succeeded","type":%q}`,
@@ -161,7 +161,7 @@ func (m *Manager) runWebhook(action *entity.Entity, run *db.ActionRun) (string, 
 
 // runGitHubAction triggers a GitHub Actions workflow_dispatch event and waits
 // briefly for the run to appear in the API.
-func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, run *db.ActionRun) (string, error) {
+func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, run *db.ActionRun, secrets map[string]string) (string, error) {
 	cfg, _ := action.Spec["config"].(map[string]any)
 	if cfg == nil {
 		cfg = map[string]any{}
@@ -170,6 +170,7 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 	repoURL, _ := cfg["repoUrl"].(string)
 	workflow, _ := cfg["workflow"].(string)
 	ref, _ := cfg["ref"].(string)
+	credentialMode, _ := cfg["credentialMode"].(string)
 
 	if repoURL == "" || workflow == "" {
 		return "", fmt.Errorf("github-action requires config.repoUrl and config.workflow")
@@ -183,12 +184,14 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 		return "", fmt.Errorf("invalid repoUrl: %w", err)
 	}
 
-	// Get token — action config takes priority over plugin config.
+	// Get token — action config takes priority, then user-scoped per-run
+	// credentials, then plugin config when allowed.
 	token, _ := cfg["token"].(string)
+	tokenSource := "action"
 	if token == "" {
-		token, err = m.getGitHubToken(ctx)
+		token, tokenSource, err = m.resolveGitHubActionToken(ctx, credentialMode, secrets)
 		if err != nil {
-			return "", fmt.Errorf("no GitHub token available (configure the GitHub plugin or set config.token): %w", err)
+			return "", err
 		}
 	}
 
@@ -217,6 +220,7 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Gantry/1.0")
 
 	dispatched := time.Now().UTC()
 
@@ -245,13 +249,58 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 
 	repoHTMLURL := fmt.Sprintf("https://github.com/%s/%s", owner, repo)
 	out, _ := json.Marshal(map[string]any{
-		"message":  "GitHub Actions workflow dispatched successfully",
-		"repo":     repoHTMLURL,
-		"workflow": workflow,
-		"ref":      ref,
-		"runUrl":   runURL,
+		"message":        "GitHub Actions workflow dispatched successfully",
+		"repo":           repoHTMLURL,
+		"workflow":       workflow,
+		"ref":            ref,
+		"runUrl":         runURL,
+		"credentialMode": credentialModeForOutput(credentialMode),
+		"tokenSource":    tokenSource,
 	})
 	return string(out), nil
+}
+
+func credentialModeForOutput(mode string) string {
+	if mode == "user" {
+		return "user"
+	}
+	return "service_account"
+}
+
+func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode string, secrets map[string]string) (token, source string, err error) {
+	if credentialMode == "user" {
+		if secrets != nil {
+			if token := strings.TrimSpace(secrets["githubToken"]); token != "" {
+				return token, "user", nil
+			}
+		}
+		if m.githubUserFallback(ctx) != "service_account" {
+			return "", "", fmt.Errorf("GitHub user authorization required for this action")
+		}
+		token, err := m.getGitHubToken(ctx)
+		if err != nil {
+			return "", "", fmt.Errorf("GitHub user authorization was not provided and no service account fallback is available: %w", err)
+		}
+		return token, "service_account_fallback", nil
+	}
+
+	token, err = m.getGitHubToken(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("no GitHub token available (configure the GitHub plugin or set config.token): %w", err)
+	}
+	return token, "service_account", nil
+}
+
+func (m *Manager) githubUserFallback(ctx context.Context) string {
+	plugin, err := m.DB.GetPlugin(ctx, "github")
+	if err != nil || plugin == nil || plugin.Config == nil {
+		return "reject"
+	}
+	fallback, _ := plugin.Config["dispatchFallback"].(string)
+	if fallback == "" {
+		return "reject"
+	}
+	return fallback
 }
 
 // getGitHubToken retrieves the personal access token from the GitHub plugin config.

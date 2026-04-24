@@ -84,8 +84,8 @@ export const api = {
   listActionRuns: (actionName: string) =>
     request<ActionRun[]>('GET', `/actions/${encodeURIComponent(actionName)}/runs`),
 
-  executeAction: (name: string, inputs: Record<string, any>) =>
-    request<ActionRun>('POST', `/actions/${name}/execute`, { inputs }),
+  executeAction: (name: string, inputs: Record<string, any>, secrets?: Record<string, string>) =>
+    request<ActionRun>('POST', `/actions/${name}/execute`, { inputs, ...(secrets ? { secrets } : {}) }),
 
   getActionRun: (actionName: string, runId: string) =>
     request<ActionRun>('GET', `/actions/${actionName}/runs/${runId}`),
@@ -159,7 +159,7 @@ export const api = {
   },
 
   getGitHubSSOConfig: () =>
-    request<{ ssoEnabled: boolean }>('GET', '/auth/github/config'),
+    request<{ ssoEnabled: boolean; dispatchAsUser?: boolean }>('GET', '/auth/github/config'),
 
   getAzureSSOConfig: () =>
     request<{ ssoEnabled: boolean }>('GET', '/auth/azure/config'),

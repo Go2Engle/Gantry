@@ -81,7 +81,7 @@ const PLUGIN_SECTIONS: Record<string, Array<{
     {
       title: 'GitHub SSO',
       description: 'Let users sign in to Gantry with their GitHub account via OAuth. Requires a GitHub OAuth App.',
-      fields: ['ssoEnabled', 'oauthClientId', 'oauthClientSecret', 'defaultRole'],
+      fields: ['ssoEnabled', 'oauthClientId', 'oauthClientSecret', 'defaultRole', 'dispatchAsUser', 'dispatchFallback', 'userTokenScopes'],
       renderBanner: () => {
         const origin = window.location.origin;
         return (
@@ -209,6 +209,9 @@ const FIELD_VISIBILITY: Record<string, Record<string, VisibilityFn>> = {
     oauthClientId:      (v) => !!v.ssoEnabled,
     oauthClientSecret:  (v) => !!v.ssoEnabled,
     defaultRole:        (v) => !!v.ssoEnabled,
+    dispatchAsUser:     (v) => !!v.ssoEnabled,
+    dispatchFallback:   (v) => !!v.ssoEnabled && !!v.dispatchAsUser,
+    userTokenScopes:    (v) => !!v.ssoEnabled && !!v.dispatchAsUser,
   },
   'microsoft-azure': {
     tenantId:           (v) => !!v.ssoEnabled,

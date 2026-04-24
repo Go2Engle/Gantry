@@ -82,6 +82,59 @@ function relativeTime(dateStr: string) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function requiresGitHubUserCredential(action: Entity): boolean {
+  return action.spec?.type === 'github-action' && action.spec?.config?.credentialMode === 'user';
+}
+
+function requestGitHubUserToken(): Promise<{ token: string; login: string }> {
+  return new Promise((resolve, reject) => {
+    const popup = window.open('/api/v1/auth/github/token', 'gantry-github-token', 'width=520,height=720');
+    if (!popup) {
+      reject(new Error('GitHub authorization popup was blocked'));
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      popup.close();
+      reject(new Error('GitHub authorization timed out'));
+    }, 120000);
+    const closedPoll = window.setInterval(() => {
+      if (popup.closed) {
+        cleanup();
+        reject(new Error('GitHub authorization was cancelled'));
+      }
+    }, 500);
+
+    let cleanup = () => {};
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== 'gantry:github-token') return;
+      cleanup();
+      popup.close();
+      if (data.error) {
+        reject(new Error(data.error));
+        return;
+      }
+      if (!data.token) {
+        reject(new Error('GitHub authorization returned no token'));
+        return;
+      }
+      resolve({ token: data.token, login: data.login || '' });
+    };
+
+    cleanup = () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(closedPoll);
+      window.removeEventListener('message', onMessage);
+    };
+
+    window.addEventListener('message', onMessage);
+  });
+}
+
 // ─── Action Card ──────────────────────────────────────────────────────────────
 
 function ActionCard({
@@ -99,6 +152,7 @@ function ActionCard({
   const type = action.spec?.type ?? '';
   const category = action.spec?.category as string | undefined;
   const inputCount = Array.isArray(action.spec?.inputs) ? action.spec.inputs.length : 0;
+  const userCredentialMode = requiresGitHubUserCredential(action);
 
   return (
     <div className="group flex flex-col rounded-xl border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] transition-shadow hover:shadow-md">
@@ -131,6 +185,11 @@ function ActionCard({
           {inputCount > 0 && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--gantry-bg-tertiary)] px-2 py-0.5 text-xs text-[var(--gantry-text-secondary)]">
               {inputCount} input{inputCount !== 1 ? 's' : ''}
+            </span>
+          )}
+          {userCredentialMode && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--gantry-bg-tertiary)] px-2 py-0.5 text-xs text-[var(--gantry-text-secondary)]">
+              user GitHub token
             </span>
           )}
           {showCategory && category && (
@@ -475,7 +534,19 @@ export default function Actions() {
   const handleExecute = async (inputs: Record<string, any>) => {
     if (!executing) return;
     try {
-      const run = await api.executeAction(executing.metadata.name, inputs);
+      const secrets: Record<string, string> = {};
+      if (requiresGitHubUserCredential(executing)) {
+        const cfg = await api.getGitHubSSOConfig();
+        if (cfg.ssoEnabled && cfg.dispatchAsUser) {
+          const github = await requestGitHubUserToken();
+          secrets.githubToken = github.token;
+        }
+      }
+      const run = await api.executeAction(
+        executing.metadata.name,
+        inputs,
+        Object.keys(secrets).length > 0 ? secrets : undefined,
+      );
       setExecuting(null);
       setActiveRun(run);
     } catch (e: any) { setError(e.message); }

@@ -115,6 +115,7 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			protected.Get("/auth/me", h.GetMe)
 			protected.Post("/auth/logout", h.Logout)
 			protected.Put("/auth/me/password", h.ChangePassword)
+			protected.Get("/auth/github/token", h.GitHubOAuthTokenBegin)
 			protected.With(middleware.RequireRole("admin")).Post("/auth/register", h.Register)
 
 			// User management (admin only).

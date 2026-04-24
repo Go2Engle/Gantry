@@ -79,6 +79,24 @@
           "title": "Sync GitHub Teams",
           "description": "Automatically create groups from GitHub org teams and assign users during SSO login."
         },
+        "dispatchAsUser": {
+          "type": "boolean",
+          "title": "Run Actions as GitHub User",
+          "description": "Allow actions configured with credentialMode=user to request a one-time GitHub OAuth token from the triggering user at execution time.",
+          "default": false
+        },
+        "dispatchFallback": {
+          "type": "string",
+          "title": "User Credential Fallback",
+          "description": "What to do when a GitHub action requests user credentials but the triggering user has not connected GitHub.",
+          "enum": ["reject", "service_account"],
+          "default": "reject"
+        },
+        "userTokenScopes": {
+          "type": "string",
+          "title": "User OAuth Scopes",
+          "description": "Optional space- or comma-separated GitHub OAuth scopes for user-attributed action dispatch. Leave empty to request read:user user:email read:org repo workflow."
+        },
         "orgName": {
           "type": "string",
           "title": "Organization Name",

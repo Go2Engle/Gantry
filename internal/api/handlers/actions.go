@@ -33,7 +33,8 @@ func (h *Handlers) ListActions(w http.ResponseWriter, r *http.Request) {
 
 // executeActionRequest represents the JSON body for executing an action.
 type executeActionRequest struct {
-	Inputs map[string]any `json:"inputs,omitempty"`
+	Inputs  map[string]any    `json:"inputs,omitempty"`
+	Secrets map[string]string `json:"secrets,omitempty"`
 }
 
 // ExecuteAction handles POST /actions/{name}/execute. It creates a new action
@@ -106,7 +107,7 @@ func (h *Handlers) ExecuteAction(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Asynchronously dispatch — updates run status as it progresses.
-	go h.Dispatcher.Dispatch(actionEntity, run)
+	go h.Dispatcher.Dispatch(actionEntity, run, req.Secrets)
 
 	writeJSON(w, http.StatusCreated, run)
 }
@@ -291,7 +292,9 @@ func fetchGitHubWorkflows(token, owner, repo string) ([]GitHubWorkflow, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		var ghErr struct{ Message string `json:"message"` }
+		var ghErr struct {
+			Message string `json:"message"`
+		}
 		json.NewDecoder(resp.Body).Decode(&ghErr)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, ghErr.Message)
 	}
@@ -352,7 +355,9 @@ func fetchWorkflowInputs(token, owner, repo, workflowFile string) ([]WorkflowInp
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		var ghErr struct{ Message string `json:"message"` }
+		var ghErr struct {
+			Message string `json:"message"`
+		}
 		json.NewDecoder(resp.Body).Decode(&ghErr)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, ghErr.Message)
 	}
