@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.3](https://github.com/Go2Engle/Gantry/compare/v0.14.2...v0.14.3) (2026-04-24)
+
+
+### Bug Fixes
+
+* Fix invalid entity name handling for existing Flow entities ([#102](https://github.com/Go2Engle/Gantry/issues/102)) ([0ebe1cc](https://github.com/Go2Engle/Gantry/commit/0ebe1cc9ef34be8214dfe670e15141d07dcc5dae))
+
 ## [0.14.2](https://github.com/Go2Engle/Gantry/compare/v0.14.1...v0.14.2) (2026-04-24)
 
 
