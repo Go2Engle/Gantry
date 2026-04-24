@@ -635,6 +635,105 @@ export default function Flow() {
     };
   }, [getRenderedNodeDimensions]);
 
+  const getResizeAlignment = useCallback((
+    resizedNode: FlowNode,
+    candidate: { x: number; y: number; width: number; height: number },
+    nodeMap: Map<string, FlowNode>,
+    handle: ResizeHandle,
+    limits: { minWidth: number; minHeight: number; maxWidth: number }
+  ) => {
+    const parent = resizedNode.parentId ? nodeMap.get(resizedNode.parentId) : null;
+    const parentAbs = parent ? getAbsolutePosition(parent, nodeMap) : { x: 0, y: 0 };
+    const candidateAbs = {
+      x: parentAbs.x + candidate.x,
+      y: parentAbs.y + candidate.y,
+    };
+    const dragLeft = handle.includes('w');
+    const dragRight = handle.includes('e');
+    const dragTop = handle.includes('n');
+    const dragBottom = handle.includes('s');
+    const fixedRight = candidateAbs.x + candidate.width;
+    const fixedBottom = candidateAbs.y + candidate.height;
+
+    const verticalMatches: Array<{ delta: number; guide: number; x: number; width: number }> = [];
+    const horizontalMatches: Array<{ delta: number; guide: number; y: number; height: number }> = [];
+
+    function considerVertical(current: number, guide: number, absX: number, width: number) {
+      if (width < limits.minWidth || width > limits.maxWidth) return;
+      const delta = guide - current;
+      if (Math.abs(delta) > ALIGNMENT_SNAP_THRESHOLD) return;
+      verticalMatches.push({ delta, guide, x: absX - parentAbs.x, width });
+    }
+
+    function considerHorizontal(current: number, guide: number, absY: number, height: number) {
+      if (height < limits.minHeight) return;
+      const delta = guide - current;
+      if (Math.abs(delta) > ALIGNMENT_SNAP_THRESHOLD) return;
+      horizontalMatches.push({ delta, guide, y: absY - parentAbs.y, height });
+    }
+
+    for (const node of nodeMap.values()) {
+      if (node.id === resizedNode.id) continue;
+
+      const nodeAbs = getAbsolutePosition(node, nodeMap);
+      const nodeSize = getRenderedNodeDimensions(node);
+      const targetX = [nodeAbs.x, nodeAbs.x + nodeSize.width / 2, nodeAbs.x + nodeSize.width];
+      const targetY = [nodeAbs.y, nodeAbs.y + nodeSize.height / 2, nodeAbs.y + nodeSize.height];
+
+      if (dragLeft || dragRight) {
+        const left = candidateAbs.x;
+        const centerX = left + candidate.width / 2;
+        const right = left + candidate.width;
+
+        for (const target of targetX) {
+          if (dragLeft) {
+            considerVertical(left, target, target, fixedRight - target);
+            const centeredWidth = (fixedRight - target) * 2;
+            considerVertical(centerX, target, fixedRight - centeredWidth, centeredWidth);
+          }
+          if (dragRight) {
+            considerVertical(right, target, left, target - left);
+            const centeredWidth = (target - left) * 2;
+            considerVertical(centerX, target, left, centeredWidth);
+          }
+        }
+      }
+
+      if (dragTop || dragBottom) {
+        const top = candidateAbs.y;
+        const centerY = top + candidate.height / 2;
+        const bottom = top + candidate.height;
+
+        for (const target of targetY) {
+          if (dragTop) {
+            considerHorizontal(top, target, target, fixedBottom - target);
+            const centeredHeight = (fixedBottom - target) * 2;
+            considerHorizontal(centerY, target, fixedBottom - centeredHeight, centeredHeight);
+          }
+          if (dragBottom) {
+            considerHorizontal(bottom, target, top, target - top);
+            const centeredHeight = (target - top) * 2;
+            considerHorizontal(centerY, target, top, centeredHeight);
+          }
+        }
+      }
+    }
+
+    const bestVertical = verticalMatches.sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))[0];
+    const bestHorizontal = horizontalMatches.sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))[0];
+
+    return {
+      x: bestVertical?.x ?? candidate.x,
+      y: bestHorizontal?.y ?? candidate.y,
+      width: bestVertical?.width ?? candidate.width,
+      height: bestHorizontal?.height ?? candidate.height,
+      guides: {
+        vertical: bestVertical?.guide ?? null,
+        horizontal: bestHorizontal?.guide ?? null,
+      },
+    };
+  }, [getRenderedNodeDimensions]);
+
   function nudgeSelectedNodes(dx: number, dy: number) {
     if (!flowSettings.canEdit || selectedNodeIds.size === 0) return;
     const ids = selectedNodeIds;
@@ -866,61 +965,79 @@ export default function Flow() {
       const dragRight = currentResize.handle.includes('e');
       const dragTop = currentResize.handle.includes('n');
       const dragBottom = currentResize.handle.includes('s');
+      let nextGuides = { vertical: null as number | null, horizontal: null as number | null };
 
-      setFlowSpec((prev) => ({
-        ...prev,
-        nodes: prev.nodes.map((node) => {
-          if (node.id !== currentResize.nodeId) return node;
+      setFlowSpec((prev) => {
+        const nodeMap = new Map(prev.nodes.map((n) => [n.id, n]));
+        const resizingNode = nodeMap.get(currentResize.nodeId);
+        if (!resizingNode) return prev;
 
-          let nextX = currentResize.startX;
-          let nextY = currentResize.startY;
-          let nextWidth = currentResize.startWidth;
-          let nextHeight = currentResize.startHeight;
+        let nextX = currentResize.startX;
+        let nextY = currentResize.startY;
+        let nextWidth = currentResize.startWidth;
+        let nextHeight = currentResize.startHeight;
 
-          if (dragRight) {
-            nextWidth = currentResize.startWidth + dx;
-          }
-          if (dragLeft) {
-            nextWidth = currentResize.startWidth - dx;
-            nextX = currentResize.startX + dx;
-          }
-          if (dragBottom) {
-            nextHeight = currentResize.startHeight + dy;
-          }
-          if (dragTop) {
-            nextHeight = currentResize.startHeight - dy;
-            nextY = currentResize.startY + dy;
-          }
+        if (dragRight) {
+          nextWidth = currentResize.startWidth + dx;
+        }
+        if (dragLeft) {
+          nextWidth = currentResize.startWidth - dx;
+          nextX = currentResize.startX + dx;
+        }
+        if (dragBottom) {
+          nextHeight = currentResize.startHeight + dy;
+        }
+        if (dragTop) {
+          nextHeight = currentResize.startHeight - dy;
+          nextY = currentResize.startY + dy;
+        }
 
-          if (nextWidth < minWidth) {
-            if (dragLeft) nextX = currentResize.startX + currentResize.startWidth - minWidth;
-            nextWidth = minWidth;
-          }
-          if (nextWidth > MAX_NODE_WIDTH) {
-            if (dragLeft) nextX = currentResize.startX + currentResize.startWidth - MAX_NODE_WIDTH;
-            nextWidth = MAX_NODE_WIDTH;
-          }
-          if (nextHeight < minHeight) {
-            if (dragTop) nextY = currentResize.startY + currentResize.startHeight - minHeight;
-            nextHeight = minHeight;
-          }
+        if (nextWidth < minWidth) {
+          if (dragLeft) nextX = currentResize.startX + currentResize.startWidth - minWidth;
+          nextWidth = minWidth;
+        }
+        if (nextWidth > MAX_NODE_WIDTH) {
+          if (dragLeft) nextX = currentResize.startX + currentResize.startWidth - MAX_NODE_WIDTH;
+          nextWidth = MAX_NODE_WIDTH;
+        }
+        if (nextHeight < minHeight) {
+          if (dragTop) nextY = currentResize.startY + currentResize.startHeight - minHeight;
+          nextHeight = minHeight;
+        }
 
-          return {
-            ...node,
-            position: {
-              x: nextX,
-              y: nextY,
-            },
-            width: nextWidth,
-            height: nextHeight,
-          };
-        }),
-      }));
+        const aligned = getResizeAlignment(
+          resizingNode,
+          { x: nextX, y: nextY, width: nextWidth, height: nextHeight },
+          nodeMap,
+          currentResize.handle,
+          { minWidth, minHeight, maxWidth: MAX_NODE_WIDTH }
+        );
+        nextGuides = aligned.guides;
+
+        return {
+          ...prev,
+          nodes: prev.nodes.map((node) => (
+            node.id === currentResize.nodeId
+              ? {
+                  ...node,
+                  position: {
+                    x: aligned.x,
+                    y: aligned.y,
+                  },
+                  width: aligned.width,
+                  height: aligned.height,
+                }
+              : node
+          )),
+        };
+      });
+      setAlignmentGuides((prev) => (guidesMatch(prev, nextGuides) ? prev : nextGuides));
       setDirty(true);
     }
 
     function handleUp() {
       document.body.style.cursor = '';
+      setAlignmentGuides({ vertical: null, horizontal: null });
       setResizing(null);
     }
 
@@ -933,7 +1050,7 @@ export default function Flow() {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [resizing, canvasZoom]);
+  }, [resizing, canvasZoom, getResizeAlignment]);
 
   useEffect(() => {
     if (!panning) return;
@@ -2278,28 +2395,6 @@ export default function Flow() {
                     })}
                   </svg>
 
-                  {alignmentGuides.vertical !== null && (
-                    <div
-                      className="pointer-events-none absolute top-0 opacity-70"
-                      style={{
-                        left: alignmentGuides.vertical,
-                        height: stageHeight,
-                        borderLeft: '1px dashed var(--gantry-accent)',
-                      }}
-                    />
-                  )}
-
-                  {alignmentGuides.horizontal !== null && (
-                    <div
-                      className="pointer-events-none absolute left-0 opacity-70"
-                      style={{
-                        top: alignmentGuides.horizontal,
-                        width: stageWidth,
-                        borderTop: '1px dashed var(--gantry-accent)',
-                      }}
-                    />
-                  )}
-
                   {sortedNodes.map((node) => {
                     const active = node.id === selectedNodeId;
                     const multiSelected = selectedNodeIds.has(node.id);
@@ -2555,6 +2650,30 @@ export default function Flow() {
                       </div>
                     );
                   })}
+
+                  {alignmentGuides.vertical !== null && (
+                    <div
+                      className="pointer-events-none absolute top-0 opacity-70"
+                      style={{
+                        left: alignmentGuides.vertical,
+                        height: stageHeight,
+                        borderLeft: '1px dashed var(--gantry-accent)',
+                        zIndex: 2147483647,
+                      }}
+                    />
+                  )}
+
+                  {alignmentGuides.horizontal !== null && (
+                    <div
+                      className="pointer-events-none absolute left-0 opacity-70"
+                      style={{
+                        top: alignmentGuides.horizontal,
+                        width: stageWidth,
+                        borderTop: '1px dashed var(--gantry-accent)',
+                        zIndex: 2147483647,
+                      }}
+                    />
+                  )}
 
                   {flowSpec.nodes.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
