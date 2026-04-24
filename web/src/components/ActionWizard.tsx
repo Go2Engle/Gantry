@@ -94,6 +94,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
   const [loadingWorkflows, setLoadingWorkflows] = useState(false);
   const [workflowError, setWorkflowError] = useState('');
   const [importingInputs, setImportingInputs] = useState(false);
+  const [gitHubUserDispatchEnabled, setGitHubUserDispatchEnabled] = useState(false);
 
   // Step 3: Inputs
   const [inputs, setInputs] = useState<ActionInputDef[]>(
@@ -151,6 +152,18 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
       }
     });
   }, []);
+
+  useEffect(() => {
+    api.getGitHubSSOConfig()
+      .then((cfg) => setGitHubUserDispatchEnabled(!!cfg.ssoEnabled && !!cfg.dispatchAsUser))
+      .catch(() => setGitHubUserDispatchEnabled(false));
+  }, []);
+
+  useEffect(() => {
+    if (!gitHubUserDispatchEnabled && ghConfig.credentialMode === 'user') {
+      setGhConfig((c) => ({ ...c, credentialMode: 'service_account' }));
+    }
+  }, [gitHubUserDispatchEnabled, ghConfig.credentialMode]);
 
   // Load workflows when repo URL changes
   useEffect(() => {
@@ -524,10 +537,12 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
                       className="w-full rounded-md border border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none"
                     >
                       <option value="service_account">Service account</option>
-                      <option value="user">Prompt triggering user</option>
+                      <option value="user" disabled={!gitHubUserDispatchEnabled}>Prompt triggering user</option>
                     </select>
-                    <p className="mt-0.5 text-xs text-[var(--gantry-text-secondary)]">
-                      User mode requests a one-time GitHub token when the action runs.
+                    <p className={`mt-0.5 text-xs ${gitHubUserDispatchEnabled ? 'text-[var(--gantry-text-secondary)]' : 'text-[var(--gantry-danger)]'}`}>
+                      {gitHubUserDispatchEnabled
+                        ? 'User mode requests a one-time GitHub token when the action runs.'
+                        : 'Enable Run Actions as GitHub User in the GitHub plugin settings to use user credentials.'}
                     </p>
                   </div>
 

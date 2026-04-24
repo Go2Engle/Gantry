@@ -269,12 +269,16 @@ func credentialModeForOutput(mode string) string {
 
 func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode string, secrets map[string]string) (token, source string, err error) {
 	if credentialMode == "user" {
+		dispatchAsUser, fallback := m.githubUserDispatchPolicy(ctx)
+		if !dispatchAsUser {
+			return "", "", fmt.Errorf("GitHub user-attributed action dispatch is not enabled")
+		}
 		if secrets != nil {
 			if token := strings.TrimSpace(secrets["githubToken"]); token != "" {
 				return token, "user", nil
 			}
 		}
-		if m.githubUserFallback(ctx) != "service_account" {
+		if fallback != "service_account" {
 			return "", "", fmt.Errorf("GitHub user authorization required for this action")
 		}
 		token, err := m.getGitHubToken(ctx)
@@ -291,16 +295,17 @@ func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode s
 	return token, "service_account", nil
 }
 
-func (m *Manager) githubUserFallback(ctx context.Context) string {
+func (m *Manager) githubUserDispatchPolicy(ctx context.Context) (bool, string) {
 	plugin, err := m.DB.GetPlugin(ctx, "github")
 	if err != nil || plugin == nil || plugin.Config == nil {
-		return "reject"
+		return false, "reject"
 	}
+	dispatchAsUser, _ := plugin.Config["dispatchAsUser"].(bool)
 	fallback, _ := plugin.Config["dispatchFallback"].(string)
 	if fallback == "" {
-		return "reject"
+		fallback = "reject"
 	}
-	return fallback
+	return dispatchAsUser, fallback
 }
 
 // getGitHubToken retrieves the personal access token from the GitHub plugin config.
