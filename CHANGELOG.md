@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/Go2Engle/Gantry/compare/v0.14.1...v0.14.2) (2026-04-24)
+
+
+### Bug Fixes
+
+* Update flow snap guides and resize alignment ([#99](https://github.com/Go2Engle/Gantry/issues/99)) ([d121af7](https://github.com/Go2Engle/Gantry/commit/d121af727e2b4ada2b54f954bac74b846adfeab5))
+
 ## [0.14.1](https://github.com/Go2Engle/Gantry/compare/v0.14.0...v0.14.1) (2026-04-24)
 
 
