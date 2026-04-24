@@ -57,16 +57,16 @@ export const api = {
     request<Entity[]>('GET', kind ? `/entities/${kind}` : '/entities'),
 
   getEntity: (kind: string, name: string, namespace?: string) =>
-    request<Entity>('GET', `/entities/${kind}/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<Entity>('GET', `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   createEntity: (entity: Entity) =>
     request<Entity>('POST', '/entities', entity),
 
   updateEntity: (kind: string, name: string, entity: Entity, namespace?: string) =>
-    request<Entity>('PUT', `/entities/${kind}/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, entity),
+    request<Entity>('PUT', `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, entity),
 
   deleteEntity: (kind: string, name: string, namespace?: string) =>
-    request<void>('DELETE', `/entities/${kind}/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<void>('DELETE', `/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   search: (q: string) =>
     request<SearchResult[]>('GET', `/search?q=${encodeURIComponent(q)}`),
@@ -222,7 +222,7 @@ export const api = {
   createFlow: (metadata: Entity['metadata'], spec: FlowSpec) =>
     request<Entity>('POST', '/plugins/flow/entities', { kind: 'Flow', apiVersion: 'gantry.io/v1', metadata, spec }),
   updateFlow: (name: string, metadata: Entity['metadata'], spec: FlowSpec, namespace?: string) =>
-    request<Entity>('PUT', `/plugins/flow/entities/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, {
+    request<Entity>('PUT', `/plugins/flow/entities/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`, {
       kind: 'Flow',
       apiVersion: 'gantry.io/v1',
       metadata: {
@@ -232,7 +232,7 @@ export const api = {
       spec,
     }),
   deleteFlow: (name: string, namespace?: string) =>
-    request<void>('DELETE', `/plugins/flow/entities/${name}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+    request<void>('DELETE', `/plugins/flow/entities/${encodeURIComponent(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
   // Health check proxy
   checkHealth: (url: string, signal?: AbortSignal) =>

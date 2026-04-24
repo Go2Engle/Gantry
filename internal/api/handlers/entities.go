@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -39,6 +40,22 @@ func marshalEntityState(e *entity.Entity) string {
 		return ""
 	}
 	return string(b)
+}
+
+func entityNotFoundMessage(kind, namespace, name string) string {
+	if namespace == "" {
+		namespace = entity.DefaultNamespace
+	}
+	if kind == "" {
+		if name == "" {
+			return fmt.Sprintf("entity not found in namespace %q", namespace)
+		}
+		return fmt.Sprintf("entity %q not found in namespace %q", name, namespace)
+	}
+	if name == "" {
+		return fmt.Sprintf("%s entity not found in namespace %q", kind, namespace)
+	}
+	return fmt.Sprintf("%s entity %q not found in namespace %q", kind, name, namespace)
 }
 
 // ListEntities handles GET /entities.
@@ -94,7 +111,7 @@ func (h *Handlers) GetEntity(w http.ResponseWriter, r *http.Request) {
 	e, err := h.DB.GetEntity(r.Context(), kind, namespace, name)
 	if err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, "entity not found")
+			writeError(w, http.StatusNotFound, entityNotFoundMessage(kind, namespace, name))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to get entity")
@@ -209,7 +226,7 @@ func (h *Handlers) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.DB.UpdateEntity(r.Context(), &e); err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, "entity not found")
+			writeError(w, http.StatusNotFound, entityNotFoundMessage(e.Kind, ns, e.Metadata.Name))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to update entity")
@@ -270,7 +287,7 @@ func (h *Handlers) DeleteEntity(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.DB.DeleteEntity(r.Context(), kind, namespace, name); err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, "entity not found")
+			writeError(w, http.StatusNotFound, entityNotFoundMessage(kind, namespace, name))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to delete entity")

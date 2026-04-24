@@ -222,7 +222,7 @@ func (h *Handlers) UpdateFlowEntity(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.DB.UpdateEntity(r.Context(), &e); err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, "entity not found")
+			writeError(w, http.StatusNotFound, entityNotFoundMessage(e.Kind, ns, e.Metadata.Name))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to update flow")
@@ -279,7 +279,7 @@ func (h *Handlers) DeleteFlowEntity(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.DB.DeleteEntity(r.Context(), "Flow", namespace, name); err != nil {
 		if errors.Is(err, entity.ErrEntityNotFound) {
-			writeError(w, http.StatusNotFound, "entity not found")
+			writeError(w, http.StatusNotFound, entityNotFoundMessage("Flow", namespace, name))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to delete flow")
