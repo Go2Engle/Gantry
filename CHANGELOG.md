@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/Go2Engle/Gantry/compare/v0.14.0...v0.14.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* **admin:** finish plugin settings action alignment ([#96](https://github.com/Go2Engle/Gantry/issues/96)) ([6d0969e](https://github.com/Go2Engle/Gantry/commit/6d0969ef5f10e15be4c6e97c79f88c70e2b07091))
+* Flow node resizing and wrapping ([#98](https://github.com/Go2Engle/Gantry/issues/98)) ([636747f](https://github.com/Go2Engle/Gantry/commit/636747f1967f9fc24b305b103fcb64a674f162c7))
+
 ## [0.14.0](https://github.com/Go2Engle/Gantry/compare/v0.13.0...v0.14.0) (2026-04-23)
 
 
