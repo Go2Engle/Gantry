@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.4](https://github.com/Go2Engle/Gantry/compare/v0.14.3...v0.14.4) (2026-04-27)
+
+
+### Features
+
+* use GitHub user for actions ([#104](https://github.com/Go2Engle/Gantry/issues/104)) ([0c271e6](https://github.com/Go2Engle/Gantry/commit/0c271e6f8860471cf108760445d5c612443cdca0))
+
 ## [0.14.3](https://github.com/Go2Engle/Gantry/compare/v0.14.2...v0.14.3) (2026-04-24)
 
 
