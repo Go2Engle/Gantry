@@ -171,8 +171,9 @@ func (d *DB) Migrate() error {
 }
 
 func (d *DB) ensureEntitiesFTSSchema() error {
+	ctx := context.Background()
 	columns := map[string]bool{}
-	rows, err := d.Query(`PRAGMA table_info(entities_fts)`)
+	rows, err := d.queryRows(ctx, `PRAGMA table_info(entities_fts)`)
 	if err != nil {
 		return fmt.Errorf("checking entities_fts schema: %w", err)
 	}
@@ -216,7 +217,7 @@ func (d *DB) ensureEntitiesFTSSchema() error {
 		}
 	}
 	if !needsRebuild {
-		triggersOK, err := d.entitiesFTSTriggersExist()
+		triggersOK, err := d.entitiesFTSTriggersExist(ctx)
 		if err != nil {
 			return err
 		}
@@ -238,15 +239,15 @@ func (d *DB) ensureEntitiesFTSSchema() error {
 		`INSERT INTO entities_fts(entities_fts) VALUES('rebuild')`,
 	}
 	for _, stmt := range statements {
-		if _, err := d.Exec(stmt); err != nil {
+		if _, err := d.exec(ctx, stmt); err != nil {
 			return fmt.Errorf("upgrading entities_fts schema: %w", err)
 		}
 	}
 	return nil
 }
 
-func (d *DB) entitiesFTSTriggersExist() (bool, error) {
-	rows, err := d.Query(`
+func (d *DB) entitiesFTSTriggersExist(ctx context.Context) (bool, error) {
+	rows, err := d.queryRows(ctx, `
 		SELECT name, sql
 		FROM sqlite_master
 		WHERE type = 'trigger'
@@ -264,11 +265,11 @@ func (d *DB) entitiesFTSTriggersExist() (bool, error) {
 		"entities_au": normalizeSQLiteSchemaSQL(entitiesFTSUpdateTriggerSQL),
 	}
 	for rows.Next() {
-		var name, sql string
-		if err := rows.Scan(&name, &sql); err != nil {
+		var name, triggerSQL string
+		if err := rows.Scan(&name, &triggerSQL); err != nil {
 			return false, fmt.Errorf("scanning entities_fts trigger: %w", err)
 		}
-		found[name] = normalizeSQLiteSchemaSQL(sql) == expected[name]
+		found[name] = normalizeSQLiteSchemaSQL(triggerSQL) == expected[name]
 	}
 	if err := rows.Err(); err != nil {
 		return false, fmt.Errorf("iterating entities_fts triggers: %w", err)

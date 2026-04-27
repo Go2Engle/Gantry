@@ -59,13 +59,38 @@ const KIND_META: Record<string, { icon: React.ReactNode; description: string; co
   },
 };
 
+function appendSearchValue(value: unknown, parts: string[], seen: WeakSet<object>) {
+  if (value == null) return;
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    parts.push(String(value));
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) appendSearchValue(item, parts, seen);
+    return;
+  }
+
+  if (typeof value === 'object') {
+    if (seen.has(value)) return;
+    seen.add(value);
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      parts.push(key);
+      appendSearchValue(nested, parts, seen);
+    }
+  }
+}
+
 function entitySearchText(entity: Entity) {
-  return JSON.stringify({
+  const parts: string[] = [];
+  appendSearchValue({
     kind: entity.kind,
     apiVersion: entity.apiVersion,
     metadata: entity.metadata,
     spec: entity.spec,
-  }).toLowerCase();
+  }, parts, new WeakSet<object>());
+  return parts.join(' ').toLowerCase();
 }
 
 export default function Catalog() {
