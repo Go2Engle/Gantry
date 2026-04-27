@@ -537,10 +537,14 @@ export default function Actions() {
       const secrets: Record<string, string> = {};
       if (requiresGitHubUserCredential(executing)) {
         const cfg = await api.getGitHubSSOConfig();
-        if (cfg.ssoEnabled && cfg.dispatchAsUser) {
-          const github = await requestGitHubUserToken();
-          secrets.githubToken = github.token;
+        if (!cfg.dispatchAsUser) {
+          throw new Error('GitHub user credentials are not enabled for this action.');
         }
+        const github = await requestGitHubUserToken();
+        if (!github.token) {
+          throw new Error('GitHub authorization returned no token');
+        }
+        secrets.githubToken = github.token;
       }
       const run = await api.executeAction(
         executing.metadata.name,

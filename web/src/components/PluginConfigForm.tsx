@@ -47,9 +47,9 @@ const PLUGIN_SECTIONS: Record<string, Array<{
       fields: ['authMode', 'personalAccessToken', 'appId', 'privateKey', 'installationId'],
     },
     {
-      title: 'GitHub SSO',
-      description: 'Let users sign in to Gantry with their GitHub account via OAuth. Requires a GitHub OAuth App.',
-      fields: ['ssoEnabled', 'oauthClientId', 'oauthClientSecret', 'defaultRole'],
+      title: 'GitHub OAuth',
+      description: 'Let users sign in with GitHub or authorize user-attributed action dispatch. Requires a GitHub OAuth App.',
+      fields: ['ssoEnabled', 'oauthClientId', 'oauthClientSecret', 'defaultRole', 'dispatchAsUser', 'dispatchFallback', 'userTokenScopes'],
       renderBanner: () => {
         const origin = window.location.origin;
         return (
@@ -155,9 +155,12 @@ const FIELD_VISIBILITY: Record<string, Record<string, VisibilityFn>> = {
     appId: (v) => v.authMode === 'app',
     privateKey: (v) => v.authMode === 'app',
     installationId: (v) => v.authMode === 'app',
-    oauthClientId: (v) => !!v.ssoEnabled,
-    oauthClientSecret: (v) => !!v.ssoEnabled,
+    oauthClientId: (v) => !!v.ssoEnabled || !!v.dispatchAsUser,
+    oauthClientSecret: (v) => !!v.ssoEnabled || !!v.dispatchAsUser,
     defaultRole: (v) => !!v.ssoEnabled,
+    dispatchAsUser: () => true,
+    dispatchFallback: (v) => !!v.dispatchAsUser,
+    userTokenScopes: (v) => !!v.dispatchAsUser,
   },
   'microsoft-azure': {
     tenantId: (v) => !!v.ssoEnabled,

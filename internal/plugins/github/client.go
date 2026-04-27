@@ -227,6 +227,7 @@ func ExchangeOAuthCodeWithResponse(code, clientID, clientSecret string) (*OAuthT
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", "Gantry/1.0")
 
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	res, err := httpClient.Do(req)
@@ -270,6 +271,7 @@ func FetchUserWithToken(accessToken string) (*GitHubUser, error) {
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "Gantry/1.0")
 
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	res, err := httpClient.Do(req)
@@ -277,6 +279,16 @@ func FetchUserWithToken(accessToken string) (*GitHubUser, error) {
 		return nil, err
 	}
 	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var ghErr struct {
+			Message string `json:"message"`
+		}
+		_ = json.NewDecoder(res.Body).Decode(&ghErr)
+		if ghErr.Message == "" {
+			ghErr.Message = res.Status
+		}
+		return nil, fmt.Errorf("GitHub API returned HTTP %d: %s", res.StatusCode, ghErr.Message)
+	}
 
 	var user GitHubUser
 	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {

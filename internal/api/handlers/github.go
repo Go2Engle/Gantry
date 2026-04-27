@@ -26,9 +26,10 @@ func (h *Handlers) GetGitHubSSOConfig(w http.ResponseWriter, r *http.Request) {
 	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
 	clientID, _ := p.Config["oauthClientId"].(string)
 	dispatchAsUser, _ := p.Config["dispatchAsUser"].(bool)
+	oauthConfigured := clientID != ""
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ssoEnabled":     ssoEnabled && clientID != "",
-		"dispatchAsUser": dispatchAsUser,
+		"ssoEnabled":     ssoEnabled && oauthConfigured,
+		"dispatchAsUser": dispatchAsUser && oauthConfigured,
 	})
 }
 
@@ -89,14 +90,12 @@ func (h *Handlers) GitHubOAuthTokenBegin(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "GitHub plugin not installed or not enabled")
 		return
 	}
-	ssoEnabled, _ := p.Config["ssoEnabled"].(bool)
 	clientID, _ := p.Config["oauthClientId"].(string)
-	if !ssoEnabled || clientID == "" {
-		writeError(w, http.StatusBadRequest, "GitHub OAuth is not configured")
+	if clientID == "" {
+		writeError(w, http.StatusBadRequest, "GitHub OAuth client is not configured")
 		return
 	}
-	dispatchAsUser, _ := p.Config["dispatchAsUser"].(bool)
-	if !dispatchAsUser {
+	if dispatchAsUser, _ := p.Config["dispatchAsUser"].(bool); !dispatchAsUser {
 		writeError(w, http.StatusBadRequest, "GitHub user-attributed action dispatch is not enabled")
 		return
 	}
@@ -125,7 +124,9 @@ func (h *Handlers) GitHubOAuthTokenBegin(w http.ResponseWriter, r *http.Request)
 // fetches the GitHub user, finds or creates a Gantry account, issues a JWT,
 // then redirects to the frontend with the token in the query string.
 func (h *Handlers) GitHubOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	if tokenStateCookie, err := r.Cookie("gh_oauth_token_state"); err == nil {
+	if tokenStateCookie, err := r.Cookie("gh_oauth_token_state"); err == nil &&
+		tokenStateCookie.Value != "" &&
+		tokenStateCookie.Value == r.URL.Query().Get("state") {
 		h.githubOAuthTokenCallback(w, r, tokenStateCookie.Value)
 		return
 	}
@@ -330,12 +331,14 @@ func (h *Handlers) githubOAuthTokenCallback(w http.ResponseWriter, r *http.Reque
 	clientSecret, _ := p.Config["oauthClientSecret"].(string)
 	accessToken, err := ghplugin.ExchangeOAuthCode(code, clientID, clientSecret)
 	if err != nil {
-		writeGitHubTokenPopup(w, "", "", "exchange oauth code: "+err.Error())
+		log.Printf("github token auth: exchange oauth code failed: %v", err)
+		writeGitHubTokenPopup(w, "", "", "failed to exchange oauth code")
 		return
 	}
 	ghUser, err := ghplugin.FetchUserWithToken(accessToken)
 	if err != nil {
-		writeGitHubTokenPopup(w, "", "", "fetch GitHub user: "+err.Error())
+		log.Printf("github token auth: fetch GitHub user failed: %v", err)
+		writeGitHubTokenPopup(w, "", "", "failed to fetch GitHub user")
 		return
 	}
 	writeGitHubTokenPopup(w, accessToken, ghUser.Login, "")

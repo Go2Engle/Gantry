@@ -155,7 +155,7 @@ export default function ActionWizard({ existing, onSave, onClose }: Props) {
 
   useEffect(() => {
     api.getGitHubSSOConfig()
-      .then((cfg) => setGitHubUserDispatchEnabled(!!cfg.ssoEnabled && !!cfg.dispatchAsUser))
+      .then((cfg) => setGitHubUserDispatchEnabled(!!cfg.dispatchAsUser))
       .catch(() => setGitHubUserDispatchEnabled(false));
   }, []);
 

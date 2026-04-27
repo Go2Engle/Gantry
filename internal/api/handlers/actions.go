@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/go2engle/gantry/internal/db"
 	"github.com/go2engle/gantry/internal/entity"
 	"github.com/go2engle/gantry/internal/events"
+	ghplugin "github.com/go2engle/gantry/internal/plugins/github"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,6 +65,11 @@ func (h *Handlers) ExecuteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := h.validateExecuteActionSecrets(r, req.Secrets); err != nil {
+		log.Printf("github action user token validation failed: %v", err)
+		writeError(w, http.StatusForbidden, "GitHub user token does not match the authenticated Gantry user")
+		return
+	}
 
 	// Serialize inputs for storage.
 	inputsJSON := ""
@@ -110,6 +117,53 @@ func (h *Handlers) ExecuteAction(w http.ResponseWriter, r *http.Request) {
 	go h.Dispatcher.Dispatch(actionEntity, run, req.Secrets)
 
 	writeJSON(w, http.StatusCreated, run)
+}
+
+func (h *Handlers) validateExecuteActionSecrets(r *http.Request, secrets map[string]string) error {
+	if secrets == nil {
+		return nil
+	}
+	token := strings.TrimSpace(secrets["githubToken"])
+	if token == "" {
+		delete(secrets, "githubToken")
+		return nil
+	}
+	secrets["githubToken"] = token
+
+	claims := middleware.GetClaims(r.Context())
+	if claims == nil || claims.UserID == "" {
+		return fmt.Errorf("missing authenticated user claims")
+	}
+
+	ghUser, err := ghplugin.FetchUserWithToken(token)
+	if err != nil {
+		return fmt.Errorf("fetch GitHub user for action token: %w", err)
+	}
+	if ghUser == nil || strings.TrimSpace(ghUser.Login) == "" {
+		return fmt.Errorf("GitHub token did not identify a user")
+	}
+
+	githubUsername := "github:" + ghUser.Login
+	if strings.EqualFold(claims.Username, githubUsername) {
+		return nil
+	}
+
+	currentUser, err := h.DB.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || currentUser == nil {
+		return fmt.Errorf("current Gantry user %q not found", claims.UserID)
+	}
+	if strings.EqualFold(currentUser.Username, githubUsername) {
+		return nil
+	}
+
+	if ghUser.Email != "" {
+		usersByEmail, err := h.DB.GetUsersByEmail(r.Context(), ghUser.Email)
+		if err == nil && len(usersByEmail) == 1 && usersByEmail[0].ID == currentUser.ID {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("GitHub token belongs to %q, not Gantry user %q", ghUser.Login, currentUser.Username)
 }
 
 // ListAllActionRuns handles GET /actions/runs. It returns recent runs across

@@ -261,13 +261,17 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 }
 
 func credentialModeForOutput(mode string) string {
-	if mode == "user" {
+	switch mode {
+	case "user":
 		return "user"
+	case "":
+		return "unset"
+	default:
+		return "service_account"
 	}
-	return "service_account"
 }
 
-func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode string, secrets map[string]string) (token, source string, err error) {
+func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode string, secrets map[string]string) (string, string, error) {
 	if credentialMode == "user" {
 		dispatchAsUser, fallback := m.githubUserDispatchPolicy(ctx)
 		if !dispatchAsUser {
@@ -279,7 +283,7 @@ func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode s
 			}
 		}
 		if fallback != "service_account" {
-			return "", "", fmt.Errorf("GitHub user authorization required for this action")
+			return "", "", fmt.Errorf("GitHub user authorization required for this action; complete the OAuth popup or re-authorize GitHub")
 		}
 		token, err := m.getGitHubToken(ctx)
 		if err != nil {
@@ -288,7 +292,7 @@ func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode s
 		return token, "service_account_fallback", nil
 	}
 
-	token, err = m.getGitHubToken(ctx)
+	token, err := m.getGitHubToken(ctx)
 	if err != nil {
 		return "", "", fmt.Errorf("no GitHub token available (configure the GitHub plugin or set config.token): %w", err)
 	}
@@ -297,7 +301,7 @@ func (m *Manager) resolveGitHubActionToken(ctx context.Context, credentialMode s
 
 func (m *Manager) githubUserDispatchPolicy(ctx context.Context) (bool, string) {
 	plugin, err := m.DB.GetPlugin(ctx, "github")
-	if err != nil || plugin == nil || plugin.Config == nil {
+	if err != nil || plugin == nil || !plugin.Enabled || plugin.Config == nil {
 		return false, "reject"
 	}
 	dispatchAsUser, _ := plugin.Config["dispatchAsUser"].(bool)

@@ -29,7 +29,8 @@
         "personalAccessToken": {
           "type": "string",
           "title": "Personal Access Token",
-          "description": "GitHub PAT with repo and read:org scopes. Required when authMode=pat."
+          "description": "GitHub PAT with repo and read:org scopes. Required when authMode=pat.",
+          "secret": true
         },
         "appId": {
           "type": "string",
@@ -39,7 +40,8 @@
         "privateKey": {
           "type": "string",
           "title": "Private Key (PEM)",
-          "description": "PEM-encoded RSA private key for your GitHub App. Required when authMode=app."
+          "description": "PEM-encoded RSA private key for your GitHub App. Required when authMode=app.",
+          "secret": true
         },
         "installationId": {
           "type": "string",
@@ -54,12 +56,13 @@
         "oauthClientId": {
           "type": "string",
           "title": "OAuth App Client ID",
-          "description": "Client ID from your GitHub OAuth App. Required when ssoEnabled=true."
+          "description": "Client ID from your GitHub OAuth App. Required when ssoEnabled=true or dispatchAsUser=true."
         },
         "oauthClientSecret": {
           "type": "string",
           "title": "OAuth App Client Secret",
-          "description": "Client secret from your GitHub OAuth App. Required when ssoEnabled=true."
+          "description": "Client secret from your GitHub OAuth App. Required when ssoEnabled=true or dispatchAsUser=true.",
+          "secret": true
         },
         "autoProvision": {
           "type": "boolean",
