@@ -9,6 +9,40 @@ const (
 	DefaultAdminPasswordHash = "$2a$10$eMgfxZdz20Vk.9EKPJ4oP.g99eQ1JgaHQs/JH7v2fpZZykUcN1Q8y"
 )
 
+const entitiesFTSTableSQL = `CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+	name,
+	namespace,
+	title,
+	description,
+	tags,
+	kind,
+	owner,
+	annotations,
+	labels,
+	spec,
+	api_version,
+	created_by,
+	content='entities',
+	content_rowid='rowid'
+)`
+
+const entitiesFTSInsertTriggerSQL = `CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
+	INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+	VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
+END`
+
+const entitiesFTSDeleteTriggerSQL = `CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
+	INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+	VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
+END`
+
+const entitiesFTSUpdateTriggerSQL = `CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
+	INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+	VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
+	INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+	VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
+END`
+
 // allMigrations returns the ordered list of SQL migration statements.
 // Each statement is idempotent (using IF NOT EXISTS) so migrations can be
 // run on every startup without harm.
@@ -254,40 +288,12 @@ func allMigrations(dbType string) []string {
 	if dbType == "sqlite" {
 		migrations = append(migrations,
 			// FTS5 virtual table for full-text search across entities.
-			`CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
-				name,
-				namespace,
-				title,
-				description,
-				tags,
-				kind,
-				owner,
-				annotations,
-				labels,
-				spec,
-				api_version,
-				created_by,
-				content='entities',
-				content_rowid='rowid'
-			)`,
+			entitiesFTSTableSQL,
 
 			// Triggers to keep the FTS index in sync with the entities table.
-			`CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
-				INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-				VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
-			END`,
-
-			`CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
-				INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-				VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
-			END`,
-
-			`CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
-				INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-				VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
-				INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-				VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
-			END`,
+			entitiesFTSInsertTriggerSQL,
+			entitiesFTSDeleteTriggerSQL,
+			entitiesFTSUpdateTriggerSQL,
 		)
 	}
 

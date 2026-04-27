@@ -7,8 +7,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
-	"unicode"
+
+	"github.com/go2engle/gantry/internal/search/fts"
 )
 
 // Result represents a single search hit from the FTS5 index.
@@ -42,7 +42,7 @@ func (s *Service) Search(ctx context.Context, query string) ([]*Result, error) {
 	// Sanitize: FTS5 treats punctuation such as ':', '-', '/', and '"' as
 	// syntax. Those characters also appear in common entity values like URLs,
 	// so normalize them into token boundaries before adding prefix matching.
-	ftsQuery := sanitizeFTS5(query)
+	ftsQuery := fts.SanitizeQuery(query)
 	if ftsQuery == "" {
 		return nil, nil
 	}
@@ -75,28 +75,6 @@ func (s *Service) Search(ctx context.Context, query string) ([]*Result, error) {
 	}
 
 	return results, nil
-}
-
-// sanitizeFTS5 converts a raw user query into a safe FTS5 MATCH expression.
-// It replaces punctuation and symbols with spaces so raw input aligns with how
-// the FTS5 unicode61 tokenizer indexed text like names, labels, and URLs. The
-// last token gets a '*' suffix for prefix matching, enabling search-as-you-type
-// behaviour.
-func sanitizeFTS5(q string) string {
-	var b strings.Builder
-	for _, r := range q {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte(' ')
-		}
-	}
-	parts := strings.Fields(b.String())
-	if len(parts) == 0 {
-		return ""
-	}
-	parts[len(parts)-1] += "*"
-	return strings.Join(parts, " ")
 }
 
 // Reindex rebuilds the FTS5 index from the underlying entities table.

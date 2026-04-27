@@ -171,37 +171,6 @@ func (d *DB) Migrate() error {
 }
 
 func (d *DB) ensureEntitiesFTSSchema() error {
-	const createFTS = `CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
-		name,
-		namespace,
-		title,
-		description,
-		tags,
-		kind,
-		owner,
-		annotations,
-		labels,
-		spec,
-		api_version,
-		created_by,
-		content='entities',
-		content_rowid='rowid'
-	)`
-	const createInsertTrigger = `CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
-		INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-		VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
-	END`
-	const createDeleteTrigger = `CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
-		INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-		VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
-	END`
-	const createUpdateTrigger = `CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
-		INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-		VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
-		INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
-		VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
-	END`
-
 	columns := map[string]bool{}
 	rows, err := d.Query(`PRAGMA table_info(entities_fts)`)
 	if err != nil {
@@ -247,6 +216,13 @@ func (d *DB) ensureEntitiesFTSSchema() error {
 		}
 	}
 	if !needsRebuild {
+		triggersOK, err := d.entitiesFTSTriggersExist()
+		if err != nil {
+			return err
+		}
+		needsRebuild = !triggersOK
+	}
+	if !needsRebuild {
 		return nil
 	}
 
@@ -255,10 +231,10 @@ func (d *DB) ensureEntitiesFTSSchema() error {
 		`DROP TRIGGER IF EXISTS entities_ad`,
 		`DROP TRIGGER IF EXISTS entities_au`,
 		`DROP TABLE IF EXISTS entities_fts`,
-		createFTS,
-		createInsertTrigger,
-		createDeleteTrigger,
-		createUpdateTrigger,
+		entitiesFTSTableSQL,
+		entitiesFTSInsertTriggerSQL,
+		entitiesFTSDeleteTriggerSQL,
+		entitiesFTSUpdateTriggerSQL,
 		`INSERT INTO entities_fts(entities_fts) VALUES('rebuild')`,
 	}
 	for _, stmt := range statements {
@@ -267,6 +243,43 @@ func (d *DB) ensureEntitiesFTSSchema() error {
 		}
 	}
 	return nil
+}
+
+func (d *DB) entitiesFTSTriggersExist() (bool, error) {
+	rows, err := d.Query(`
+		SELECT name, sql
+		FROM sqlite_master
+		WHERE type = 'trigger'
+			AND tbl_name = 'entities'
+			AND name IN ('entities_ai', 'entities_ad', 'entities_au')`)
+	if err != nil {
+		return false, fmt.Errorf("checking entities_fts triggers: %w", err)
+	}
+	defer rows.Close()
+
+	found := map[string]bool{}
+	expected := map[string]string{
+		"entities_ai": normalizeSQLiteSchemaSQL(entitiesFTSInsertTriggerSQL),
+		"entities_ad": normalizeSQLiteSchemaSQL(entitiesFTSDeleteTriggerSQL),
+		"entities_au": normalizeSQLiteSchemaSQL(entitiesFTSUpdateTriggerSQL),
+	}
+	for rows.Next() {
+		var name, sql string
+		if err := rows.Scan(&name, &sql); err != nil {
+			return false, fmt.Errorf("scanning entities_fts trigger: %w", err)
+		}
+		found[name] = normalizeSQLiteSchemaSQL(sql) == expected[name]
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterating entities_fts triggers: %w", err)
+	}
+	return found["entities_ai"] && found["entities_ad"] && found["entities_au"], nil
+}
+
+func normalizeSQLiteSchemaSQL(sql string) string {
+	normalized := strings.Join(strings.Fields(sql), " ")
+	normalized = strings.Replace(normalized, "CREATE TRIGGER IF NOT EXISTS ", "CREATE TRIGGER ", 1)
+	return strings.ToLower(normalized)
 }
 
 // pgDuplicateColumnRe matches PostgreSQL's duplicate-column error message:

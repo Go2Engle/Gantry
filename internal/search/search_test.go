@@ -8,6 +8,7 @@ import (
 	"github.com/go2engle/gantry/internal/config"
 	"github.com/go2engle/gantry/internal/db"
 	"github.com/go2engle/gantry/internal/entity"
+	"github.com/go2engle/gantry/internal/search/fts"
 )
 
 func newTestDB(t *testing.T) *db.DB {
@@ -82,9 +83,9 @@ func TestSearchMatchesEntityURLInMetadataAndSpec(t *testing.T) {
 }
 
 func TestSanitizeFTS5NormalizesURLPunctuation(t *testing.T) {
-	got := sanitizeFTS5("https://status.example.com/checkout/healthz?probe=ready")
+	got := fts.SanitizeQuery("https://status.example.com/checkout/healthz?probe=ready")
 	want := "https status example com checkout healthz probe ready*"
 	if got != want {
-		t.Fatalf("sanitizeFTS5() = %q, want %q", got, want)
+		t.Fatalf("SanitizeQuery() = %q, want %q", got, want)
 	}
 }

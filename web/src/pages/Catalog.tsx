@@ -160,6 +160,14 @@ export default function Catalog() {
     return Array.from(tags).sort();
   }, [entities]);
 
+  const entitySearchTexts = useMemo(() => {
+    const searchTexts = new WeakMap<Entity, string>();
+    for (const e of entities) {
+      searchTexts.set(e, entitySearchText(e));
+    }
+    return searchTexts;
+  }, [entities]);
+
   const filtered = useMemo(() => {
     return entities.filter((e) => {
       if (!visibleKindNames.has(e.kind)) return false;
@@ -167,11 +175,11 @@ export default function Catalog() {
       if (tagFilter && !(e.metadata.tags || []).includes(tagFilter)) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        return entitySearchText(e).includes(q);
+        return (entitySearchTexts.get(e) ?? entitySearchText(e)).includes(q);
       }
       return true;
     });
-  }, [entities, searchQuery, ownerFilter, tagFilter, visibleKindNames]);
+  }, [entities, entitySearchTexts, searchQuery, ownerFilter, tagFilter, visibleKindNames]);
 
   const hasFilters = searchQuery || ownerFilter || tagFilter;
 

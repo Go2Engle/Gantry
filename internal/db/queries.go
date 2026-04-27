@@ -6,14 +6,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/go2engle/gantry/internal/auth"
 	gantrycrypto "github.com/go2engle/gantry/internal/crypto"
 	"github.com/go2engle/gantry/internal/entity"
 	"github.com/go2engle/gantry/internal/plugins"
+	"github.com/go2engle/gantry/internal/search/fts"
 )
 
 // ---------------------------------------------------------------------------
@@ -483,7 +482,7 @@ func (d *DB) SearchEntities(ctx context.Context, query string) ([]*entity.Entity
 	var args []any
 
 	if d.IsSQLite() {
-		ftsQuery := sanitizeEntityFTSQuery(query)
+		ftsQuery := fts.SanitizeQuery(query)
 		if ftsQuery == "" {
 			return nil, nil
 		}
@@ -539,23 +538,6 @@ func (d *DB) SearchEntities(ctx context.Context, query string) ([]*entity.Entity
 		return nil, fmt.Errorf("iterating search results: %w", err)
 	}
 	return entities, nil
-}
-
-func sanitizeEntityFTSQuery(q string) string {
-	var b strings.Builder
-	for _, r := range q {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte(' ')
-		}
-	}
-	parts := strings.Fields(b.String())
-	if len(parts) == 0 {
-		return ""
-	}
-	parts[len(parts)-1] += "*"
-	return strings.Join(parts, " ")
 }
 
 // ---------------------------------------------------------------------------
