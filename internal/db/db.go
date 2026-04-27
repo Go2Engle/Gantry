@@ -162,6 +162,110 @@ func (d *DB) Migrate() error {
 			return fmt.Errorf("migration %d failed: %w", i+1, err)
 		}
 	}
+	if d.IsSQLite() {
+		if err := d.ensureEntitiesFTSSchema(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DB) ensureEntitiesFTSSchema() error {
+	const createFTS = `CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+		name,
+		namespace,
+		title,
+		description,
+		tags,
+		kind,
+		owner,
+		annotations,
+		labels,
+		spec,
+		api_version,
+		created_by,
+		content='entities',
+		content_rowid='rowid'
+	)`
+	const createInsertTrigger = `CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
+		INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+		VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
+	END`
+	const createDeleteTrigger = `CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
+		INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+		VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
+	END`
+	const createUpdateTrigger = `CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
+		INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+		VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
+		INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+		VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
+	END`
+
+	columns := map[string]bool{}
+	rows, err := d.Query(`PRAGMA table_info(entities_fts)`)
+	if err != nil {
+		return fmt.Errorf("checking entities_fts schema: %w", err)
+	}
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("scanning entities_fts schema: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("closing entities_fts schema rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating entities_fts schema: %w", err)
+	}
+
+	required := []string{
+		"name",
+		"namespace",
+		"title",
+		"description",
+		"tags",
+		"kind",
+		"owner",
+		"annotations",
+		"labels",
+		"spec",
+		"api_version",
+		"created_by",
+	}
+	needsRebuild := len(columns) == 0
+	for _, col := range required {
+		if !columns[col] {
+			needsRebuild = true
+			break
+		}
+	}
+	if !needsRebuild {
+		return nil
+	}
+
+	statements := []string{
+		`DROP TRIGGER IF EXISTS entities_ai`,
+		`DROP TRIGGER IF EXISTS entities_ad`,
+		`DROP TRIGGER IF EXISTS entities_au`,
+		`DROP TABLE IF EXISTS entities_fts`,
+		createFTS,
+		createInsertTrigger,
+		createDeleteTrigger,
+		createUpdateTrigger,
+		`INSERT INTO entities_fts(entities_fts) VALUES('rebuild')`,
+	}
+	for _, stmt := range statements {
+		if _, err := d.Exec(stmt); err != nil {
+			return fmt.Errorf("upgrading entities_fts schema: %w", err)
+		}
+	}
 	return nil
 }
 

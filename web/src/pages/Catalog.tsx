@@ -59,6 +59,15 @@ const KIND_META: Record<string, { icon: React.ReactNode; description: string; co
   },
 };
 
+function entitySearchText(entity: Entity) {
+  return JSON.stringify({
+    kind: entity.kind,
+    apiVersion: entity.apiVersion,
+    metadata: entity.metadata,
+    spec: entity.spec,
+  }).toLowerCase();
+}
+
 export default function Catalog() {
   const { kind } = useParams<{ kind?: string }>();
   const navigate = useNavigate();
@@ -158,12 +167,7 @@ export default function Catalog() {
       if (tagFilter && !(e.metadata.tags || []).includes(tagFilter)) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        return (
-          e.metadata.name.toLowerCase().includes(q) ||
-          (e.metadata.title || '').toLowerCase().includes(q) ||
-          (e.metadata.owner || '').toLowerCase().includes(q) ||
-          (e.metadata.tags || []).some((t) => t.toLowerCase().includes(q))
-        );
+        return entitySearchText(e).includes(q);
       }
       return true;
     });

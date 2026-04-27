@@ -256,31 +256,37 @@ func allMigrations(dbType string) []string {
 			// FTS5 virtual table for full-text search across entities.
 			`CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
 				name,
+				namespace,
 				title,
 				description,
 				tags,
 				kind,
 				owner,
+				annotations,
+				labels,
+				spec,
+				api_version,
+				created_by,
 				content='entities',
 				content_rowid='rowid'
 			)`,
 
 			// Triggers to keep the FTS index in sync with the entities table.
 			`CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
-				INSERT INTO entities_fts(rowid, name, title, description, tags, kind, owner)
-				VALUES (new.rowid, new.name, new.title, new.description, new.tags, new.kind, new.owner);
+				INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+				VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
 			END`,
 
 			`CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
-				INSERT INTO entities_fts(entities_fts, rowid, name, title, description, tags, kind, owner)
-				VALUES ('delete', old.rowid, old.name, old.title, old.description, old.tags, old.kind, old.owner);
+				INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+				VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
 			END`,
 
 			`CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
-				INSERT INTO entities_fts(entities_fts, rowid, name, title, description, tags, kind, owner)
-				VALUES ('delete', old.rowid, old.name, old.title, old.description, old.tags, old.kind, old.owner);
-				INSERT INTO entities_fts(rowid, name, title, description, tags, kind, owner)
-				VALUES (new.rowid, new.name, new.title, new.description, new.tags, new.kind, new.owner);
+				INSERT INTO entities_fts(entities_fts, rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+				VALUES ('delete', old.rowid, old.name, old.namespace, old.title, old.description, old.tags, old.kind, old.owner, old.annotations, old.labels, old.spec, old.api_version, old.created_by);
+				INSERT INTO entities_fts(rowid, name, namespace, title, description, tags, kind, owner, annotations, labels, spec, api_version, created_by)
+				VALUES (new.rowid, new.name, new.namespace, new.title, new.description, new.tags, new.kind, new.owner, new.annotations, new.labels, new.spec, new.api_version, new.created_by);
 			END`,
 		)
 	}

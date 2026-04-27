@@ -6,7 +6,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go2engle/gantry/internal/auth"
 	gantrycrypto "github.com/go2engle/gantry/internal/crypto"
@@ -481,6 +483,10 @@ func (d *DB) SearchEntities(ctx context.Context, query string) ([]*entity.Entity
 	var args []any
 
 	if d.IsSQLite() {
+		ftsQuery := sanitizeEntityFTSQuery(query)
+		if ftsQuery == "" {
+			return nil, nil
+		}
 		// Use FTS5 for SQLite. The MATCH query supports prefix matching with *.
 		sqlQuery = `SELECT e.kind, e.api_version, e.name, e.namespace, e.title, e.description, e.owner,
 				e.tags, e.annotations, e.labels, e.spec, e.created_at, e.updated_at, e.created_by
@@ -488,17 +494,31 @@ func (d *DB) SearchEntities(ctx context.Context, query string) ([]*entity.Entity
 			JOIN entities_fts fts ON e.rowid = fts.rowid
 			WHERE entities_fts MATCH ?
 			ORDER BY rank`
-		// Append * for prefix matching so partial words match.
-		args = append(args, query+"*")
+		args = append(args, ftsQuery)
 	} else {
 		// Fallback LIKE search for PostgreSQL (tsvector search can be added later).
 		likePattern := "%" + query + "%"
 		sqlQuery = `SELECT kind, api_version, name, namespace, title, description, owner,
 				tags, annotations, labels, spec, created_at, updated_at, created_by
 			FROM entities
-			WHERE name ILIKE ? OR title ILIKE ? OR description ILIKE ? OR tags ILIKE ? OR kind ILIKE ? OR owner ILIKE ?
+			WHERE name ILIKE ? OR namespace ILIKE ? OR title ILIKE ? OR description ILIKE ?
+				OR tags ILIKE ? OR kind ILIKE ? OR owner ILIKE ? OR annotations ILIKE ?
+				OR labels ILIKE ? OR spec ILIKE ? OR api_version ILIKE ? OR created_by ILIKE ?
 			ORDER BY name`
-		args = append(args, likePattern, likePattern, likePattern, likePattern, likePattern, likePattern)
+		args = append(args,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+			likePattern,
+		)
 	}
 
 	rows, err := d.queryRows(ctx, sqlQuery, args...)
@@ -519,6 +539,23 @@ func (d *DB) SearchEntities(ctx context.Context, query string) ([]*entity.Entity
 		return nil, fmt.Errorf("iterating search results: %w", err)
 	}
 	return entities, nil
+}
+
+func sanitizeEntityFTSQuery(q string) string {
+	var b strings.Builder
+	for _, r := range q {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte(' ')
+		}
+	}
+	parts := strings.Fields(b.String())
+	if len(parts) == 0 {
+		return ""
+	}
+	parts[len(parts)-1] += "*"
+	return strings.Join(parts, " ")
 }
 
 // ---------------------------------------------------------------------------
