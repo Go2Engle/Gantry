@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/url"
 	"os"
 	"path"
@@ -24,7 +25,7 @@ const (
 	maxWikiMarkdownBytes = 2 * 1024 * 1024
 )
 
-var wikiCloneMu sync.Mutex
+var repoWikiLocks sync.Map
 
 // GetWiki fetches metadata and optionally Markdown content from a repository's
 // GitHub wiki. GitHub stores each wiki as a sibling Git repository, not as a
@@ -69,8 +70,9 @@ func (c *Client) GetWiki(ctx context.Context, owner, repo, dataDir, pageSlug str
 }
 
 func (c *Client) ensureWikiClone(ctx context.Context, owner, repo, dataDir string) (string, bool, error) {
-	wikiCloneMu.Lock()
-	defer wikiCloneMu.Unlock()
+	repoLock := getRepoWikiLock(owner + "/" + repo)
+	repoLock.Lock()
+	defer repoLock.Unlock()
 
 	repoPath := filepath.Join(dataDir, "github-wikis", safeWikiPathSegment(owner), safeWikiPathSegment(repo))
 	markerPath := filepath.Join(repoPath, ".gantry-wiki-fetched")
@@ -129,6 +131,11 @@ func (c *Client) gitAuth() *githttp.BasicAuth {
 		Username: "gantry",
 		Password: c.token,
 	}
+}
+
+func getRepoWikiLock(repoKey string) *sync.Mutex {
+	lock, _ := repoWikiLocks.LoadOrStore(strings.ToLower(repoKey), &sync.Mutex{})
+	return lock.(*sync.Mutex)
 }
 
 func listWikiPages(repoPath string) ([]WikiPage, error) {
@@ -313,8 +320,41 @@ func isMissingWikiError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
+	isAuthError := strings.Contains(msg, "authentication required") ||
+		strings.Contains(msg, "authorization failed")
+	if isAuthError {
+		log.Printf("github wiki: treating authentication error as unavailable: %s", redactWikiError(err.Error()))
+	}
 	return strings.Contains(msg, "repository not found") ||
 		strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "authentication required") ||
-		strings.Contains(msg, "authorization failed")
+		isAuthError
+}
+
+func redactWikiError(message string) string {
+	message = redactURLCredentials(message)
+	message = redactBearerToken(message)
+	return message
+}
+
+func redactURLCredentials(message string) string {
+	parts := strings.Fields(message)
+	for i, part := range parts {
+		u, err := url.Parse(strings.Trim(part, `"'`))
+		if err != nil || u.User == nil {
+			continue
+		}
+		u.User = url.User("redacted")
+		parts[i] = strings.Replace(part, strings.Trim(part, `"'`), u.String(), 1)
+	}
+	return strings.Join(parts, " ")
+}
+
+func redactBearerToken(message string) string {
+	fields := strings.Fields(message)
+	for i := 0; i < len(fields)-1; i++ {
+		if strings.EqualFold(strings.TrimSuffix(fields[i], ":"), "bearer") {
+			fields[i+1] = "redacted"
+		}
+	}
+	return strings.Join(fields, " ")
 }

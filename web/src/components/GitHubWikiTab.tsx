@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BookOpen, ExternalLink, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
@@ -6,7 +6,7 @@ import type { Entity, GitHubWikiInfo } from '../lib/types';
 
 function repoURLFromEntity(entity: Entity): string {
   const repoUrl = entity.spec?.repoUrl as string | undefined;
-  if (repoUrl) return repoUrl;
+  if (repoUrl?.includes('github.com')) return repoUrl;
   const owner = entity.metadata.annotations?.['github.com/owner'];
   const repo = entity.metadata.annotations?.['github.com/repo'];
   return owner && repo ? `https://github.com/${owner}/${repo}` : '';
@@ -20,8 +20,11 @@ export default function GitHubWikiTab({ entity }: { entity: Entity }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  function load(page = selectedPage) {
-    if (!repoUrl) return;
+  const load = useCallback((page: string) => {
+    if (!repoUrl) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     api
@@ -34,16 +37,13 @@ export default function GitHubWikiTab({ entity }: { entity: Entity }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }
+  }, [repoUrl]);
 
   useEffect(() => {
-    setSelectedPage(defaultPage ?? '');
-  }, [defaultPage, repoUrl]);
-
-  useEffect(() => {
-    load(defaultPage ?? '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoUrl, defaultPage]);
+    const initialPage = defaultPage ?? '';
+    setSelectedPage(initialPage);
+    load(initialPage);
+  }, [repoUrl, defaultPage, load]);
 
   const pageHtml = useMemo(() => {
     if (!data?.currentPage?.markdown) return '';
@@ -62,7 +62,7 @@ export default function GitHubWikiTab({ entity }: { entity: Entity }) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
         {error}
-        <button onClick={() => load()} className="ml-3 underline">Retry</button>
+        <button onClick={() => load(selectedPage)} className="ml-3 underline">Retry</button>
       </div>
     );
   }
@@ -80,7 +80,7 @@ export default function GitHubWikiTab({ entity }: { entity: Entity }) {
             <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Wiki</h3>
           </div>
           <button
-            onClick={() => load()}
+            onClick={() => load(selectedPage)}
             title="Refresh"
             className="rounded p-1 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-text-primary)]"
           >

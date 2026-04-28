@@ -24,7 +24,7 @@ function rewriteRelativeImageSources(html: string, rawImageBaseUrl?: string): st
 
 function sanitizeHtml(html: string): string {
   if (typeof DOMParser === 'undefined') {
-    return html;
+    return '';
   }
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc.body.querySelectorAll('*').forEach((el) => {
@@ -59,5 +59,15 @@ function isAbsoluteOrSpecialURL(value: string): boolean {
 
 function isUnsafeURL(value: string): boolean {
   const compact = value.replace(/[\u0000-\u001F\u007F\s]+/g, '').toLowerCase();
-  return compact.startsWith('javascript:') || compact.startsWith('data:text/html');
+  if (compact.startsWith('javascript:')) {
+    return true;
+  }
+  if (!compact.startsWith('data:')) {
+    return false;
+  }
+  const mediaType = compact.slice(5).split(/[;,]/, 1)[0];
+  return mediaType === 'text/html' ||
+    mediaType === 'text/xml' ||
+    mediaType === 'image/svg+xml' ||
+    mediaType.endsWith('+xml');
 }
