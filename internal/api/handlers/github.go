@@ -429,6 +429,54 @@ func (h *Handlers) GetGitHubRepo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetGitHubWiki fetches GitHub wiki metadata and optionally a page's markdown.
+// Query params:
+//   - url: repository URL (https://github.com/owner/repo)
+//   - page: optional wiki page slug/title
+//   - content=false: list pages without returning page markdown
+func (h *Handlers) GetGitHubWiki(w http.ResponseWriter, r *http.Request) {
+	repoURL := r.URL.Query().Get("url")
+	if repoURL == "" {
+		writeError(w, http.StatusBadRequest, "url query param is required")
+		return
+	}
+	if !strings.Contains(repoURL, "github.com") {
+		writeError(w, http.StatusBadRequest, "only github.com URLs are supported")
+		return
+	}
+
+	owner, repo, err := ghplugin.ParseGitHubURL(repoURL)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid GitHub URL: "+err.Error())
+		return
+	}
+
+	p, err := h.DB.GetPlugin(r.Context(), "github")
+	if err != nil || p == nil {
+		writeError(w, http.StatusNotFound, "GitHub plugin not installed")
+		return
+	}
+	if !p.Enabled {
+		writeError(w, http.StatusBadRequest, "GitHub plugin is not enabled")
+		return
+	}
+
+	client, err := ghplugin.NewClient(p.Config)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "GitHub client error: "+err.Error())
+		return
+	}
+
+	includeContent := r.URL.Query().Get("content") != "false"
+	wiki, err := client.GetWiki(r.Context(), owner, repo, h.DataDir, r.URL.Query().Get("page"), includeContent)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch wiki: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, wiki)
+}
+
 // requestHostname returns just the hostname from r.Host, stripping any port.
 func requestHostname(r *http.Request) string {
 	host := r.Host

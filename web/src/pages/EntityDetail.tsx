@@ -9,6 +9,7 @@ import SchemaForm from '../components/SchemaForm';
 import EntityGraph from '../components/EntityGraph';
 import KubernetesTab from '../components/KubernetesTab';
 import GitHubTab from '../components/GitHubTab';
+import GitHubWikiTab from '../components/GitHubWikiTab';
 import ArgoCDTab from '../components/ArgoCDTab';
 import APIDocsTab from '../components/APIDocsTab';
 import HarborTab from '../components/HarborTab';
@@ -99,12 +100,13 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
   other:     <CircleHelp className="h-3.5 w-3.5" />,
 };
 
-type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis' | 'flow';
+type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'wiki' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis' | 'flow';
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   relationships: 'Dependencies',
   kubernetes: 'Kubernetes',
   github: 'GitHub',
+  wiki: 'Wiki',
   argocd: 'ArgoCD',
   apidocs: 'API Docs',
   harbor: 'Harbor',
@@ -112,6 +114,15 @@ const TAB_LABELS: Partial<Record<Tab, string>> = {
   apis: 'APIs',
   flow: 'Flow',
 };
+
+function githubRepoURLFromEntity(entity: Entity | null): string {
+  if (!entity) return '';
+  const repoUrl = entity.spec?.repoUrl as string | undefined;
+  if (repoUrl?.includes('github.com')) return repoUrl;
+  const owner = entity.metadata.annotations?.['github.com/owner'];
+  const repo = entity.metadata.annotations?.['github.com/repo'];
+  return owner && repo ? `https://github.com/${owner}/${repo}` : '';
+}
 
 export default function EntityDetail() {
   const { kind, name } = useParams<{ kind: string; name: string }>();
@@ -136,6 +147,7 @@ export default function EntityDetail() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [apiEntities, setApiEntities] = useState<Entity[]>([]);
   const [apisLoading, setApisLoading] = useState(false);
+  const [githubWikiAvailable, setGitHubWikiAvailable] = useState(false);
 
   useEffect(() => {
     if (!kind || !name) return;
@@ -162,6 +174,31 @@ export default function EntityDetail() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [kind, name, namespace]);
+
+  const githubRepoUrl = githubRepoURLFromEntity(entity);
+
+  useEffect(() => {
+    if (!githubRepoUrl || !enabledPlugins.has('github')) {
+      setGitHubWikiAvailable(false);
+      return;
+    }
+
+    let cancelled = false;
+    setGitHubWikiAvailable(false);
+    api.getGitHubWiki(githubRepoUrl, undefined, false)
+      .then((wiki) => {
+        if (!cancelled) {
+          setGitHubWikiAvailable(wiki.available && wiki.pages.length > 0);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGitHubWikiAvailable(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [githubRepoUrl, enabledPlugins]);
 
   const healthCheckUrl = (entity?.spec?.healthCheckUrl as string) || '';
 
@@ -402,10 +439,7 @@ export default function EntityDetail() {
       {/* Tabs */}
       {(() => {
         const isK8sEntity = !!(entity.metadata.annotations?.['kubernetes.io/kind']);
-        const hasGitHub = !!(
-          (entity.spec?.repoUrl as string | undefined)?.includes('github.com') ||
-          entity.metadata.annotations?.['github.com/repo']
-        );
+        const hasGitHub = !!githubRepoUrl;
         const hasArgoCD = !!(
           entity.metadata.annotations?.['argocd.io/appNames'] ||
           entity.metadata.annotations?.['argocd.io/appName']
@@ -421,6 +455,10 @@ export default function EntityDetail() {
         if (hasFlow) tabs.splice(1, 0, 'flow');
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
+        if (hasGitHub && githubWikiAvailable && enabledPlugins.has('github')) {
+          const githubIndex = tabs.indexOf('github');
+          tabs.splice(githubIndex >= 0 ? githubIndex + 1 : 1, 0, 'wiki');
+        }
         if (hasArgoCD && entity.kind === 'Service' && enabledPlugins.has('argocd')) tabs.splice(1, 0, 'argocd');
         if (hasAPIDocs) tabs.splice(1, 0, 'apidocs');
         if (hasHarbor && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('harbor')) tabs.splice(1, 0, 'harbor');
@@ -866,6 +904,10 @@ export default function EntityDetail() {
 
         {tab === 'github' && (
           <GitHubTab entity={entity} />
+        )}
+
+        {tab === 'wiki' && (
+          <GitHubWikiTab entity={entity} />
         )}
 
         {tab === 'argocd' && (

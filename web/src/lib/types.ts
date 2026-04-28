@@ -403,6 +403,25 @@ export interface GitHubRepoInfo {
   latestRelease?: GitHubRelease;
 }
 
+export interface GitHubWikiPage {
+  title: string;
+  slug: string;
+  path: string;
+}
+
+export interface GitHubWikiPageContent extends GitHubWikiPage {
+  markdown: string;
+  htmlUrl: string;
+  rawBaseUrl?: string;
+}
+
+export interface GitHubWikiInfo {
+  available: boolean;
+  htmlUrl: string;
+  pages: GitHubWikiPage[];
+  currentPage?: GitHubWikiPageContent;
+}
+
 export interface EntityLink {
   title: string;
   url: string;

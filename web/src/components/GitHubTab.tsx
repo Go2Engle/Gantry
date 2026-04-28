@@ -3,8 +3,8 @@ import {
   Star, GitFork, CircleDot, GitBranch, GitPullRequest,
   GitCommit, ExternalLink, Archive, Lock, Globe, RefreshCw, BookOpen, ChevronDown, ChevronUp, Tag,
 } from 'lucide-react';
-import { marked } from 'marked';
 import { api } from '../lib/api';
+import { renderMarkdown } from '../lib/markdown';
 import type { Entity, GitHubRepoInfo, GitHubPullRequest } from '../lib/types';
 
 function formatRelativeTime(dateStr: string): string {
@@ -70,16 +70,12 @@ export default function GitHubTab({ entity }: { entity: Entity }) {
 
   const readmeHtml = useMemo(() => {
     if (!data?.readme) return '';
-    let html = marked.parse(data.readme) as string;
-    // Rewrite relative image src URLs to GitHub raw content so logos/badges load.
     if (data.repo) {
       const branch = data.repo.default_branch;
       const rawBase = `https://raw.githubusercontent.com/${data.repo.full_name}/${branch}/`;
-      html = html.replace(/src="(?!https?:\/\/)([^"]+)"/g, (_, path) =>
-        `src="${rawBase}${path.replace(/^\.\//, '')}"`,
-      );
+      return renderMarkdown(data.readme, rawBase);
     }
-    return html;
+    return renderMarkdown(data.readme);
   }, [data?.readme, data?.repo?.full_name, data?.repo?.default_branch]);
 
   if (!repoUrl) {
@@ -344,7 +340,7 @@ export default function GitHubTab({ entity }: { entity: Entity }) {
           {readmeExpanded && (
             <div
               className="px-6 py-5 gantry-markdown"
-              // README content is fetched from GitHub's API for the user's own repo.
+              // README content is fetched from GitHub and sanitized before render.
               // eslint-disable-next-line react/no-danger
               dangerouslySetInnerHTML={{ __html: readmeHtml }}
             />

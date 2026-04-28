@@ -71,11 +71,11 @@ type GitHubUser struct {
 
 // Release represents a GitHub release summary.
 type Release struct {
-	TagName    string `json:"tag_name"`
-	Name       string `json:"name"`
-	HTMLURL    string `json:"html_url"`
-	Prerelease bool   `json:"prerelease"`
-	Draft      bool   `json:"draft"`
+	TagName     string `json:"tag_name"`
+	Name        string `json:"name"`
+	HTMLURL     string `json:"html_url"`
+	Prerelease  bool   `json:"prerelease"`
+	Draft       bool   `json:"draft"`
 	PublishedAt string `json:"published_at"`
 }
 
@@ -86,6 +86,31 @@ type RepoInfo struct {
 	PullRequests  []PullRequest `json:"pullRequests"`
 	Readme        string        `json:"readme,omitempty"`
 	LatestRelease *Release      `json:"latestRelease,omitempty"`
+}
+
+// WikiPage represents a single page discovered in a GitHub wiki repository.
+type WikiPage struct {
+	Title string `json:"title"`
+	Slug  string `json:"slug"`
+	Path  string `json:"path"`
+}
+
+// WikiPageContent is the rendered-source payload for a wiki page.
+type WikiPageContent struct {
+	Title      string `json:"title"`
+	Slug       string `json:"slug"`
+	Path       string `json:"path"`
+	Markdown   string `json:"markdown"`
+	HTMLURL    string `json:"htmlUrl"`
+	RawBaseURL string `json:"rawBaseUrl,omitempty"`
+}
+
+// WikiInfo describes a repository wiki and optionally includes page content.
+type WikiInfo struct {
+	Available   bool             `json:"available"`
+	HTMLURL     string           `json:"htmlUrl"`
+	Pages       []WikiPage       `json:"pages"`
+	CurrentPage *WikiPageContent `json:"currentPage,omitempty"`
 }
 
 // GitHubTeam represents a GitHub organization team.

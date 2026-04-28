@@ -1,4 +1,4 @@
-import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, NexusRepository, TopologyData, TopologyStatusMap, FlowPluginSettings, FlowSpec } from './types';
+import type { Entity, User, SearchResult, ActionRun, AuditEntry, APIKey, GraphData, PluginRegistryEntry, PluginDetail, PluginConfig, PluginSyncResult, K8sWorkloadInfo, GitHubRepoInfo, GitHubWikiInfo, ArgoCDAppStatus, ArgoCDAppWithInstance, GitHubWorkflow, ActionInputDef, DashboardConfig, HistoryEntry, StatusMonitorResult, GitOpsStatus, GitOpsSyncEntry, GitOpsFileEntry, Group, GroupDetail, PermissionRule, EffectivePermissions, RBACConfig, Role, VersionResponse, HarborRepository, HarborArtifact, HarborVulnerability, HarborSummaryResponse, NexusComponent, NexusAsset, NexusRepository, TopologyData, TopologyStatusMap, FlowPluginSettings, FlowSpec } from './types';
 import { encodePathSegment } from './utils';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
@@ -171,6 +171,13 @@ export const api = {
 
   getGitHubRepo: (url: string) =>
     request<GitHubRepoInfo>('GET', `/plugins/github/repo?url=${encodeURIComponent(url)}`),
+
+  getGitHubWiki: (url: string, page?: string, includeContent = true) => {
+    const params = new URLSearchParams({ url });
+    if (page) params.set('page', page);
+    if (!includeContent) params.set('content', 'false');
+    return request<GitHubWikiInfo>('GET', `/plugins/github/wiki?${params.toString()}`);
+  },
 
   getArgoCDEntityApps: (appNames: string[]) =>
     request<ArgoCDAppWithInstance[]>('GET', `/plugins/argocd/entity-apps?appNames=${encodeURIComponent(appNames.join(','))}`),
