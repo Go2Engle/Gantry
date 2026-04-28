@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Server, Globe, Database, Users, Cloud, FileText, Box, Workflow } from 'lucide-react';
 import { api } from '../lib/api';
@@ -26,10 +26,25 @@ export default function CommandPalette() {
   const navigate = useNavigate();
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   // Refs so document-level keydown handler always sees current state
-  const resultsRef = useRef<SearchResult[]>([]);
+  const displayedResultsRef = useRef<SearchResult[]>([]);
   const selectedIndexRef = useRef(0);
-  resultsRef.current = results;
   selectedIndexRef.current = selectedIndex;
+
+  const groupedEntries = useMemo(() => {
+    const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {
+      if (!acc[r.kind]) acc[r.kind] = [];
+      acc[r.kind].push(r);
+      return acc;
+    }, {});
+
+    return Object.entries(grouped);
+  }, [results]);
+
+  const displayedResults = useMemo(
+    () => groupedEntries.flatMap(([, items]) => items),
+    [groupedEntries],
+  );
+  displayedResultsRef.current = displayedResults;
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -60,16 +75,18 @@ export default function CommandPalette() {
     setTimeout(() => inputRef.current?.focus(), 50);
 
     function handleNavKeyDown(e: KeyboardEvent) {
-      const len = resultsRef.current.length;
+      const len = displayedResultsRef.current.length;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        if (len === 0) return;
         setSelectedIndex((prev) => Math.min(prev + 1, len - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        if (len === 0) return;
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        const result = resultsRef.current[selectedIndexRef.current];
+        const result = displayedResultsRef.current[selectedIndexRef.current];
         if (result) {
           setOpen(false);
           navigate(catalogEntityPath(result.kind, result.name, result.namespace));
@@ -116,12 +133,6 @@ export default function CommandPalette() {
     navigate(catalogEntityPath(result.kind, result.name, result.namespace));
   };
 
-  const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {
-    if (!acc[r.kind]) acc[r.kind] = [];
-    acc[r.kind].push(r);
-    return acc;
-  }, {});
-
   let flatIndex = -1;
 
   if (!open) return null;
@@ -167,7 +178,7 @@ export default function CommandPalette() {
           )}
 
           {!loading &&
-            Object.entries(grouped).map(([kind, items]) => {
+            groupedEntries.map(([kind, items]) => {
               const KindIcon = kindIcons[kind] || Box;
               return (
                 <div key={kind}>
@@ -182,7 +193,7 @@ export default function CommandPalette() {
                     const idx = flatIndex;
                     return (
                       <button
-                        key={`${result.kind}-${result.name}`}
+                        key={`${result.kind}-${result.namespace}-${result.name}`}
                         data-selected={idx === selectedIndex ? 'true' : 'false'}
                         className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                           idx === selectedIndex
