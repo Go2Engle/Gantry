@@ -265,7 +265,7 @@ export default function ActionRuns() {
                     onClick={() => toggle(run.id)}
                     aria-expanded={isOpen}
                     aria-controls={`action-run-details-${run.id}`}
-                    className="grid w-full grid-cols-1 gap-3 px-4 py-4 text-left hover:bg-[var(--gantry-bg-secondary)] md:grid-cols-[minmax(0,1.5fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_auto]"
+                    className="grid w-full grid-cols-1 gap-3 px-4 py-4 text-left hover:bg-[var(--gantry-bg-secondary)] md:grid-cols-[minmax(0,1fr)_12rem_10rem_7.5rem] xl:grid-cols-[minmax(0,1fr)_16rem_14rem_8.5rem]"
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <span className="mt-0.5">{statusIcon[run.status] ?? statusIcon.pending}</span>
@@ -279,16 +279,16 @@ export default function ActionRuns() {
                         </p>
                       </div>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-xs text-[var(--gantry-text-secondary)]">Triggered by</p>
                       <p className="truncate text-sm text-[var(--gantry-text-primary)]">{run.triggeredBy || 'system'}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-xs text-[var(--gantry-text-secondary)]">Started</p>
                       <p className="text-sm text-[var(--gantry-text-primary)]">{relativeTime(run.startedAt)}</p>
                     </div>
                     <div className="flex items-center justify-between gap-3 md:justify-end">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[run.status] ?? statusBadge.pending}`}>
+                      <span className={`min-w-20 rounded-full px-2 py-0.5 text-center text-xs font-medium ${statusBadge[run.status] ?? statusBadge.pending}`}>
                         {statusLabel[run.status] ?? run.status}
                       </span>
                       {isOpen
