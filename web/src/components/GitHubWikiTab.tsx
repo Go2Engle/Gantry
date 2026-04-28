@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { BookOpen, ExternalLink, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
@@ -10,6 +10,44 @@ function repoURLFromEntity(entity: Entity): string {
   const owner = entity.metadata.annotations?.['github.com/owner'];
   const repo = entity.metadata.annotations?.['github.com/repo'];
   return owner && repo ? `https://github.com/${owner}/${repo}` : '';
+}
+
+function wikiSlugFromHref(href: string, currentSlug: string): string {
+  const trimmed = href.trim();
+  if (!trimmed || trimmed.startsWith('#')) return '';
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      const wikiIndex = url.pathname.indexOf('/wiki/');
+      if (!url.hostname.endsWith('github.com') || wikiIndex === -1) return '';
+      return normalizeWikiSlug(decodeURIComponent(url.pathname.slice(wikiIndex + 6)));
+    } catch {
+      return '';
+    }
+  }
+
+  const [pathPart] = trimmed.split(/[?#]/, 1);
+  if (!pathPart || pathPart.startsWith('/')) return '';
+  const currentDir = currentSlug.includes('/') ? currentSlug.slice(0, currentSlug.lastIndexOf('/')) : '';
+  const combined = pathPart.startsWith('./') || pathPart.startsWith('../')
+    ? `${currentDir}/${pathPart}`
+    : pathPart;
+  return normalizeWikiSlug(combined);
+}
+
+function normalizeWikiSlug(slug: string): string {
+  let normalized = slug.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+/g, '/');
+  normalized = normalized.replace(/\.(?:md|markdown)$/i, '');
+  const parts: string[] = [];
+  for (const part of normalized.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join('/');
 }
 
 export default function GitHubWikiTab({ entity }: { entity: Entity }) {
@@ -49,6 +87,21 @@ export default function GitHubWikiTab({ entity }: { entity: Entity }) {
     if (!data?.currentPage?.markdown) return '';
     return renderMarkdown(data.currentPage.markdown, data.currentPage.rawBaseUrl);
   }, [data?.currentPage?.markdown, data?.currentPage?.rawBaseUrl]);
+
+  const pageSlugs = useMemo(() => new Set(data?.pages.map((page) => page.slug.toLowerCase()) ?? []), [data?.pages]);
+
+  const handleWikiContentClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) return;
+    const link = event.target.closest('a');
+    if (!link) return;
+
+    const href = link.getAttribute('href') ?? '';
+    const slug = wikiSlugFromHref(href, data?.currentPage?.slug ?? '');
+    if (!slug || !pageSlugs.has(slug.toLowerCase())) return;
+
+    event.preventDefault();
+    load(slug);
+  }, [data?.currentPage?.slug, load, pageSlugs]);
 
   if (loading) {
     return (
@@ -120,6 +173,7 @@ export default function GitHubWikiTab({ entity }: { entity: Entity }) {
         </div>
         <div
           className="px-6 py-5 gantry-markdown"
+          onClick={handleWikiContentClick}
           // Wiki markdown is fetched from GitHub and sanitized before render.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: pageHtml }}
