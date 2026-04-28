@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/Go2Engle/Gantry/compare/v0.14.4...v0.15.0) (2026-04-28)
+
+
+### Features
+
+* **search:** index full entity data ([#106](https://github.com/Go2Engle/Gantry/issues/106)) ([f8d5dc9](https://github.com/Go2Engle/Gantry/commit/f8d5dc94057181f2a8558854085cb1f1694a6dab))
+
+
+### Bug Fixes
+
+* **ui:** improve entity description editing ([#108](https://github.com/Go2Engle/Gantry/issues/108)) ([234e51f](https://github.com/Go2Engle/Gantry/commit/234e51f9cfc4aee2edea1aed707fcd88b4a8c96e))
+
 ## [0.14.4](https://github.com/Go2Engle/Gantry/compare/v0.14.3...v0.14.4) (2026-04-27)
 
 
