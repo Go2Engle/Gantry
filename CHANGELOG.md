@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/Go2Engle/Gantry/compare/v0.15.1...v0.16.0) (2026-04-28)
+
+
+### Features
+
+* **actions:** add action run history view ([#111](https://github.com/Go2Engle/Gantry/issues/111)) ([a2cbd0d](https://github.com/Go2Engle/Gantry/commit/a2cbd0de22d9f5b2dcab7f2fec1ceb582f13373e))
+
 ## [0.15.1](https://github.com/Go2Engle/Gantry/compare/v0.15.0...v0.15.1) (2026-04-28)
 
 
