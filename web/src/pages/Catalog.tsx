@@ -290,7 +290,7 @@ export default function Catalog() {
         },
         _title: { type: 'string', title: 'Title', description: 'Display name' },
         _owner: { type: 'string', title: 'Owner', description: 'Team or user that owns this entity', 'x-entity-ref': 'Team' },
-        _description: { type: 'string', title: 'Description' },
+        _description: { type: 'string', title: 'Description', format: 'textarea' },
         ...(kindSchema as any).properties,
         ...(showHarbor ? {
           _harbor_project: { type: 'string', title: 'Harbor Project', description: 'Harbor registry project name (e.g. my-project)' },

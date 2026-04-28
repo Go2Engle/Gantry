@@ -336,9 +336,6 @@ export default function EntityDetail() {
           {entity.metadata.title && entity.metadata.title !== entity.metadata.name && (
             <p className="mt-1 text-sm text-[var(--gantry-text-secondary)]">{entity.metadata.title}</p>
           )}
-          {entity.metadata.description && (
-            <p className="mt-2 text-sm text-[var(--gantry-text-secondary)]">{entity.metadata.description}</p>
-          )}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {entity.metadata.owner && (
               <span className="text-sm text-[var(--gantry-text-secondary)]">
@@ -460,6 +457,14 @@ export default function EntityDetail() {
             {/* Spec */}
             <div className="lg:col-span-2">
               <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-6">
+                {entity.metadata.description && (
+                  <div className="mb-6 border-b border-[var(--gantry-border)] pb-6">
+                    <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Description</h3>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--gantry-text-secondary)]">
+                      {entity.metadata.description}
+                    </p>
+                  </div>
+                )}
                 <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Spec</h3>
                 {entity.spec && Object.keys(entity.spec).length > 0 ? (
                   <dl className="mt-4 space-y-3">
@@ -1045,8 +1050,8 @@ export default function EntityDetail() {
                   <div>
                     <label className="block text-sm font-medium text-[var(--gantry-text-primary)] mb-1">Description</label>
                     <textarea
-                      rows={2}
-                      className="w-full rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)] resize-none"
+                      rows={4}
+                      className="min-h-28 w-full resize-y rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-text-primary)] focus:border-[var(--gantry-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--gantry-accent)]"
                       value={editMeta.description}
                       placeholder="A short description of this entity"
                       onChange={(e) => setEditMeta((m) => ({ ...m, description: e.target.value }))}
