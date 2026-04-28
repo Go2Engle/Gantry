@@ -78,8 +78,13 @@ export const api = {
 
   listActions: () => request<Entity[]>('GET', '/actions'),
 
-  listAllActionRuns: (limit?: number) =>
-    request<ActionRun[]>('GET', `/actions/runs${limit ? `?limit=${limit}` : ''}`),
+  listAllActionRuns: (limit?: number, offset?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.set('limit', String(limit));
+    if (offset) params.set('offset', String(offset));
+    const qs = params.toString();
+    return request<ActionRun[]>('GET', `/actions/runs${qs ? `?${qs}` : ''}`);
+  },
 
   listActionRuns: (actionName: string) =>
     request<ActionRun[]>('GET', `/actions/${encodeURIComponent(actionName)}/runs`),

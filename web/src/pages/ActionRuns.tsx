@@ -17,11 +17,13 @@ import { api } from '../lib/api';
 import { encodePathSegment } from '../lib/utils';
 import type { ActionRun, Entity } from '../lib/types';
 
+const RUN_HISTORY_PAGE_SIZE = 100;
+
 const statusBadge: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  running: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  pending: 'bg-[var(--gantry-bg-tertiary)] text-[var(--gantry-text-secondary)]',
+  running: 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]',
+  success: 'bg-[var(--gantry-accent)]/10 text-[var(--gantry-accent)]',
+  failed: 'bg-[var(--gantry-danger)]/10 text-[var(--gantry-danger)]',
 };
 
 const statusLabel: Record<string, string> = {
@@ -32,9 +34,9 @@ const statusLabel: Record<string, string> = {
 };
 
 const statusIcon: Record<string, React.ReactNode> = {
-  pending: <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />,
+  pending: <Clock className="h-4 w-4 text-[var(--gantry-text-secondary)]" />,
   running: <Loader2 className="h-4 w-4 animate-spin text-[var(--gantry-accent)]" />,
-  success: <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />,
+  success: <CheckCircle2 className="h-4 w-4 text-[var(--gantry-accent)]" />,
   failed: <XCircle className="h-4 w-4 text-[var(--gantry-danger)]" />,
 };
 
@@ -69,32 +71,38 @@ export default function ActionRuns() {
   const [actions, setActions] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [actionName, setActionName] = useState('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const load = async (showSpinner = false) => {
+  const loadPage = async (offset = 0, append = false, showSpinner = false) => {
     setError('');
     if (showSpinner) setRefreshing(true);
+    if (append) setLoadingMore(true);
     try {
       const [runData, actionData] = await Promise.all([
-        api.listAllActionRuns(),
+        api.listAllActionRuns(RUN_HISTORY_PAGE_SIZE + 1, offset),
         api.listActions().catch(() => [] as Entity[]),
       ]);
-      setRuns(runData || []);
+      const pageRuns = (runData || []).slice(0, RUN_HISTORY_PAGE_SIZE);
+      setRuns((prev) => append ? [...prev, ...pageRuns] : pageRuns);
       setActions(actionData || []);
+      setHasMore((runData || []).length > RUN_HISTORY_PAGE_SIZE);
     } catch (e: any) {
       setError(e.message || 'failed to load action run history');
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    void load();
+    void loadPage();
   }, []);
 
   const actionLookup = useMemo(() => {
@@ -162,7 +170,7 @@ export default function ActionRuns() {
           </p>
         </div>
         <button
-          onClick={() => void load(true)}
+          onClick={() => void loadPage(0, false, true)}
           disabled={refreshing}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -171,7 +179,7 @@ export default function ActionRuns() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+        <div className="rounded-lg border border-[var(--gantry-danger)] bg-[var(--gantry-bg-primary)] px-4 py-3 text-sm text-[var(--gantry-danger)]">
           {error}
         </div>
       )}
@@ -255,6 +263,8 @@ export default function ActionRuns() {
                   <button
                     type="button"
                     onClick={() => toggle(run.id)}
+                    aria-expanded={isOpen}
+                    aria-controls={`action-run-details-${run.id}`}
                     className="grid w-full grid-cols-1 gap-3 px-4 py-4 text-left hover:bg-[var(--gantry-bg-secondary)] md:grid-cols-[minmax(0,1.5fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_auto]"
                   >
                     <div className="flex min-w-0 items-start gap-3">
@@ -289,7 +299,10 @@ export default function ActionRuns() {
                   </button>
 
                   {isOpen && (
-                    <div className="space-y-4 border-t border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-4 py-4">
+                    <div
+                      id={`action-run-details-${run.id}`}
+                      className="space-y-4 border-t border-[var(--gantry-border)] bg-[var(--gantry-bg-secondary)] px-4 py-4"
+                    >
                       <div className="grid gap-3 text-sm md:grid-cols-3">
                         <div>
                           <p className="text-xs font-medium text-[var(--gantry-text-secondary)]">Started at</p>
@@ -308,7 +321,7 @@ export default function ActionRuns() {
                       </div>
 
                       {run.error && (
-                        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+                        <div className="rounded-md border border-[var(--gantry-danger)] bg-[var(--gantry-bg-primary)] px-3 py-2 text-sm text-[var(--gantry-danger)]">
                           {run.error}
                         </div>
                       )}
@@ -347,6 +360,20 @@ export default function ActionRuns() {
           </div>
         )}
       </div>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadPage(runs.length, true)}
+            disabled={loadingMore}
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+            Load more runs
+          </button>
+        </div>
+      )}
     </div>
   );
 }

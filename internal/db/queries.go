@@ -1101,8 +1101,9 @@ func (d *DB) UpdateActionRun(ctx context.Context, run *ActionRun) error {
 }
 
 // ListActionRuns returns action runs for a given action name, ordered by most recent first.
-// If actionName is empty, all runs are returned. A positive limit caps the result count.
-func (d *DB) ListActionRuns(ctx context.Context, actionName string, limit int) ([]*ActionRun, error) {
+// If actionName is empty, all runs are returned. Positive limit and offset values
+// page through the result count.
+func (d *DB) ListActionRuns(ctx context.Context, actionName string, limit, offset int) ([]*ActionRun, error) {
 	query := `SELECT id, action_name, status, inputs, outputs,
 				triggered_by, started_at, completed_at, error
 			 FROM action_runs`
@@ -1116,6 +1117,10 @@ func (d *DB) ListActionRuns(ctx context.Context, actionName string, limit int) (
 	if limit > 0 {
 		query += ` LIMIT ?`
 		args = append(args, limit)
+		if offset > 0 {
+			query += ` OFFSET ?`
+			args = append(args, offset)
+		}
 	}
 
 	rows, err := d.queryRows(ctx, query, args...)
