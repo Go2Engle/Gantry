@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/Go2Engle/Gantry/compare/v0.15.0...v0.15.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* **search:** select highlighted result ([#109](https://github.com/Go2Engle/Gantry/issues/109)) ([04d6242](https://github.com/Go2Engle/Gantry/commit/04d62428918c9ddac6e41dc296c360f658dd22f8))
+
 ## [0.15.0](https://github.com/Go2Engle/Gantry/compare/v0.14.4...v0.15.0) (2026-04-28)
 
 
