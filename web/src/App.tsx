@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Catalog = lazy(() => import('./pages/Catalog'));
 const EntityDetail = lazy(() => import('./pages/EntityDetail'));
 const Actions = lazy(() => import('./pages/Actions'));
+const ActionRuns = lazy(() => import('./pages/ActionRuns'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Plugins = lazy(() => import('./pages/Plugins'));
@@ -51,6 +52,7 @@ function AuthenticatedLayout() {
                     <Route path="/catalog/:kind" element={<Catalog />} />
                     <Route path="/catalog/:kind/:name" element={<EntityDetail />} />
                     <Route path="/actions" element={<Actions />} />
+                    <Route path="/actions/runs" element={<ActionRuns />} />
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/admin/users" element={<Admin section="users" />} />
                     <Route path="/admin/access" element={<Admin section="access" />} />

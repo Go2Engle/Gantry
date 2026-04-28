@@ -712,8 +712,8 @@ export default function Dashboard() {
                 <Zap className="h-4 w-4 text-[var(--gantry-text-secondary)]" />
                 <h2 className="text-base font-semibold text-[var(--gantry-text-primary)]">Action Runs</h2>
               </div>
-              <Link to="/actions" className="flex items-center gap-1 text-sm text-[var(--gantry-accent)] hover:opacity-75">
-                Go to Actions <ArrowRight className="h-4 w-4" />
+              <Link to="/actions/runs" className="flex items-center gap-1 text-sm text-[var(--gantry-accent)] hover:opacity-75">
+                View history <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
             {actionRuns.length === 0 ? (

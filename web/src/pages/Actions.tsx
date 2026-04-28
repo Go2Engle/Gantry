@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Zap, X, CheckCircle2, XCircle, Clock, Loader2, Plus,
   Edit2, History, ExternalLink, Github, Webhook, ChevronDown, ChevronUp,
@@ -641,14 +642,22 @@ export default function Actions() {
             {hasCategories && ` across ${categories.length} categor${categories.length !== 1 ? 'ies' : 'y'}`}
           </p>
         </div>
-        {canWrite && (
-          <button
-            onClick={() => setShowWizard(true)}
-            className="flex shrink-0 items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Link
+            to="/actions/runs"
+            className="flex items-center gap-2 rounded-lg border border-[var(--gantry-border)] px-4 py-2 text-sm font-medium text-[var(--gantry-text-primary)] hover:bg-[var(--gantry-bg-tertiary)]"
           >
-            <Plus className="h-4 w-4" /> New Action
-          </button>
-        )}
+            <History className="h-4 w-4" /> Run History
+          </Link>
+          {canWrite && (
+            <button
+              onClick={() => setShowWizard(true)}
+              className="flex items-center gap-2 rounded-lg bg-[var(--gantry-accent)] px-4 py-2 text-sm font-medium text-[var(--gantry-bg-primary)] hover:bg-[var(--gantry-accent-hover)]"
+            >
+              <Plus className="h-4 w-4" /> New Action
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

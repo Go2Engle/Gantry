@@ -78,8 +78,8 @@ export const api = {
 
   listActions: () => request<Entity[]>('GET', '/actions'),
 
-  listAllActionRuns: (limit = 10) =>
-    request<ActionRun[]>('GET', `/actions/runs?limit=${limit}`),
+  listAllActionRuns: (limit?: number) =>
+    request<ActionRun[]>('GET', `/actions/runs${limit ? `?limit=${limit}` : ''}`),
 
   listActionRuns: (actionName: string) =>
     request<ActionRun[]>('GET', `/actions/${encodeURIComponent(actionName)}/runs`),
