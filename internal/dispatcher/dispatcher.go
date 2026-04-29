@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,17 +23,23 @@ import (
 // Manager holds shared HTTP client and event bus, and dispatches action runs
 // to the appropriate backend based on the action entity's spec.type.
 type Manager struct {
-	DB     *db.DB
-	Events *events.Bus
-	client *http.Client
+	DB                 *db.DB
+	Events             *events.Bus
+	client             *http.Client
+	githubAPIBaseURL   string
+	githubPollInterval time.Duration
+	githubPollTimeout  time.Duration
 }
 
 // New creates a new Manager.
 func New(database *db.DB, eventBus *events.Bus) *Manager {
 	return &Manager{
-		DB:     database,
-		Events: eventBus,
-		client: &http.Client{Timeout: 30 * time.Second},
+		DB:                 database,
+		Events:             eventBus,
+		client:             &http.Client{Timeout: 30 * time.Second},
+		githubAPIBaseURL:   "https://api.github.com",
+		githubPollInterval: 10 * time.Second,
+		githubPollTimeout:  60 * time.Minute,
 	}
 }
 
@@ -160,7 +167,7 @@ func (m *Manager) runWebhook(action *entity.Entity, run *db.ActionRun) (string, 
 }
 
 // runGitHubAction triggers a GitHub Actions workflow_dispatch event and waits
-// briefly for the run to appear in the API.
+// for the resulting workflow run to complete.
 func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, run *db.ActionRun, secrets map[string]string) (string, error) {
 	cfg, _ := action.Spec["config"].(map[string]any)
 	if cfg == nil {
@@ -178,6 +185,7 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 	if ref == "" {
 		ref = "main"
 	}
+	timeout := githubPollTimeoutFromConfig(cfg, m.githubPollTimeout)
 
 	owner, repo, err := parseGitHubURL(repoURL)
 	if err != nil {
@@ -206,7 +214,8 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 	}
 
 	// Dispatch the workflow.
-	dispatchURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/workflows/%s/dispatches", owner, repo, workflow)
+	workflowID := url.PathEscape(workflow)
+	dispatchURL := fmt.Sprintf("%s/repos/%s/%s/actions/workflows/%s/dispatches", m.githubAPIBaseURL, owner, repo, workflowID)
 	payload, _ := json.Marshal(map[string]any{
 		"ref":    ref,
 		"inputs": stringInputs,
@@ -243,21 +252,248 @@ func (m *Manager) runGitHubAction(ctx context.Context, action *entity.Entity, ru
 		return "", fmt.Errorf("GitHub API returned HTTP %d: %s", resp.StatusCode, msg)
 	}
 
-	// Wait a moment then try to locate the new run for its URL.
-	time.Sleep(3 * time.Second)
-	runURL := m.findLatestWorkflowRun(token, owner, repo, dispatched)
-
 	repoHTMLURL := fmt.Sprintf("https://github.com/%s/%s", owner, repo)
-	out, _ := json.Marshal(map[string]any{
-		"message":        "GitHub Actions workflow dispatched successfully",
-		"repo":           repoHTMLURL,
-		"workflow":       workflow,
-		"ref":            ref,
-		"runUrl":         runURL,
-		"credentialMode": credentialModeForOutput(credentialMode),
-		"tokenSource":    tokenSource,
-	})
+	initialOutput := githubActionOutput{
+		Message:        "GitHub Actions workflow dispatched; waiting for workflow run to complete",
+		Repo:           repoHTMLURL,
+		Workflow:       workflow,
+		Ref:            ref,
+		CredentialMode: credentialModeForOutput(credentialMode),
+		TokenSource:    tokenSource,
+	}
+	m.updateGitHubActionRunOutput(ctx, run, initialOutput)
+
+	workflowRun, err := m.waitForWorkflowRun(ctx, token, owner, repo, workflowID, ref, dispatched, timeout)
+	if err != nil {
+		out, _ := json.Marshal(githubActionOutput{
+			Message:        "GitHub Actions workflow dispatched, but Gantry could not confirm its final result",
+			Repo:           repoHTMLURL,
+			Workflow:       workflow,
+			Ref:            ref,
+			RunURL:         workflowRun.HTMLURL,
+			RunID:          workflowRun.ID,
+			RunNumber:      workflowRun.RunNumber,
+			Status:         workflowRun.Status,
+			Conclusion:     workflowRun.Conclusion,
+			CredentialMode: credentialModeForOutput(credentialMode),
+			TokenSource:    tokenSource,
+		})
+		return string(out), err
+	}
+
+	finalOutput := githubActionOutput{
+		Message:        "GitHub Actions workflow completed",
+		Repo:           repoHTMLURL,
+		Workflow:       workflow,
+		Ref:            ref,
+		RunURL:         workflowRun.HTMLURL,
+		RunID:          workflowRun.ID,
+		RunNumber:      workflowRun.RunNumber,
+		Status:         workflowRun.Status,
+		Conclusion:     workflowRun.Conclusion,
+		CredentialMode: credentialModeForOutput(credentialMode),
+		TokenSource:    tokenSource,
+	}
+	out, _ := json.Marshal(finalOutput)
+	if workflowRun.Conclusion != "success" {
+		conclusion := workflowRun.Conclusion
+		if conclusion == "" {
+			conclusion = workflowRun.Status
+		}
+		return string(out), fmt.Errorf("GitHub Actions workflow completed with conclusion %q", conclusion)
+	}
 	return string(out), nil
+}
+
+type githubActionOutput struct {
+	Message        string `json:"message"`
+	Repo           string `json:"repo"`
+	Workflow       string `json:"workflow"`
+	Ref            string `json:"ref"`
+	RunURL         string `json:"runUrl,omitempty"`
+	RunID          int64  `json:"runId,omitempty"`
+	RunNumber      int    `json:"runNumber,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Conclusion     string `json:"conclusion,omitempty"`
+	CredentialMode string `json:"credentialMode"`
+	TokenSource    string `json:"tokenSource"`
+}
+
+type githubWorkflowRun struct {
+	ID         int64  `json:"id"`
+	HTMLURL    string `json:"html_url"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	CreatedAt  string `json:"created_at"`
+	HeadBranch string `json:"head_branch"`
+	RunNumber  int    `json:"run_number"`
+}
+
+func githubPollTimeoutFromConfig(cfg map[string]any, fallback time.Duration) time.Duration {
+	raw, ok := cfg["timeoutMinutes"]
+	if !ok {
+		return fallback
+	}
+
+	var minutes float64
+	switch v := raw.(type) {
+	case float64:
+		minutes = v
+	case int:
+		minutes = float64(v)
+	case json.Number:
+		n, err := v.Float64()
+		if err == nil {
+			minutes = n
+		}
+	}
+	if minutes <= 0 {
+		return fallback
+	}
+	return time.Duration(minutes * float64(time.Minute))
+}
+
+func (m *Manager) updateGitHubActionRunOutput(ctx context.Context, run *db.ActionRun, output githubActionOutput) {
+	b, err := json.Marshal(output)
+	if err != nil {
+		return
+	}
+	run.Outputs = string(b)
+	if err := m.DB.UpdateActionRun(ctx, run); err == nil {
+		m.publishRunEvent(run)
+	}
+}
+
+func (m *Manager) waitForWorkflowRun(ctx context.Context, token, owner, repo, workflowID, ref string, dispatched time.Time, timeout time.Duration) (githubWorkflowRun, error) {
+	if timeout <= 0 {
+		timeout = 60 * time.Minute
+	}
+	interval := m.githubPollInterval
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var lastRun *githubWorkflowRun
+	for {
+		var (
+			workflowRun *githubWorkflowRun
+			err         error
+		)
+		if lastRun == nil {
+			workflowRun, err = m.findWorkflowRun(ctx, token, owner, repo, workflowID, ref, dispatched)
+		} else {
+			latest, getErr := m.getWorkflowRun(ctx, token, owner, repo, lastRun.ID)
+			if getErr == nil {
+				workflowRun = &latest
+			}
+			err = getErr
+		}
+		if err != nil && ctx.Err() == nil {
+			return githubWorkflowRun{}, err
+		}
+		if workflowRun != nil {
+			lastRun = workflowRun
+			if workflowRun.Status == "completed" {
+				return *workflowRun, nil
+			}
+		}
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			if lastRun != nil {
+				return *lastRun, fmt.Errorf("timed out waiting for GitHub Actions workflow run %d to complete", lastRun.ID)
+			}
+			return githubWorkflowRun{}, fmt.Errorf("timed out waiting for GitHub Actions workflow run to appear")
+		case <-timer.C:
+		}
+	}
+}
+
+func (m *Manager) findWorkflowRun(ctx context.Context, token, owner, repo, workflowID, ref string, after time.Time) (*githubWorkflowRun, error) {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/workflows/%s/runs?event=workflow_dispatch&per_page=20", m.githubAPIBaseURL, owner, repo, workflowID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building workflow run lookup request: %w", err)
+	}
+	setGitHubHeaders(req, token)
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("looking up workflow run: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("GitHub workflow run lookup returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var result struct {
+		WorkflowRuns []githubWorkflowRun `json:"workflow_runs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding workflow run lookup response: %w", err)
+	}
+
+	after = after.Add(-10 * time.Second)
+	for _, workflowRun := range result.WorkflowRuns {
+		createdAt, err := time.Parse(time.RFC3339, workflowRun.CreatedAt)
+		if err != nil || createdAt.Before(after) {
+			continue
+		}
+		if ref != "" && workflowRun.HeadBranch != "" && !githubRefMatches(ref, workflowRun.HeadBranch) {
+			continue
+		}
+		matchedRun := workflowRun
+		return &matchedRun, nil
+	}
+	return nil, nil
+}
+
+func (m *Manager) getWorkflowRun(ctx context.Context, token, owner, repo string, runID int64) (githubWorkflowRun, error) {
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/actions/runs/%d", m.githubAPIBaseURL, owner, repo, runID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return githubWorkflowRun{}, fmt.Errorf("building workflow run status request: %w", err)
+	}
+	setGitHubHeaders(req, token)
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return githubWorkflowRun{}, fmt.Errorf("checking workflow run status: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return githubWorkflowRun{}, fmt.Errorf("GitHub workflow run status returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var workflowRun githubWorkflowRun
+	if err := json.NewDecoder(resp.Body).Decode(&workflowRun); err != nil {
+		return githubWorkflowRun{}, fmt.Errorf("decoding workflow run status response: %w", err)
+	}
+	return workflowRun, nil
+}
+
+func githubRefMatches(ref, headBranch string) bool {
+	ref = strings.TrimPrefix(ref, "refs/heads/")
+	return ref == headBranch
+}
+
+func setGitHubHeaders(req *http.Request, token string) {
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "Gantry/1.0")
 }
 
 func credentialModeForOutput(mode string) string {
@@ -329,46 +565,6 @@ func (m *Manager) getGitHubToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("personalAccessToken not set in GitHub plugin config")
 	}
 	return token, nil
-}
-
-// findLatestWorkflowRun polls the GitHub API for the most recent workflow_dispatch
-// run created after the dispatch timestamp and returns its HTML URL.
-func (m *Manager) findLatestWorkflowRun(token, owner, repo string, after time.Time) string {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/runs?event=workflow_dispatch&per_page=10", owner, repo)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := m.client.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		WorkflowRuns []struct {
-			HTMLURL   string `json:"html_url"`
-			CreatedAt string `json:"created_at"`
-		} `json:"workflow_runs"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return ""
-	}
-
-	for _, r := range result.WorkflowRuns {
-		t, err := time.Parse(time.RFC3339, r.CreatedAt)
-		if err != nil {
-			continue
-		}
-		if t.After(after.Add(-10 * time.Second)) {
-			return r.HTMLURL
-		}
-	}
-	return ""
 }
 
 // parseGitHubURL parses a GitHub repository URL and returns owner and repo.
