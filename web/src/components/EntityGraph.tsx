@@ -23,6 +23,7 @@ const RELATION_COLORS: Record<string, string> = {
   providesApi: '#10B981',
   consumesApi: '#3B82F6',
   ownedBy: '#8B5CF6',
+  documents: '#6B7280',
 };
 
 const RELATION_LABELS: Record<string, string> = {
@@ -30,6 +31,7 @@ const RELATION_LABELS: Record<string, string> = {
   providesApi: 'provides API',
   consumesApi: 'consumes API',
   ownedBy: 'owned by',
+  documents: 'documents',
 };
 
 function kindColor(kind: string): string {

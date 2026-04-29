@@ -113,6 +113,8 @@ export interface JsonSchema {
   'x-entity-ref'?: string;
   /** Custom extension: keep this string as a URL-safe entity slug. */
   'x-slug'?: boolean;
+  /** Custom extension: allow a schema field but omit it from generated forms. */
+  'x-hidden'?: boolean;
   /** Custom extension: render a dropdown of Gantry roles. */
   'x-role-picker'?: boolean;
 }

@@ -157,6 +157,7 @@ func NewServer(cfg *config.Config, database *db.DB, authSvc *auth.Service, event
 			// Entity CRUD. Read: any authenticated user. Write: developer+.
 			protected.Get("/entities", h.ListEntities)
 			protected.Get("/entities/{kind}", h.ListEntitiesByKind)
+			protected.Get("/entities/{kind}/{name}/documentation", h.ListEntityDocumentation)
 			protected.Get("/entities/{kind}/{name}", h.GetEntity)
 			protected.With(middleware.RequireRole("developer")).Post("/entities", h.CreateEntity)
 			protected.With(middleware.RequireRole("developer")).Put("/entities/{kind}/{name}", h.UpdateEntity)

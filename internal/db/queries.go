@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go2engle/gantry/internal/auth"
@@ -330,6 +331,28 @@ func (d *DB) ListEntities(ctx context.Context, kind, namespace string) ([]*entit
 	return entities, nil
 }
 
+// ListDocumentationForEntity returns Documentation entities in the namespace
+// whose spec.relatedTo (or legacy spec.associatedEntity) references the entity.
+func (d *DB) ListDocumentationForEntity(ctx context.Context, kind, namespace, name string) ([]*entity.Entity, error) {
+	if namespace == "" {
+		namespace = entity.DefaultNamespace
+	}
+	docs, err := d.ListEntities(ctx, "Documentation", namespace)
+	if err != nil {
+		return nil, err
+	}
+	var related []*entity.Entity
+	for _, doc := range docs {
+		if documentationRelatesTo(doc.Spec, kind, name) {
+			related = append(related, doc)
+		}
+	}
+	if related == nil {
+		related = []*entity.Entity{}
+	}
+	return related, nil
+}
+
 // CountEntitiesByKind returns a map of entity kind to count for all entities.
 func (d *DB) CountEntitiesByKind(ctx context.Context) (map[string]int64, error) {
 	rows, err := d.queryRows(ctx, `SELECT kind, COUNT(*) FROM entities GROUP BY kind`)
@@ -558,7 +581,7 @@ type GraphNode struct {
 type GraphEdge struct {
 	From     string `json:"from"`
 	To       string `json:"to"`
-	Relation string `json:"relation"` // "dependsOn", "providesApi", "consumesApi", "ownedBy"
+	Relation string `json:"relation"` // "dependsOn", "providesApi", "consumesApi", "ownedBy", "documents"
 }
 
 // GraphData is the complete relationship graph for a given root entity.
@@ -567,9 +590,80 @@ type GraphData struct {
 	Edges []GraphEdge `json:"edges"`
 }
 
+type entityRef struct {
+	Kind string
+	Name string
+}
+
+func relatedEntityRefs(spec map[string]any) []entityRef {
+	if spec == nil {
+		return nil
+	}
+	raw, ok := spec["relatedTo"]
+	if !ok {
+		return nil
+	}
+	refs, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	var out []entityRef
+	for _, ref := range refs {
+		m, ok := ref.(map[string]any)
+		if !ok {
+			continue
+		}
+		refKind, _ := m["kind"].(string)
+		refName, _ := m["name"].(string)
+		if refKind != "" && refName != "" {
+			out = append(out, entityRef{Kind: refKind, Name: refName})
+		}
+	}
+	return out
+}
+
+func documentationRelatesTo(spec map[string]any, kind, name string) bool {
+	for _, ref := range relatedEntityRefs(spec) {
+		if ref.Kind == kind && ref.Name == name {
+			return true
+		}
+	}
+
+	// Backward compatibility for older Documentation entities.
+	legacy, _ := spec["associatedEntity"].(string)
+	legacy = strings.TrimSpace(legacy)
+	if legacy == "" {
+		return false
+	}
+	return legacy == name || legacy == kind+"/"+name || legacy == kind+":"+name
+}
+
+func legacyDocumentationRef(spec map[string]any) (entityRef, bool) {
+	legacy, _ := spec["associatedEntity"].(string)
+	legacy = strings.TrimSpace(legacy)
+	if legacy == "" {
+		return entityRef{}, false
+	}
+	for _, sep := range []string{"/", ":"} {
+		if before, after, ok := strings.Cut(legacy, sep); ok && before != "" && after != "" {
+			return entityRef{Kind: before, Name: after}, true
+		}
+	}
+	return entityRef{}, false
+}
+
+func appendGraphEdge(edges []GraphEdge, edge GraphEdge) []GraphEdge {
+	for _, existing := range edges {
+		if existing == edge {
+			return edges
+		}
+	}
+	return append(edges, edge)
+}
+
 // GetEntityGraph builds a relationship graph centered on the given entity.
 // It includes direct forward relationships from the entity's spec and reverse
-// dependencies found by scanning all entities.
+// dependencies and documentation links found by scanning all entities.
 func (d *DB) GetEntityGraph(ctx context.Context, kind, namespace, name string) (*GraphData, error) {
 	root, err := d.GetEntity(ctx, kind, namespace, name)
 	if err != nil {
@@ -659,6 +753,18 @@ func (d *DB) GetEntityGraph(ctx context.Context, kind, namespace, name string) (
 		}
 	}
 
+	// Forward: relatedTo — Documentation entities document their related entities.
+	if root.Kind == "Documentation" {
+		for _, ref := range relatedEntityRefs(spec) {
+			addNode(ref.Kind, ref.Name)
+			edges = appendGraphEdge(edges, GraphEdge{From: rootID, To: ref.Kind + "/" + ref.Name, Relation: "documents"})
+		}
+		if ref, ok := legacyDocumentationRef(spec); ok {
+			addNode(ref.Kind, ref.Name)
+			edges = appendGraphEdge(edges, GraphEdge{From: rootID, To: ref.Kind + "/" + ref.Name, Relation: "documents"})
+		}
+	}
+
 	// Forward: owner (metadata) → Team
 	if root.Metadata.Owner != "" {
 		addNode("Team", root.Metadata.Owner)
@@ -706,6 +812,12 @@ func (d *DB) GetEntityGraph(ctx context.Context, kind, namespace, name string) (
 					}
 				}
 			}
+		}
+		if e.Kind == "Documentation" && e.Metadata.Namespace == namespace && documentationRelatesTo(e.Spec, kind, name) {
+			if _, exists := nodes[eID]; !exists {
+				nodes[eID] = GraphNode{ID: eID, Kind: e.Kind, Namespace: e.Metadata.Namespace, Name: e.Metadata.Name, Title: e.Metadata.Title}
+			}
+			edges = appendGraphEdge(edges, GraphEdge{From: eID, To: rootID, Relation: "documents"})
 		}
 	}
 

@@ -131,6 +131,9 @@ export const api = {
   getEntityGraph: (kind: string, name: string, namespace?: string) =>
     request<GraphData>('GET', `/graph/${encodePathSegment(kind)}/${encodePathSegment(name)}${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 
+  listEntityDocumentation: (kind: string, name: string, namespace?: string) =>
+    request<Entity[]>('GET', `/entities/${encodePathSegment(kind)}/${encodePathSegment(name)}/documentation${namespace && namespace !== 'default' ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+
   // Plugin marketplace
   listPlugins: () => request<PluginRegistryEntry[]>('GET', '/plugins'),
   getPlugin: (name: string) => request<PluginDetail>('GET', `/plugins/${name}`),

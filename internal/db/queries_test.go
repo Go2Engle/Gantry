@@ -31,6 +31,119 @@ func newTestDB(t *testing.T) *DB {
 	return database
 }
 
+func TestListDocumentationForEntityUsesRelatedToAndLegacyAssociatedEntity(t *testing.T) {
+	ctx := context.Background()
+	database := newTestDB(t)
+
+	for _, e := range []*entity.Entity{
+		{
+			Kind:       "Service",
+			APIVersion: entity.DefaultAPIVersion,
+			Metadata:   entity.EntityMetadata{Name: "checkout", Namespace: entity.DefaultNamespace},
+			Spec:       map[string]any{},
+		},
+		{
+			Kind:       "Documentation",
+			APIVersion: entity.DefaultAPIVersion,
+			Metadata:   entity.EntityMetadata{Name: "checkout-runbook", Namespace: entity.DefaultNamespace},
+			Spec: map[string]any{
+				"url":  "https://docs.example.com/checkout/runbook",
+				"type": "runbook",
+				"relatedTo": []any{
+					map[string]any{"kind": "Service", "name": "checkout"},
+				},
+			},
+		},
+		{
+			Kind:       "Documentation",
+			APIVersion: entity.DefaultAPIVersion,
+			Metadata:   entity.EntityMetadata{Name: "checkout-legacy", Namespace: entity.DefaultNamespace},
+			Spec: map[string]any{
+				"url":              "https://docs.example.com/checkout/legacy",
+				"associatedEntity": "Service/checkout",
+			},
+		},
+		{
+			Kind:       "Documentation",
+			APIVersion: entity.DefaultAPIVersion,
+			Metadata:   entity.EntityMetadata{Name: "billing-runbook", Namespace: entity.DefaultNamespace},
+			Spec: map[string]any{
+				"url": "https://docs.example.com/billing/runbook",
+				"relatedTo": []any{
+					map[string]any{"kind": "Service", "name": "billing"},
+				},
+			},
+		},
+	} {
+		e.SetDefaults()
+		if err := database.CreateEntity(ctx, e); err != nil {
+			t.Fatalf("CreateEntity(%s/%s) error = %v", e.Kind, e.Metadata.Name, err)
+		}
+	}
+
+	docs, err := database.ListDocumentationForEntity(ctx, "Service", entity.DefaultNamespace, "checkout")
+	if err != nil {
+		t.Fatalf("ListDocumentationForEntity() error = %v", err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("ListDocumentationForEntity() returned %d docs, want 2", len(docs))
+	}
+	got := map[string]bool{}
+	for _, doc := range docs {
+		got[doc.Metadata.Name] = true
+	}
+	for _, name := range []string{"checkout-runbook", "checkout-legacy"} {
+		if !got[name] {
+			t.Fatalf("ListDocumentationForEntity() missing %q", name)
+		}
+	}
+}
+
+func TestGetEntityGraphIncludesDocumentationEdges(t *testing.T) {
+	ctx := context.Background()
+	database := newTestDB(t)
+
+	for _, e := range []*entity.Entity{
+		{
+			Kind:       "Service",
+			APIVersion: entity.DefaultAPIVersion,
+			Metadata:   entity.EntityMetadata{Name: "checkout", Namespace: entity.DefaultNamespace},
+			Spec:       map[string]any{},
+		},
+		{
+			Kind:       "Documentation",
+			APIVersion: entity.DefaultAPIVersion,
+			Metadata:   entity.EntityMetadata{Name: "checkout-runbook", Namespace: entity.DefaultNamespace},
+			Spec: map[string]any{
+				"url": "https://docs.example.com/checkout/runbook",
+				"relatedTo": []any{
+					map[string]any{"kind": "Service", "name": "checkout"},
+				},
+			},
+		},
+	} {
+		e.SetDefaults()
+		if err := database.CreateEntity(ctx, e); err != nil {
+			t.Fatalf("CreateEntity(%s/%s) error = %v", e.Kind, e.Metadata.Name, err)
+		}
+	}
+
+	graph, err := database.GetEntityGraph(ctx, "Service", entity.DefaultNamespace, "checkout")
+	if err != nil {
+		t.Fatalf("GetEntityGraph() error = %v", err)
+	}
+	found := false
+	for _, edge := range graph.Edges {
+		if edge.From == "Documentation/checkout-runbook" && edge.To == "Service/checkout" && edge.Relation == "documents" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("GetEntityGraph() missing documentation edge: %#v", graph.Edges)
+	}
+}
+
 func TestMigrateUpgradesEntityFTSForFullEntitySearch(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()

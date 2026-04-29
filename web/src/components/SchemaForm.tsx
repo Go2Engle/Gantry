@@ -412,17 +412,19 @@ function ObjectFields({
 
   return (
     <div className="space-y-4">
-      {Object.entries(properties).map(([key, propSchema]) => (
-        <FormField
-          key={key}
-          name={key}
-          schema={propSchema}
-          value={value[key] ?? getDefaultValue(propSchema)}
-          onChange={(newVal) => onChange({ ...value, [key]: newVal })}
-          required={required.includes(key)}
-          error={errors ? errors.includes(key) : false}
-        />
-      ))}
+      {Object.entries(properties)
+        .filter(([, propSchema]) => !propSchema['x-hidden'])
+        .map(([key, propSchema]) => (
+          <FormField
+            key={key}
+            name={key}
+            schema={propSchema}
+            value={value[key] ?? getDefaultValue(propSchema)}
+            onChange={(newVal) => onChange({ ...value, [key]: newVal })}
+            required={required.includes(key)}
+            error={errors ? errors.includes(key) : false}
+          />
+        ))}
     </div>
   );
 }

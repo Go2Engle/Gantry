@@ -121,6 +121,33 @@ func (h *Handlers) GetEntity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, e)
 }
 
+// ListEntityDocumentation handles GET /entities/{kind}/{name}/documentation.
+// It returns Documentation entities whose spec.relatedTo references this entity.
+func (h *Handlers) ListEntityDocumentation(w http.ResponseWriter, r *http.Request) {
+	kind := chi.URLParam(r, "kind")
+	name := chi.URLParam(r, "name")
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		namespace = entity.DefaultNamespace
+	}
+
+	if _, err := h.DB.GetEntity(r.Context(), kind, namespace, name); err != nil {
+		if errors.Is(err, entity.ErrEntityNotFound) {
+			writeError(w, http.StatusNotFound, entityNotFoundMessage(kind, namespace, name))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to get entity")
+		return
+	}
+
+	docs, err := h.DB.ListDocumentationForEntity(r.Context(), kind, namespace, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list documentation")
+		return
+	}
+	writeJSON(w, http.StatusOK, docs)
+}
+
 // CreateEntity handles POST /entities.
 // Parses a JSON entity body, validates with SchemaValidator, saves to DB,
 // publishes an EntityCreated event, and writes an audit log entry.

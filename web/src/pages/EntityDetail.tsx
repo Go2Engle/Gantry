@@ -15,6 +15,7 @@ import APIDocsTab from '../components/APIDocsTab';
 import HarborTab from '../components/HarborTab';
 import NexusTab from '../components/NexusTab';
 import FlowTab from '../components/FlowTab';
+import DocumentationTab from '../components/DocumentationTab';
 
 const ACTION_COLORS: Record<string, string> = {
   'entity.created': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -100,7 +101,7 @@ const LINK_ICONS: Record<string, React.ReactNode> = {
   other:     <CircleHelp className="h-3.5 w-3.5" />,
 };
 
-type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'wiki' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis' | 'flow';
+type Tab = 'overview' | 'yaml' | 'relationships' | 'activity' | 'kubernetes' | 'github' | 'wiki' | 'argocd' | 'apidocs' | 'harbor' | 'nexus' | 'apis' | 'flow' | 'docs';
 
 const TAB_LABELS: Partial<Record<Tab, string>> = {
   relationships: 'Dependencies',
@@ -113,6 +114,7 @@ const TAB_LABELS: Partial<Record<Tab, string>> = {
   nexus: 'Nexus',
   apis: 'APIs',
   flow: 'Flow',
+  docs: 'Docs',
 };
 
 function githubRepoURLFromEntity(entity: Entity | null): string {
@@ -122,6 +124,18 @@ function githubRepoURLFromEntity(entity: Entity | null): string {
   const owner = entity.metadata.annotations?.['github.com/owner'];
   const repo = entity.metadata.annotations?.['github.com/repo'];
   return owner && repo ? `https://github.com/${owner}/${repo}` : '';
+}
+
+function isClickableURLField(key: string, value: unknown): value is string {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  const looksLikeURLField = key === 'url' || key.endsWith('Url') || key.endsWith('URL');
+  if (!looksLikeURLField && !/^https?:\/\//i.test(value)) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export default function EntityDetail() {
@@ -148,23 +162,27 @@ export default function EntityDetail() {
   const [apiEntities, setApiEntities] = useState<Entity[]>([]);
   const [apisLoading, setApisLoading] = useState(false);
   const [githubWikiAvailable, setGitHubWikiAvailable] = useState(false);
+  const [relatedDocs, setRelatedDocs] = useState<Entity[]>([]);
 
   useEffect(() => {
     if (!kind || !name) return;
     setTab('overview');
     setGraphData(null);
     setApiEntities([]);
+    setRelatedDocs([]);
     setLoading(true);
     Promise.all([
       api.getEntity(kind, name, namespace),
       api.getSchema(kind).catch(() => null),
       api.listAuditEntries(100, 0).catch(() => [] as AuditEntry[]),
       api.listPlugins().catch(() => [] as PluginRegistryEntry[]),
+      api.listEntityDocumentation(kind, name, namespace).catch(() => [] as Entity[]),
     ])
-      .then(([e, s, audit, plugins]) => {
+      .then(([e, s, audit, plugins, docs]) => {
         setEnabledPlugins(new Set((plugins as PluginRegistryEntry[]).filter((p) => p.enabled).map((p) => p.name)));
         setEntity(e);
         setSchema(s);
+        setRelatedDocs(docs);
         api.recordView(kind, name, namespace).catch(() => {});
         const entries = (audit ?? []).filter(
           (a) => a.resourceName === name && a.resourceType === kind
@@ -451,8 +469,10 @@ export default function EntityDetail() {
         const serviceProvidedApis = (entity.spec?.providesApis as string[] | undefined) ?? [];
         const serviceConsumedApis = (entity.spec?.consumesApis as string[] | undefined) ?? [];
         const hasApis = entity.kind === 'Service' && (serviceProvidedApis.length > 0 || serviceConsumedApis.length > 0);
+        const hasDocs = relatedDocs.length > 0;
         const tabs: Tab[] = ['overview', 'relationships', 'yaml', 'activity'];
         if (hasFlow) tabs.splice(1, 0, 'flow');
+        if (hasDocs) tabs.splice(1, 0, 'docs');
         if (isK8sEntity && (entity.kind === 'Service' || entity.kind === 'Infrastructure') && enabledPlugins.has('kubernetes')) tabs.splice(1, 0, 'kubernetes');
         if (hasGitHub && enabledPlugins.has('github')) tabs.splice(1, 0, 'github');
         if (hasGitHub && githubWikiAvailable && enabledPlugins.has('github')) {
@@ -480,6 +500,11 @@ export default function EntityDetail() {
                 {t === 'activity' && activity.length > 0 && (
                   <span className="ml-1.5 rounded-full bg-[var(--gantry-bg-tertiary)] px-1.5 py-0.5 text-xs">
                     {activity.length}
+                  </span>
+                )}
+                {t === 'docs' && relatedDocs.length > 0 && (
+                  <span className="ml-1.5 rounded-full bg-[var(--gantry-bg-tertiary)] px-1.5 py-0.5 text-xs">
+                    {relatedDocs.length}
                   </span>
                 )}
               </button>
@@ -521,6 +546,7 @@ export default function EntityDetail() {
                         Array.isArray(value) &&
                         value.length > 0 &&
                         (value as any[]).every((v) => v && typeof v === 'object' && 'kind' in v && 'name' in v);
+                      const isURLField = isClickableURLField(key, value);
 
                       return (
                         <div key={key}>
@@ -560,6 +586,16 @@ export default function EntityDetail() {
                               <pre className="mt-1 overflow-auto rounded-md bg-[var(--gantry-bg-tertiary)] p-2 text-xs">
                                 {JSON.stringify(value, null, 2)}
                               </pre>
+                            ) : isURLField ? (
+                              <a
+                                href={value}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex max-w-full items-center gap-1.5 text-[var(--gantry-accent)] hover:underline"
+                              >
+                                <span className="truncate">{value}</span>
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                              </a>
                             ) : (
                               String(value)
                             )}
@@ -723,6 +759,55 @@ export default function EntityDetail() {
                 );
               })()}
 
+              {/* Related documentation — shown when Documentation entities point at this entity */}
+              {relatedDocs.length > 0 && (
+                <div className="rounded-lg border border-[var(--gantry-border)] bg-[var(--gantry-bg-primary)] p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-[var(--gantry-text-primary)]">Documentation</h3>
+                    <button
+                      type="button"
+                      onClick={() => setTab('docs')}
+                      className="text-xs font-medium text-[var(--gantry-accent)] hover:underline"
+                    >
+                      View all
+                    </button>
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {relatedDocs.slice(0, 5).map((doc) => {
+                      const url = doc.spec?.url as string | undefined;
+                      const docType = (doc.spec?.type as string | undefined)?.replace(/-/g, ' ');
+                      return (
+                        <li key={`${doc.metadata.namespace || 'default'}:${doc.metadata.name}`} className="flex items-start gap-2">
+                          <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--gantry-text-secondary)]" />
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              to={catalogEntityPath('Documentation', doc.metadata.name, doc.metadata.namespace)}
+                              className="block truncate text-sm font-medium text-[var(--gantry-accent)] hover:underline"
+                            >
+                              {doc.metadata.title || doc.metadata.name}
+                            </Link>
+                            <p className="mt-0.5 truncate text-xs capitalize text-[var(--gantry-text-secondary)]">
+                              {docType || 'documentation'}
+                            </p>
+                          </div>
+                          {url && (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-0.5 shrink-0 rounded p-0.5 text-[var(--gantry-text-secondary)] hover:text-[var(--gantry-accent)]"
+                              title="Open documentation"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
               {/* Links card — shown when entity has spec.links or spec.repoUrl */}
               {(() => {
                 const links = (entity.spec?.links as EntityLink[] | undefined) ?? [];
@@ -849,6 +934,10 @@ export default function EntityDetail() {
               })()}
             </div>
           </div>
+        )}
+
+        {tab === 'docs' && (
+          <DocumentationTab docs={relatedDocs} />
         )}
 
         {tab === 'yaml' && (

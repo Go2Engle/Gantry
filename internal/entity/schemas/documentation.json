@@ -16,7 +16,22 @@
     },
     "associatedEntity": {
       "type": "string",
-      "description": "Entity reference this documentation is associated with"
+      "description": "Legacy entity reference this documentation is associated with (for example, Service/checkout)",
+      "x-hidden": true
+    },
+    "relatedTo": {
+      "type": "array",
+      "title": "Relates to",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["kind", "name"],
+        "additionalProperties": false
+      },
+      "description": "Entities this documentation relates to"
     },
     "format": {
       "type": "string",
@@ -25,28 +40,6 @@
     "system": {
       "type": "string",
       "description": "Parent system or domain"
-    },
-    "dependsOn": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "kind": { "type": "string" },
-          "name": { "type": "string" }
-        },
-        "required": ["kind", "name"]
-      },
-      "description": "Entities this documentation depends on"
-    },
-    "providesApis": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "APIs provided by this entity"
-    },
-    "consumesApis": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "APIs consumed by this entity"
     }
   },
   "required": ["url"],
