@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0](https://github.com/Go2Engle/Gantry/compare/v0.16.0...v0.17.0) (2026-04-29)
+
+
+### Features
+
+* **github:** render repository wikis in entity tabs ([#113](https://github.com/Go2Engle/Gantry/issues/113)) ([5cc57e3](https://github.com/Go2Engle/Gantry/commit/5cc57e3fe3dfd1742fc8659491c72a1230cc3f57))
+
+
+### Bug Fixes
+
+* **dispatcher:** reflect github actions run failures ([#115](https://github.com/Go2Engle/Gantry/issues/115)) ([1cc6ae9](https://github.com/Go2Engle/Gantry/commit/1cc6ae929d2dbb23ab6e62bf25a230225c938913))
+
 ## [0.16.0](https://github.com/Go2Engle/Gantry/compare/v0.15.1...v0.16.0) (2026-04-28)
 
 
