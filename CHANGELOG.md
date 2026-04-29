@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/Go2Engle/Gantry/compare/v0.17.0...v0.18.0) (2026-04-29)
+
+
+### Features
+
+* **documentation:** link docs to related entities ([#118](https://github.com/Go2Engle/Gantry/issues/118)) ([6537605](https://github.com/Go2Engle/Gantry/commit/6537605153bd0b62261cbd769482531ceb5ecc4e))
+
 ## [0.17.0](https://github.com/Go2Engle/Gantry/compare/v0.16.0...v0.17.0) (2026-04-29)
 
 
