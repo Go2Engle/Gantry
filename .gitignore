@@ -32,3 +32,6 @@ local/
 
 # Claude Code
 .claude/
+
+# Codex
+.codex/
